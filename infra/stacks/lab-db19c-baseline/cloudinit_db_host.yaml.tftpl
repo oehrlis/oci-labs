@@ -1,7 +1,0 @@
-#cloud-config
-
-runcmd:
-  - [ bash, -lc, "mkdir -p /opt/lab && cd /opt/lab && curl -fSL '${bootstrap_url}' -o bootstrap_linux.tar.gz" ]
-  - [ bash, -lc, "cd /opt/lab && tar xzf bootstrap_linux.tar.gz" ]
-  - [ bash, -lc, "chmod +x /opt/lab/bootstrap/linux/bootstrap_linux_host.sh" ]
-  - [ bash, -lc, "/opt/lab/bootstrap/linux/bootstrap_linux_host.sh --type '${profile_type}' --profile '${profile_name}'" ]
