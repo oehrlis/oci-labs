@@ -1,0 +1,7 @@
+---
+- name: Ensure base packages are installed
+  ansible.builtin.package:
+    name:
+      - git
+      - tmux
+    state: present

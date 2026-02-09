@@ -1,0 +1,99 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: inventory-output.tf
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Editor.....: Stefan Oehrli
+# Date.......: 2025.11.26
+# Version....: v0.1.0
+# Purpose....: Ansible inventory outputs (jumphost + DB hosts) for odb19eng-single.
+# Notes......: Assumes jumphost_gateway and db19_engineering modules plus ssh_port var.
+# Reference..: https://github.com/oehrlis/oci-labs-infra
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+# Modified...:
+# 2025.11.26 oehrli - initial version
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Locals
+# ------------------------------------------------------------------------------
+
+# Derived addresses and Ansible structure
+locals {
+  # Convenience locals for readability
+  jumphost_public_ip = module.jumphost_gateway.public_ip
+  jumphost_ssh_port  = var.ssh_port
+
+  db_group_name = "db19" # can be changed per lab, e.g. "db21", "db26ai"
+  db_user       = "oracle"
+
+  db_hosts = [
+    for idx, ip in module.db19_engineering.private_ips : {
+      name = "${local.db_group_name}-${format("%02d", idx + 1)}"
+      ip   = ip
+    }
+  ]
+
+  # YAML inventory structure (for yamlencode)
+  ansible_inventory_yaml_struct = {
+    jumphost = {
+      hosts = {
+        jumphost = {
+          ansible_host = local.jumphost_public_ip
+          ansible_user = "opc"
+          ansible_port = local.jumphost_ssh_port
+        }
+      }
+    }
+
+    "${local.db_group_name}" = {
+      hosts = {
+        for h in local.db_hosts :
+        h.name => {
+          ansible_host            = h.ip
+          ansible_user            = local.db_user
+          ansible_ssh_common_args = "-o ProxyCommand=\"ssh -W %h:%p -p ${local.jumphost_ssh_port} opc@${local.jumphost_public_ip}\""
+        }
+      }
+    }
+
+    all = {
+      vars = {
+        ansible_python_interpreter = "/usr/bin/python3"
+      }
+    }
+  }
+}
+
+# ------------------------------------------------------------------------------
+# INI-style inventory output
+# ------------------------------------------------------------------------------
+
+output "ansible_inventory_ini" {
+  description = "Ansible inventory in INI format (jumphost + DB19 hosts)."
+
+  value = <<-EOF
+    [jumphost]
+    jumphost ansible_host=${local.jumphost_public_ip} ansible_user=opc ansible_port=${local.jumphost_ssh_port}
+
+    [${local.db_group_name}]
+    %{for h in local.db_hosts~}
+    ${h.name} ansible_host=${h.ip} ansible_user=${local.db_user} ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -p ${local.jumphost_ssh_port} opc@${local.jumphost_public_ip}"'
+    %{endfor~}
+
+    [all:vars]
+    ansible_python_interpreter=/usr/bin/python3
+  EOF
+}
+
+# ------------------------------------------------------------------------------
+# YAML-style inventory output
+# ------------------------------------------------------------------------------
+
+output "ansible_inventory_yaml" {
+  description = "Ansible inventory in YAML format (jumphost + DB19 hosts)."
+  value       = yamlencode(local.ansible_inventory_yaml_struct)
+}
+
+# --- EOF ----------------------------------------------------------------------

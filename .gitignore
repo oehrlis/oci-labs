@@ -1,0 +1,20 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+
+# Ansible generated inventory
+ansible/inventories/generated/
+
+# Build artifacts
+dist/
+
+# Local editor / OS
+.DS_Store
+.vscode/
+.idea/

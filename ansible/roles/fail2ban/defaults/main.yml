@@ -1,0 +1,9 @@
+---
+# Default vars for fail2ban role
+
+fail2ban_package: fail2ban
+fail2ban_service: fail2ban
+
+# Später für eigene Config/Jails nutzbar
+fail2ban_manage_config: false
+fail2ban_jail_local_path: /etc/fail2ban/jail.d/sshd.local

@@ -1,0 +1,4 @@
+---
+ssh_port: 22
+ssh_listen_address: "0.0.0.0"
+ssh_password_auth: false

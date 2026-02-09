@@ -1,0 +1,50 @@
+#cloud-config
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: jumphost-cloudinit.yaml.tftpl
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2025.11.27
+# Version....: v0.2.0
+# Purpose....: Minimal cloud-init to bootstrap Ansible for jumphost/gateway.
+# Notes......: Installs git + ansible, clones oci-labs-config and runs
+#              ansible/playbooks/lab-jumphost.yml (localhost, ssh_port, etc.).
+# ------------------------------------------------------------------------------
+
+users:
+  - default
+  - name: opc
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh-authorized-keys:
+      - ${ssh_authorized_keys}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - ansible-core
+
+write_files:
+  - path: /var/log/ansible-lab-jumphost.log
+    permissions: "0644"
+    content: |
+      Ansible lab-jumphost bootstrap will log here.
+
+runcmd:
+  # Safety: ensure required tools are present (idempotent)
+  - [ sh, -c, "dnf install -y git ansible-core || dnf install -y git python3-pip && pip3 install ansible" ]
+
+  # Clone or update the oci-labs-config repo
+  - [ sh, -c, "mkdir -p /opt && if [ ! -d /opt/oci-labs-config ]; then git clone -b ${ansible_branch} ${ansible_repo_url} /opt/oci-labs-config; else cd /opt/oci-labs-config && git fetch --all && git checkout ${ansible_branch} && git pull --ff-only; fi" ]
+
+  # Run the jumphost playbook locally minor fixes only, log output
+  - [ sh, -c, "cd /opt/oci-labs-config/ansible && \
+    ANSIBLE_FORCE_COLOR=true \
+    ANSIBLE_ROLES_PATH=/opt/oci-labs-config/ansible/roles \
+    ansible-playbook playbooks/lab-jumphost.yml \
+      -i 'localhost,' --connection=local \
+      --extra-vars 'ssh_port=${ssh_port} enable_wireguard=${enable_wireguard} lab_name=${lab_name_core}' \
+      >> /var/log/ansible-lab-jumphost.log 2>&1" ]
+
+# --- EOF ----------------------------------------------------------------------

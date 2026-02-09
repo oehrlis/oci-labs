@@ -1,0 +1,23 @@
+---
+- name: Configure jumphost gateway
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    ssh_port: 16022          # wird von Cloud-Init/extra-vars überschrieben
+    enable_wireguard: false  # dito
+    lab_name: "chzh-l-odb19eng-01"
+    security_stack: "fail2ban"   # oder "crowdsec" oder "both"
+
+  roles:
+    - role: common
+    - role: common_hardening
+    - role: base_ssh
+    - role: firewall
+    - role: wireguard_gateway
+    - role: jumphost_base
+    - role: fail2ban
+      when: security_stack in ['fail2ban', 'both']
+    - role: crowdsec
+      when: security_stack in ['crowdsec', 'both']

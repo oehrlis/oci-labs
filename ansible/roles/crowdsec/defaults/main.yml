@@ -1,0 +1,18 @@
+---
+# Default-Variablen für CrowdSec-Rolle
+
+crowdsec_enabled: true
+
+# Welche Collections/Parsers/Bouncers?
+crowdsec_collections:
+  - crowdsecurity/linux
+  - crowdsecurity/sshd
+
+# Optional: weitere Collections
+#  - crowdsecurity/http-cve
+
+# Firewall-Bouncer Paketname (für OL9 = nftables/iptables Variante)
+crowdsec_firewall_bouncer_package: crowdsec-firewall-bouncer-iptables
+
+# Service-Name des Bouncers
+crowdsec_firewall_bouncer_service: crowdsec-firewall-bouncer

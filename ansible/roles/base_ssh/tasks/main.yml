@@ -1,0 +1,31 @@
+---
+- name: Ensure sshd_config uses custom SSH port
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?Port '
+    line: "Port {{ ssh_port }}"
+    state: present
+    backrefs: yes
+  notify: restart sshd
+
+- name: Ensure PasswordAuthentication is disabled
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication '
+    line: "PasswordAuthentication no"
+    state: present
+    backrefs: yes
+  notify: restart sshd
+
+- name: Allow SSH port in SELinux
+  ansible.builtin.command: "semanage port -a -t ssh_port_t -p tcp {{ ssh_port }}"
+  register: semanage_result
+  changed_when: semanage_result.rc == 0
+  failed_when: semanage_result.rc not in [0, 1]
+  when: ansible_selinux.status == "enabled"
+
+- name: Ensure sshd is enabled and running
+  ansible.builtin.service:
+    name: sshd
+    state: started
+    enabled: true

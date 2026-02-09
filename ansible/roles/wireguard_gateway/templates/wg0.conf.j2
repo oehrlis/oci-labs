@@ -1,0 +1,15 @@
+[Interface]
+Address = {{ wireguard_server_ip }}
+ListenPort = {{ wireguard_port }}
+SaveConfig = true
+
+# Keys should be pre-generated or managed separately.
+# PrivateKey placeholder, to be replaced by a safer process.
+# PrivateKey = {{ wireguard_private_key | default('CHANGEME') }}
+
+# Peers will be added later
+{% for peer in wireguard_peers %}
+[Peer]
+PublicKey = {{ peer.public_key }}
+AllowedIPs = {{ peer.allowed_ips | default('0.0.0.0/0') }}
+{% endfor %}

@@ -1,0 +1,45 @@
+---
+- name: Skip WireGuard configuration if disabled
+  ansible.builtin.debug:
+    msg: "WireGuard disabled via enable_wireguard=false"
+  when: not enable_wireguard
+
+- name: Ensure wireguard-tools are installed
+  ansible.builtin.package:
+    name: wireguard-tools
+    state: present
+  when: enable_wireguard
+
+- name: Ensure /etc/wireguard directory exists
+  ansible.builtin.file:
+    path: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: enable_wireguard
+
+- name: Deploy WireGuard config template
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: "/etc/wireguard/{{ wireguard_interface }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  when: enable_wireguard
+
+- name: Enable and start WireGuard via wg-quick
+  ansible.builtin.service:
+    name: "wg-quick@{{ wireguard_interface }}"
+    enabled: true
+    state: started
+  when: enable_wireguard
+
+- name: Place WireGuard TODO marker
+  ansible.builtin.copy:
+    dest: /root/wireguard.todo
+    content: "WireGuard endpoint configured - review keys and peers.\n"
+    owner: root
+    group: root
+    mode: "0600"
+  when: enable_wireguard

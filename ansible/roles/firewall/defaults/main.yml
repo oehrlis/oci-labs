@@ -1,0 +1,5 @@
+---
+firewall_ssh_port: 22
+firewall_wireguard_port: 51820
+firewall_enable_wireguard: true
+firewall_default_zone: public
