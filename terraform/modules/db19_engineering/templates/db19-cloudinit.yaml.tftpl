@@ -1,0 +1,114 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: db19-cloudinit.yaml.tftpl
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Editor.....: Stefan Oehrli
+# Date.......: 2025.11.26
+# Version....: v0.1.0
+# Purpose....: Cloud-init template to prepare DB19 engineering hosts.
+# Notes......: Sets SSH hardening, users, directories, kernel params, firewall, and placeholders for DB install.
+# Reference..: https://github.com/oehrlis/oci-labs-infra
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+# Modified...:
+# 2025.11.26 oehrli - initial version
+# ------------------------------------------------------------------------------
+
+#cloud-config
+users:
+  - default
+  - name: oracle
+    gecos: Oracle Software Owner
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    primary_group: oinstall
+    groups: oinstall,dba,oper
+  - name: opc
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh-authorized-keys:
+      - ${ssh_authorized_keys}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - firewalld
+  - fail2ban
+  - chrony
+  - vim
+  - rlwrap
+  - unzip
+  - tar
+  - net-tools
+  - bind-utils
+  - lsof
+  - git
+
+runcmd:
+  # Configure SSH port and basic hardening
+  - sed -i 's/^#Port 22/Port ${ssh_port}/' /etc/ssh/sshd_config
+  - sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+
+  # Create Oracle groups and user (in case not created via cloud-config user stanza)
+  - /usr/sbin/groupadd -f oinstall
+  - /usr/sbin/groupadd -f dba
+  - /usr/sbin/groupadd -f oper
+  - id oracle >/dev/null 2>&1 || /usr/sbin/useradd -g oinstall -G dba,oper oracle
+
+  # Create Oracle directory structure
+  - mkdir -p /u01/app/oracle
+  - mkdir -p /u01/app/oraInventory
+  - mkdir -p /u02/oradata
+  - mkdir -p /u03/fast_recovery_area
+  - chown -R oracle:oinstall /u01 /u02 /u03
+  - chmod -R 775 /u01 /u02 /u03
+
+  # Kernel parameters and limits for Oracle
+  - echo "
+    fs.aio-max-nr = 1048576
+    fs.file-max = 6815744
+    kernel.shmall = 2097152
+    kernel.shmmax = 8589934592
+    kernel.shmmni = 4096
+    kernel.sem = 250 32000 100 128
+    net.ipv4.ip_local_port_range = 9000 65500
+    net.core.rmem_default = 262144
+    net.core.rmem_max = 4194304
+    net.core.wmem_default = 262144
+    net.core.wmem_max = 1048576
+    " > /etc/sysctl.d/99-oracle.conf
+  - sysctl --system
+
+  - echo "
+    oracle   soft   nproc    2047
+    oracle   hard   nproc    16384
+    oracle   soft   nofile   1024
+    oracle   hard   nofile   65536
+    oracle   soft   stack    10240
+    oracle   hard   stack    32768
+    " > /etc/security/limits.d/oracle.conf
+
+  # Enable and configure chrony (basic)
+  - systemctl enable chronyd
+  - systemctl start chronyd
+
+  # Enable and start firewalld
+  - systemctl enable firewalld
+  - systemctl start firewalld
+  - firewall-cmd --permanent --add-port=${ssh_port}/tcp
+%{ if open_db_ports }
+  - firewall-cmd --permanent --add-port=${db_listener_port}/tcp
+  - firewall-cmd --permanent --add-port=${db_oem_port}/tcp
+%{ endif }
+  - firewall-cmd --reload
+
+  # Enable fail2ban
+  - systemctl enable fail2ban
+  - systemctl start fail2ban
+
+  # Placeholder for DB software installation via Ansible
+  - echo "DB19c engineering host prepared. Run Ansible role db19_engineering for software install." > /root/db19_install.todo
+
+# --- EOF ----------------------------------------------------------------------

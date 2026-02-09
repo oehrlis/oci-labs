@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../trivadis/terraform-oci-tvdlab-vcn"
+		},
+		{
+			"path": "../../trivadis/terraform-oci-tvdlab-bastion.bfg-report"
+		},
+		{
+			"path": "../../trivadis/terraform-oci-tvdlab-host"
+		},
+		{
+			"path": "../../trivadis/terraform-oci-tvdlab-bastion"
+		}
+	],
+	"settings": {}
+}

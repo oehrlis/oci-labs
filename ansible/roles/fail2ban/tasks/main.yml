@@ -1,0 +1,33 @@
+---
+# Install Fail2ban on Oracle Linux 9 via EPEL
+
+- name: Ensure EPEL release packages are installed (OL9)
+  ansible.builtin.dnf:
+    name:
+      - oracle-epel-release-el9
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] | string == '9'
+
+- name: Ensure fail2ban package is installed (from EPEL)
+  ansible.builtin.dnf:
+    name: "{{ fail2ban_package }}"
+    state: present
+    enablerepo: ol9_developer_EPEL
+  when: ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] | string == '9'
+
+- name: Ensure fail2ban service is enabled and running
+  ansible.builtin.service:
+    name: "{{ fail2ban_service }}"
+    state: started
+    enabled: true
+
+# Optionaler Hook für spätere Jail-Konfiguration
+- name: Optionally manage sshd jail config
+  ansible.builtin.template:
+    src: sshd.local.j2
+    dest: "{{ fail2ban_jail_local_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: fail2ban_manage_config | bool
+  notify: restart fail2ban

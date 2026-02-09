@@ -1,0 +1,8 @@
+---
+enable_wireguard: true
+wireguard_interface: wg0
+wireguard_port: 51820
+wireguard_network: "10.99.0.0/24"
+wireguard_server_ip: "10.99.0.1/24"
+wireguard_allowed_ips: "0.0.0.0/0"
+wireguard_peers: []   # später für Clients

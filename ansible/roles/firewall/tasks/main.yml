@@ -1,0 +1,25 @@
+---
+- name: Ensure firewalld is installed
+  ansible.builtin.package:
+    name: firewalld
+    state: present
+
+- name: Ensure firewalld is enabled and running
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+
+- name: Open SSH port in firewalld
+  ansible.builtin.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+
+- name: Open WireGuard port in firewalld (optional)
+  ansible.builtin.firewalld:
+    port: "51820/udp"
+    permanent: true
+    state: "{{ 'enabled' if enable_wireguard else 'disabled' }}"
+    immediate: true

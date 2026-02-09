@@ -1,0 +1,50 @@
+---
+- name: "CrowdSec | Repos & Pakete nur wenn aktiviert"
+  when: crowdsec_enabled | bool
+  block:
+
+    - name: "CrowdSec | Ensure dnf-plugins-core is installed"
+      ansible.builtin.package:
+        name: dnf-plugins-core
+        state: present
+
+    - name: "CrowdSec | Add official CrowdSec YUM repo"
+      ansible.builtin.get_url:
+        url: https://packagecloud.io/install/repositories/crowdsec/crowdsec/script.rpm.sh
+        dest: /tmp/crowdsec_repo_install.sh
+        mode: "0755"
+
+    - name: "CrowdSec | Run repo install script"
+      ansible.builtin.command: /tmp/crowdsec_repo_install.sh
+      args:
+        creates: /etc/yum.repos.d/crowdsec_crowdsec.repo
+
+    - name: "CrowdSec | Install crowdsec engine"
+      ansible.builtin.package:
+        name: crowdsec
+        state: present
+
+    - name: "CrowdSec | Install firewall bouncer"
+      ansible.builtin.package:
+        name: "{{ crowdsec_firewall_bouncer_package }}"
+        state: present
+
+    - name: "CrowdSec | Ensure base collections are installed"
+      ansible.builtin.command: >
+        cscli collections install {{ item }}
+      loop: "{{ crowdsec_collections }}"
+      register: crowdsec_collections_result
+      changed_when: "'already installed' not in crowdsec_collections_result.stdout | default('')"
+      failed_when: false
+
+    - name: "CrowdSec | Enable and start crowdsec service"
+      ansible.builtin.service:
+        name: crowdsec
+        state: started
+        enabled: true
+
+    - name: "CrowdSec | Enable and start firewall bouncer"
+      ansible.builtin.service:
+        name: "{{ crowdsec_firewall_bouncer_service }}"
+        state: started
+        enabled: true
