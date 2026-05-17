@@ -1,0 +1,28 @@
+# ------------------------------------------------------------------------------
+# terraform.tfvars.example - mfa_oma_setup stack
+# Copy to terraform.tfvars and fill in your values.
+# terraform.tfvars is git-ignored - never commit it.
+# Sensitive OCIDs go into .env (TF_VAR_*), not here.
+# ------------------------------------------------------------------------------
+
+# OCI provider
+oci_profile = "DEFAULT"
+region      = "eu-zurich-1"
+
+# Naming convention
+region_key   = "zrh"
+env          = "lab"
+stack        = "mfaoma"
+lab_instance = 1
+project_tag  = "oradba-labs"
+
+# Email Delivery
+smtp_sender_email = "labdb@yourdomain.com"
+smtp_sender_name  = "Oracle DB MFA Demo"
+
+# OAuth Application (leave empty to use auto-generated name)
+app_name = ""
+
+# DKIM (optional - requires verified email domain)
+create_dkim       = false
+# email_domain_ocid = "ocid1.emaildomain.oc1.eu-zurich-1.xxx"
