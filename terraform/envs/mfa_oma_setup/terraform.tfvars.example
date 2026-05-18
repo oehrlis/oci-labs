@@ -16,13 +16,32 @@ stack        = "mfaoma"
 lab_instance = 1
 project_tag  = "oradba-labs"
 
-# Email Delivery
-smtp_sender_email = "labdb@yourdomain.com"
+# Email Delivery - Approved Sender
+# One approved sender per FROM address. Multiple Oracle DBs can share the same
+# sender. Use separate addresses (e.g. db1-mfa@domain.com) if per-DB tracking
+# is needed. Must match MFA_SENDER_EMAIL_ID set on the database.
+smtp_sender_email = "mfa.notification@yourdomain.com"
 smtp_sender_name  = "Oracle DB MFA Demo"
 
-# OAuth Application (leave empty to use auto-generated name)
+# OAuth Application (leave empty to use auto-generated name from naming convention)
 app_name = ""
 
-# DKIM (optional - requires verified email domain)
+# Email Domain - three-phase deployment:
+#
+#   Phase 1: Set create_email_domain = true, set email_domain, apply.
+#            Add the TXT record from output email_domain_verification_id to DNS
+#            at _email-validation.<domain>, then verify in OCI Console.
+#
+#   Phase 2: After OCI Console domain verification is complete.
+#
+#   Phase 3: Set create_dkim = true, apply.
+#            Add CNAME record from outputs dkim_cname_name / dkim_cname_value to DNS.
+#
+# If the email domain already exists in OCI, set create_email_domain = false
+# and provide email_domain_ocid for DKIM.
+
+create_email_domain = false
+# email_domain      = "oradba.ch"
+
 create_dkim       = false
-# email_domain_ocid = "ocid1.emaildomain.oc1.eu-zurich-1.xxx"
+# email_domain_ocid = "ocid1.emaildomain.oc1.eu-zurich-1.xxx"  # only if create_email_domain = false

@@ -16,18 +16,18 @@
 
 output "iam_domain_url" {
   description = "Identity Domain URL, used as MFA_OMA_IAM_DOMAIN_URL in Oracle DB config."
-  value       = data.oci_identity_domain.domain.url
+  value       = local.idcs_endpoint
 }
 
 output "oauth_client_id" {
   description = "OAuth Confidential Application client ID (app name in Identity Domain)."
-  value       = oci_identity_domains_application.oauth_app.name
+  value       = oci_identity_domains_app.oauth_app.name
 }
 
 output "oauth_client_secret" {
   description = "OAuth Confidential Application client secret. Available once after apply; retrieve via OCI Console if lost."
   sensitive   = true
-  value       = oci_identity_domains_application.oauth_app.client_secret
+  value       = oci_identity_domains_app.oauth_app.client_secret
 }
 
 output "smtp_host" {
@@ -61,9 +61,34 @@ output "smtp_user_ocid" {
   value       = oci_identity_user.smtp_user.id
 }
 
+output "smtp_group_ocid" {
+  description = "OCID of the IAM group for the SMTP user."
+  value       = oci_identity_group.smtp_group.id
+}
+
 output "approved_sender_ocid" {
   description = "OCID of the OCI Email Delivery Approved Sender."
   value       = oci_email_sender.approved_sender.id
+}
+
+output "email_domain_ocid" {
+  description = "OCID of the OCI Email Delivery domain. Null when create_email_domain = false."
+  value       = try(oci_email_email_domain.email_domain[0].id, null)
+}
+
+output "email_domain_verification_id" {
+  description = "DNS TXT record value for domain verification. Add as TXT record at _email-validation.<domain>. Null when create_email_domain = false."
+  value       = try(oci_email_email_domain.email_domain[0].domain_verification_id, null)
+}
+
+output "dkim_cname_name" {
+  description = "DNS CNAME record name for DKIM. Null when create_dkim = false."
+  value       = try(oci_email_dkim.dkim[0].dns_subdomain_name, null)
+}
+
+output "dkim_cname_value" {
+  description = "DNS CNAME record value for DKIM. Null when create_dkim = false."
+  value       = try(oci_email_dkim.dkim[0].cname_record_value, null)
 }
 
 output "db_mfa_config_commands" {
@@ -71,7 +96,7 @@ output "db_mfa_config_commands" {
   sensitive   = true
   value       = <<-EOT
     -- Run as SYSDBA on the Oracle Database:
-    ALTER SYSTEM SET MFA_OMA_IAM_DOMAIN_URL = '${data.oci_identity_domain.domain.url}' SCOPE=BOTH;
+    ALTER SYSTEM SET MFA_OMA_IAM_DOMAIN_URL = '${local.idcs_endpoint}' SCOPE=BOTH;
     ALTER SYSTEM SET MFA_SMTP_HOST          = '${local.smtp_host}' SCOPE=BOTH;
     ALTER SYSTEM SET MFA_SMTP_PORT          = 587 SCOPE=BOTH;
     ALTER SYSTEM SET MFA_SENDER_EMAIL_ID    = '${var.smtp_sender_email}' SCOPE=BOTH;

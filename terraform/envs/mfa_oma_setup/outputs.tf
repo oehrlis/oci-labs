@@ -66,6 +66,26 @@ output "approved_sender_ocid" {
   value       = module.iam_mfa_oma.approved_sender_ocid
 }
 
+output "email_domain_ocid" {
+  description = "OCID of the OCI Email Delivery domain (null when create_email_domain = false)"
+  value       = module.iam_mfa_oma.email_domain_ocid
+}
+
+output "email_domain_verification_id" {
+  description = "DNS TXT record value for domain verification - add at _email-validation.<domain>"
+  value       = module.iam_mfa_oma.email_domain_verification_id
+}
+
+output "dkim_cname_name" {
+  description = "DNS CNAME record name for DKIM (null when create_dkim = false)"
+  value       = module.iam_mfa_oma.dkim_cname_name
+}
+
+output "dkim_cname_value" {
+  description = "DNS CNAME record value for DKIM (null when create_dkim = false)"
+  value       = module.iam_mfa_oma.dkim_cname_value
+}
+
 output "db_mfa_config_commands" {
   description = "ALTER SYSTEM commands for Oracle DB-side MFA setup"
   sensitive   = true
