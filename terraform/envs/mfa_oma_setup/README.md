@@ -46,14 +46,19 @@ terraform output -json | jq '{
 
 ### 2. Grant OAuth App roles (required for OMA Push)
 
+> Note: Custom apps appear under **Integrated Applications**, not Oracle Cloud Services.
+
 Navigate to: **OCI Console -> Identity & Security -> Domains ->
-\<your domain> -> Oracle Cloud Services -> \<app-name> -> Application Roles**
+\<your domain> -> Integrated Applications -> \<app-name> -> Application Roles**
 
 Grant the following roles:
 
 - MFA Client
 - User Administrator
-- Identity Domain Administration
+- Identity Domain Administrator
+
+See the [Runbook Step 5](../../../../docs/runbook-mfa-oma.md#step-5---grant-oauth-app-roles-manual)
+for CLI commands using `oci raw-request`.
 
 ### 3. Configure Oracle Database
 
@@ -62,17 +67,10 @@ Grant the following roles:
 terraform output db_mfa_config_commands
 ```
 
-Run the output SQL as SYSDBA on your Oracle Database. Then configure
-the OAuth client credentials in the DB wallet:
-
-```sql
--- After running ALTER SYSTEM commands:
-EXEC DBMS_CLOUD.CREATE_CREDENTIAL(
-  credential_name => 'OCI_MFA_OMA_CRED',
-  username        => '<oauth_client_id>',
-  password        => '<oauth_client_secret>'
-);
-```
+Run the output SQL as SYSDBA, then store OAuth and SMTP credentials in the MFA
+wallet using `orapki secretstore create_credential`. See the
+[Runbook Steps 6-7](../../../../docs/runbook-mfa-oma.md#step-6---configure-oracle-database)
+for the full wallet configuration procedure.
 
 ## Teardown
 

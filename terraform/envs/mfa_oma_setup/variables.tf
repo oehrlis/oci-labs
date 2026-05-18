@@ -98,16 +98,30 @@ variable "app_name" {
   default     = ""
 }
 
+# -- Email Domain (optional) ---------------------------------------------------
+
+variable "create_email_domain" {
+  description = "Create the OCI Email Delivery domain. After apply, add the TXT record output to DNS to verify the domain."
+  type        = bool
+  default     = false
+}
+
+variable "email_domain" {
+  description = "Email domain name to register in OCI Email Delivery, e.g. oradba.ch. Required when create_email_domain = true."
+  type        = string
+  default     = null
+}
+
 # -- DKIM (optional) -----------------------------------------------------------
 
 variable "create_dkim" {
-  description = "Create a DKIM record. Requires a verified email domain in OCI Email Delivery and email_domain_ocid."
+  description = "Create a DKIM record. Requires a verified domain (create_email_domain = true or email_domain_ocid provided)."
   type        = bool
   default     = false
 }
 
 variable "email_domain_ocid" {
-  description = "OCID of the OCI Email Delivery domain. Required only when create_dkim = true."
+  description = "OCID of an existing OCI Email Delivery domain. Used when create_email_domain = false and create_dkim = true."
   type        = string
   default     = null
 }

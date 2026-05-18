@@ -38,6 +38,10 @@ module "iam_mfa_oma" {
   # OAuth Application
   app_name = var.app_name
 
+  # Email Domain (optional)
+  create_email_domain = var.create_email_domain
+  email_domain        = var.email_domain
+
   # DKIM (optional)
   create_dkim       = var.create_dkim
   email_domain_ocid = var.email_domain_ocid

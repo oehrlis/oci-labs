@@ -39,18 +39,25 @@ oci-labs/
 ### OCI IAM
 
 ```text
-oci_identity_domains_application  (OAuth Confidential App)
+oci_identity_domains_app  (OAuth Confidential App)
   - display_name: var.app_name (Default: "oracle-db-mfa")
+  - based_on_template: CustomWebAppTemplateId
   - grant_type: CLIENT_CREDENTIALS
-  - app_roles:
+  - app_roles (manuell nach apply):
       - User Administrator
-      - Identity Domain Administration
+      - Identity Domain Administrator
       - MFA Client
   - Outputs: client_id, client_secret
 
 oci_identity_user  (dedizierter SMTP-User)
   - name: <stack_code>-smtp-user (via naming module)
   - compartment: tenancy root (IAM Users sind tenancy-weit)
+
+oci_identity_group  (IAM-Gruppe für SMTP-User)
+  - name: grp-<naming>-smtp-<nn>
+  - Identity Domain Tenancies unterstützen kein "Allow user" in Policies
+
+oci_identity_user_group_membership  (User-zu-Gruppe Bindung)
 
 oci_identity_smtp_credential  (an SMTP-User gebunden)
   - Outputs: username, password (sensitive)
@@ -72,8 +79,9 @@ oci_email_dkim  (optional, nur wenn Domain bereits verifiziert)
 ```text
 oci_identity_policy
   - Name: <stack_code>-smtp-policy
-  - Statement: "Allow user <smtp_user_name> to use email-family
-                in compartment <compartment_name>"
+  - Statement: "Allow group <smtp_group_name> to use email-family
+                in compartment id <compartment_ocid>"
+  - Hinweis: "Allow user" ist in Identity Domain Tenancies nicht gültig
 ```
 
 ## Variables (Modul)
@@ -204,15 +212,21 @@ Beispiel-Struktur im README:
 
 ### OAuth Confidential Application
 
-**Terraform:** oci_identity_domains_application ...
+**Terraform:** oci_identity_domains_app ...
 
-**OCI CLI:**
-$ oci identity-domains app create \
-    --schemas '["urn:ietf:params:scim:schemas:oracle:idcs:App"]' \
-    --display-name "oracle-db-mfa" \
-    --is-oauth-client true \
-    --allowed-grants '["client_credentials"]' \
-    ...
+**OCI CLI (raw-request - oci identity-domains hat kein app create):**
+$ IDCS=$(terraform output -raw iam_domain_url | sed 's/:443//')
+$ oci raw-request --http-method POST \
+    --target-uri "${IDCS}/admin/v1/Apps" \
+    --request-body '{
+      "schemas": ["urn:ietf:params:scim:schemas:oracle:idcs:App"],
+      "displayName": "oracle-db-mfa",
+      "basedOnTemplate": {"value": "CustomWebAppTemplateId"},
+      "isOAuthClient": true,
+      "allowedGrants": ["client_credentials"],
+      "clientType": "confidential",
+      "active": true
+    }'
 
 ### Approved Sender
 
