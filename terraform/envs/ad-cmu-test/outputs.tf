@@ -50,4 +50,9 @@ output "windows_instance_name" {
   value       = module.windows_ad.instance_name
 }
 
+output "auto_stop_schedule_id" {
+  description = "OCID of the auto-stop schedule (daily 20:00 Europe/Zurich, manual start)."
+  value       = oci_resource_scheduler_schedule.windows_ad_stop.id
+}
+
 # --- EOF ----------------------------------------------------------------------

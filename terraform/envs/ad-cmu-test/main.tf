@@ -77,10 +77,12 @@ module "network" {
 }
 
 # ---------------------------------------------------------------------------
-# Windows Server 2022 image lookup (x86 / VM.Standard3.Flex)
+# Windows Server 2022 image lookup (skipped when instance_image_ocid is set)
 # ---------------------------------------------------------------------------
 
 data "oci_core_images" "windows" {
+  count = var.instance_image_ocid == null ? 1 : 0
+
   compartment_id           = var.compartment_ocid
   operating_system         = "Windows"
   operating_system_version = var.windows_os_version
@@ -88,6 +90,10 @@ data "oci_core_images" "windows" {
 
   sort_by    = "TIMECREATED"
   sort_order = "DESC"
+}
+
+locals {
+  windows_image_id = var.instance_image_ocid != null ? var.instance_image_ocid : data.oci_core_images.windows[0].images[0].id
 }
 
 # ---------------------------------------------------------------------------
@@ -105,7 +111,7 @@ module "windows_ad" {
   lab_name_core = local.lab_name_core
   freeform_tags = local.base_freeform_tags
 
-  instance_image_ocid = data.oci_core_images.windows.images[0].id
+  instance_image_ocid = local.windows_image_id
 
   shape      = var.windows_shape
   ocpus      = var.windows_ocpus
@@ -116,6 +122,26 @@ module "windows_ad" {
 
   domain_name           = var.domain_name
   admin_password_secret = var.admin_password_secret
+}
+
+# ---------------------------------------------------------------------------
+# Resource Scheduler — auto-stop Windows AD at 20:00 Europe/Zurich
+# ---------------------------------------------------------------------------
+
+resource "oci_resource_scheduler_schedule" "windows_ad_stop" {
+  compartment_id = var.compartment_ocid
+  display_name   = "sched-${local.lab_name_core}-windc-stop-01"
+  description    = "Daily stop at 18:00 UTC (20:00 CEST / 19:00 CET). Start manually."
+  action         = "STOP_RESOURCE"
+
+  recurrence_type    = "CRON"
+  recurrence_details = "0 18 * * *"
+
+  resources {
+    id = module.windows_ad.instance_id
+  }
+
+  freeform_tags = local.base_freeform_tags
 }
 
 # --- EOF ----------------------------------------------------------------------
