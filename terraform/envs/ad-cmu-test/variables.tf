@@ -106,10 +106,16 @@ variable "flow_log_retention_duration" {
 # Windows AD instance variables
 # -----------------------------------------------------------------------------
 
+variable "instance_image_ocid" {
+  type        = string
+  description = "Optional: explicit image OCID for Windows AD. When set, skips data source image lookup."
+  default     = null
+}
+
 variable "windows_shape" {
   type        = string
   description = "Shape for the Windows AD VM. Must be x86 (not ARM)."
-  default     = "VM.Standard3.Flex"
+  default     = "VM.Standard.E4.Flex"
 }
 
 variable "windows_ocpus" {

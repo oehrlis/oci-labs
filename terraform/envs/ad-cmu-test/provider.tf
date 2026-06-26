@@ -28,7 +28,7 @@ terraform {
 }
 
 provider "oci" {
-  config_file_profile = "DEFAULT"
+  config_file_profile = "ACE"
 }
 
 # --- EOF ----------------------------------------------------------------------
