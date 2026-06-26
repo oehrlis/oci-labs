@@ -45,4 +45,9 @@ output "log_group_id" {
   value       = oci_logging_log_group.net.id
 }
 
+output "windows_subnet_id" {
+  description = "OCID of the Windows AD subnet."
+  value       = oci_core_subnet.windows.id
+}
+
 # --- EOF ----------------------------------------------------------------------

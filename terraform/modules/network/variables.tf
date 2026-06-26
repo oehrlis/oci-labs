@@ -119,4 +119,16 @@ variable "allow_public_http_https" {
   default     = false
 }
 
+variable "windows_subnet_cidr" {
+  type        = string
+  description = "CIDR block for the Windows AD subnet."
+  default     = "10.19.50.0/24"
+}
+
+variable "allowed_rdp_cidrs" {
+  type        = list(string)
+  description = "CIDRs allowed to reach RDP (3389) on the Windows AD subnet from outside the VCN. Empty list disables external RDP ingress."
+  default     = []
+}
+
 # --- EOF ----------------------------------------------------------------------
