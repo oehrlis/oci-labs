@@ -10,10 +10,10 @@
 #              terraform apply
 # ------------------------------------------------------------------------------
 
-# Core - ORADBACH Tenancy (personal lab, 5000 credits/year)
-# compartment_ocid: root tenancy or sub-compartment - fill after ORADBACH key setup
-# Tenancy: ocid1.tenancy.oc1..aaaaaaaag5rtpvb4ddwvfys66vr3zddc5nt75m7yvxhuwphnl44woinclnfq
-compartment_ocid = "ocid1.tenancy.oc1..aaaaaaaag5rtpvb4ddwvfys66vr3zddc5nt75m7yvxhuwphnl44woinclnfq"
+# Core - ACE Tenancy / cmp-oradba-labs (personal lab, 5000 credits/year)
+# Profile: ACE (~/.oci/config)
+# Tenancy: ocid1.tenancy.oc1..aaaaaaaaapv5xofkxzyd4nbshzwrghdg6i7gdvob7y6tyv6atcb2hd6irzbq
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaxq7bir4bjy3bzozyjd4idlvharoco3ww5jx5nzzvv6rhcypb6cfa"
 region_key       = "chzh"
 environment_code = "l"
 stack_code       = "windc"
