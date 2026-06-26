@@ -1,0 +1,52 @@
+#ps1_sysnative
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: windows_ad-cloudinit.yaml.tftpl
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.06.26
+# Version....: v0.1.0
+# Purpose....: cloudbase-init bootstrap for OCI Windows AD lab instance.
+#              Enables WinRM (HTTP+HTTPS), sets admin password, stores domain.
+# Notes......: admin_password_b64 is base64-encoded to avoid tftpl escaping issues.
+#              Rendered by Terraform templatefile() and base64-encoded as user_data.
+# ------------------------------------------------------------------------------
+
+$$ErrorActionPreference = 'Stop'
+
+# Decode admin password (base64 avoids special-char issues in tftpl)
+$$adminPassB64 = '${admin_password_b64}'
+$$adminPass = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($$adminPassB64))
+$$securePass = ConvertTo-SecureString $$adminPass -AsPlainText -Force
+
+# Set and enable Administrator account
+try {
+    Set-LocalUser -Name 'Administrator' -Password $$securePass
+    Enable-LocalUser -Name 'Administrator'
+} catch {
+    # Fallback for older WMF versions
+    $$admin = [adsi]"WinNT://./Administrator,user"
+    $$admin.SetPassword($$adminPass)
+    $$admin.SetInfo()
+}
+
+# Store domain and lab name as machine environment variables for AD setup scripts
+[System.Environment]::SetEnvironmentVariable('LAB_DOMAIN', '${domain_name}', 'Machine')
+[System.Environment]::SetEnvironmentVariable('LAB_NAME', '${lab_name_core}', 'Machine')
+
+# Configure WinRM for Ansible management
+winrm quickconfig -quiet -force
+winrm set winrm/config '@{MaxTimeoutms="1800000"}'
+winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="1024"}'
+winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+winrm set winrm/config/service/auth '@{Basic="true"}'
+winrm set winrm/config/listener?Address=*+Transport=HTTP '@{Port="5985"}'
+
+# Open firewall for WinRM (5985/5986) and RDP (3389)
+netsh advfirewall firewall add rule name="WinRM HTTP (5985)"  dir=in action=allow protocol=TCP localport=5985
+netsh advfirewall firewall add rule name="WinRM HTTPS (5986)" dir=in action=allow protocol=TCP localport=5986
+
+# Restart WinRM to apply all settings
+Restart-Service winrm -Force
+
+Write-Output "cloudbase-init: WinRM ready, domain=${domain_name}"
