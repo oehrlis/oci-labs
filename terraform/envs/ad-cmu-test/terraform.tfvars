@@ -6,7 +6,7 @@
 # Date.......: 2026.06.26
 # Purpose....: Variable values for ad-cmu-test stack.
 # Notes......: NEVER commit secrets. admin_password_secret via:
-#              export TF_VAR_admin_password_secret=$(op read "op://Private/WinDC/password")
+#              export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
 #              terraform apply
 # ------------------------------------------------------------------------------
 
