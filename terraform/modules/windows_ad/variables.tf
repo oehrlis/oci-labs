@@ -60,7 +60,7 @@ variable "ssh_authorized_keys" {
 variable "shape" {
   type        = string
   description = "Compute shape for the Windows AD instance. Must be x86 (not ARM)."
-  default     = "VM.Standard3.Flex"
+  default     = "VM.Standard.E4.Flex"
 }
 
 variable "ocpus" {
@@ -72,7 +72,7 @@ variable "ocpus" {
 variable "memory_gbs" {
   type        = number
   description = "Memory in GB for the Windows AD instance."
-  default     = 16
+  default     = 8
 }
 
 variable "boot_volume_size_gbs" {
