@@ -10,8 +10,10 @@
 #              terraform apply
 # ------------------------------------------------------------------------------
 
-# Core
-compartment_ocid = "ocid1.compartment.oc1..aaaa"
+# Core - ORADBACH Tenancy (personal lab, 5000 credits/year)
+# compartment_ocid: root tenancy or sub-compartment - fill after ORADBACH key setup
+# Tenancy: ocid1.tenancy.oc1..aaaaaaaag5rtpvb4ddwvfys66vr3zddc5nt75m7yvxhuwphnl44woinclnfq
+compartment_ocid = "ocid1.tenancy.oc1..aaaaaaaag5rtpvb4ddwvfys66vr3zddc5nt75m7yvxhuwphnl44woinclnfq"
 region_key       = "chzh"
 environment_code = "l"
 stack_code       = "windc"
@@ -33,10 +35,11 @@ windows_subnet_cidr = "10.19.50.0/24"
 # allowed_rdp_cidrs = ["<your-ip>/32"]
 
 # Windows AD
-domain_name                  = "trivadislabs.com"
-windows_shape                = "VM.Standard3.Flex"
+domain_name                  = "oradba.ch"
+instance_image_ocid          = "ocid1.image.oc1.eu-zurich-1.aaaaaaaanrw7bmj2aeab2zvviznxrfvt4w5uxm2j6bmgikmbpp5j5iwbrclq"
+windows_shape                = "VM.Standard.E4.Flex"
 windows_ocpus                = 2
-windows_memory_gbs           = 16
+windows_memory_gbs           = 8
 windows_boot_volume_size_gbs = 100
 assign_windows_public_ip     = false
 
