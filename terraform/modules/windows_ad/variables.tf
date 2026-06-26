@@ -89,8 +89,7 @@ variable "assign_public_ip" {
 
 variable "domain_name" {
   type        = string
-  description = "Active Directory domain name (FQDN)."
-  default     = "oradba.ch"
+  description = "Active Directory domain name (FQDN). Set in the env, not the module."
 }
 
 variable "admin_password_secret" {
