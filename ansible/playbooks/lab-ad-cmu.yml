@@ -1,0 +1,36 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: lab-ad-cmu.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.06.26
+# Version....: v0.1.0
+# Purpose....: Configure Windows AD for Oracle CMU + Kerberos lab.
+# Notes......: WinRM connection (HTTP 5985). Requires:
+#              - ansible.windows collection
+#              - windows_ad_admin_password in group_vars/vault
+#              - ad-lab scripts accessible at windows_ad_scripts_src
+#
+# Usage:
+#   ansible-playbook playbooks/lab-ad-cmu.yml \
+#     -i inventories/ad-cmu-test/ \
+#     --extra-vars "windows_ad_admin_password=<secret>"
+# ------------------------------------------------------------------------------
+
+- name: Configure Windows Active Directory for Oracle CMU + Kerberos
+  hosts: windows_dc
+  gather_facts: true
+
+  connection: winrm
+  vars:
+    ansible_winrm_transport: basic
+    ansible_winrm_port: 5985
+    ansible_winrm_scheme: http
+    ansible_winrm_server_cert_validation: ignore
+
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/{{ lab_name | default('ad-cmu-test') }}/group_vars/windows_dc.yml"
+
+  roles:
+    - role: windows_ad

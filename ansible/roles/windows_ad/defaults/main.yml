@@ -1,0 +1,36 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.06.26
+# Version....: v0.1.0
+# Purpose....: Default variables for the windows_ad role.
+# Notes......: Sensitive vars (windows_ad_admin_password) must be passed via
+#              inventory group_vars, extra-vars, or Ansible Vault.
+#              windows_ad_scripts_src points to the ad-lab repo checkout.
+# Reference..: https://github.com/oehrlis/oci-labs
+# ------------------------------------------------------------------------------
+
+# AD domain settings
+windows_ad_domain: "trivadislabs.com"
+windows_ad_netbios: "TRIVADISLABS"
+windows_ad_company: "Trivadis Labs"
+windows_ad_admin_user: "Administrator"
+
+# Path to the ad-lab scripts repo (checkout of https://github.com/oehrlis/ad-lab)
+# Override in inventory or extra-vars for the actual path on the control node.
+windows_ad_scripts_src: "{{ playbook_dir }}/../../../../ad-lab"
+
+# Remote destination on the Windows DC for the scripts
+windows_ad_scripts_dest: "C:\\OraLab\\Scripts"
+
+# AD setup scripts executed in order
+windows_ad_scripts:
+  - "01_install_ad_role.ps1"
+  - "11_add_lab_company.ps1"
+  - "11_add_service_principles.ps1"
+  - "12_config_dns.ps1"
+  - "13_config_ca.ps1"
+  - "27_config_cmu.ps1"
