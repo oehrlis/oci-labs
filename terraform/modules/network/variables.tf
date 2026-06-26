@@ -131,4 +131,18 @@ variable "allowed_rdp_cidrs" {
   default     = []
 }
 
+# --- DRG / VPN ---------------------------------------------------------------
+
+variable "drg_id" {
+  type        = string
+  description = "OCID of an existing DRG to attach this VCN to. When set, home_cidrs are routed via DRG."
+  default     = null
+}
+
+variable "home_cidrs" {
+  type        = list(string)
+  description = "Home/VPN CIDRs routed via DRG (home LAN, WireGuard clients). Only effective when drg_id is set."
+  default     = []
+}
+
 # --- EOF ----------------------------------------------------------------------

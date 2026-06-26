@@ -145,13 +145,29 @@ variable "assign_windows_public_ip" {
 variable "domain_name" {
   type        = string
   description = "Active Directory domain name (FQDN)."
-  default     = "trivadislabs.com"
+  default     = "oradba.ch"
 }
 
 variable "admin_password_secret" {
   type        = string
   sensitive   = true
   description = "Windows Administrator password. Set via TF_VAR_admin_password_secret or op run -- terraform apply."
+}
+
+# -----------------------------------------------------------------------------
+# VPN / DRG connectivity
+# -----------------------------------------------------------------------------
+
+variable "drg_id" {
+  type        = string
+  description = "OCID of existing DRG for site-to-site VPN connectivity. Set to attach this VCN to the home lab VPN."
+  default     = null
+}
+
+variable "home_cidrs" {
+  type        = list(string)
+  description = "Home/VPN CIDRs routed via DRG (home LAN + WireGuard clients). Only effective when drg_id is set."
+  default     = []
 }
 
 # --- EOF ----------------------------------------------------------------------

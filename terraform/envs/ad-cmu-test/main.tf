@@ -71,6 +71,9 @@ module "network" {
   flow_log_retention_duration = var.flow_log_retention_duration
 
   allowed_rdp_cidrs = var.allowed_rdp_cidrs
+
+  drg_id     = var.drg_id
+  home_cidrs = var.home_cidrs
 }
 
 # ---------------------------------------------------------------------------

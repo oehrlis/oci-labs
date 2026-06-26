@@ -292,6 +292,28 @@ resource "oci_core_route_table" "windows" {
     }
   }
 
+  dynamic "route_rules" {
+    for_each = var.drg_id != null ? var.home_cidrs : []
+    content {
+      network_entity_id = var.drg_id
+      destination       = route_rules.value
+      destination_type  = "CIDR_BLOCK"
+    }
+  }
+
+  freeform_tags = var.freeform_tags
+}
+
+# -----------------------------------------------------------------------------
+# DRG Attachment
+# -----------------------------------------------------------------------------
+
+resource "oci_core_drg_attachment" "this" {
+  count        = var.drg_id != null ? 1 : 0
+  drg_id       = var.drg_id
+  vcn_id       = oci_core_vcn.this.id
+  display_name = "drga-${var.lab_name_core}-01"
+
   freeform_tags = var.freeform_tags
 }
 
@@ -554,6 +576,44 @@ resource "oci_core_security_list" "windows" {
         for_each = ingress_security_rules.value.icmp_type != null ? [1] : []
         content {
           type = ingress_security_rules.value.icmp_type
+        }
+      }
+    }
+  }
+
+  # INGRESS – AD ports from home/VPN CIDRs (traffic arrives via DRG with on-prem source IP)
+  dynamic "ingress_security_rules" {
+    for_each = {
+      for pair in setproduct(var.home_cidrs, local.windows_ad_ingress_rules) :
+      "${pair[0]}-${pair[1].name}" => { cidr = pair[0], rule = pair[1] }
+    }
+    content {
+      description = "${ingress_security_rules.value.rule.description} from ${ingress_security_rules.value.cidr}"
+      protocol    = ingress_security_rules.value.rule.protocol
+      source      = ingress_security_rules.value.cidr
+      source_type = "CIDR_BLOCK"
+      stateless   = false
+
+      dynamic "tcp_options" {
+        for_each = ingress_security_rules.value.rule.tcp_min != null ? [1] : []
+        content {
+          min = ingress_security_rules.value.rule.tcp_min
+          max = ingress_security_rules.value.rule.tcp_max
+        }
+      }
+
+      dynamic "udp_options" {
+        for_each = ingress_security_rules.value.rule.udp_min != null ? [1] : []
+        content {
+          min = ingress_security_rules.value.rule.udp_min
+          max = ingress_security_rules.value.rule.udp_max
+        }
+      }
+
+      dynamic "icmp_options" {
+        for_each = ingress_security_rules.value.rule.icmp_type != null ? [1] : []
+        content {
+          type = ingress_security_rules.value.rule.icmp_type
         }
       }
     }

@@ -44,3 +44,11 @@ windows_boot_volume_size_gbs = 100
 assign_windows_public_ip     = false
 
 # admin_password_secret is NOT set here - use TF_VAR_admin_password_secret
+
+# VPN / DRG - site-to-site IPSec (UDM home lab → OCI)
+# DRG from deep-thought/terraform/oci/vpn; also add 10.19.0.0/16 to UDM remote networks
+drg_id = "ocid1.drg.oc1.eu-zurich-1.aaaaaaaa6lag2i4uv64up6elwntezqd64xbtpcal5nqltps2cxculppgncka"
+home_cidrs = [
+  "192.168.1.0/24",  # Home LAN
+  "10.8.0.0/24",     # WireGuard VPN clients (road)
+]
