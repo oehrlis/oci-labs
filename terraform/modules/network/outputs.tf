@@ -50,4 +50,9 @@ output "windows_subnet_id" {
   value       = oci_core_subnet.windows.id
 }
 
+output "drg_attachment_id" {
+  description = "OCID of the DRG attachment (null when drg_id not set)."
+  value       = length(oci_core_drg_attachment.this) > 0 ? oci_core_drg_attachment.this[0].id : null
+}
+
 # --- EOF ----------------------------------------------------------------------
