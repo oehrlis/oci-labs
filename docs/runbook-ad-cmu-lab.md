@@ -143,7 +143,7 @@ terraform init
 Set the Windows Administrator password from 1Password before applying:
 
 ```bash
-export TF_VAR_admin_password_secret=$(op read "op://Private/WinDC/password")
+export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
 terraform plan -out=tfplan
 terraform apply tfplan
 ```
@@ -178,7 +178,7 @@ Wait approximately 5-10 minutes for cloudbase-init to complete. Then verify WinR
 ansible windows_dc -i <inventory> -m ansible.windows.win_ping \
   -e "ansible_host=<windows_private_ip>" \
   -e "ansible_user=Administrator" \
-  -e "ansible_password=$(op read 'op://Private/WinDC/password')" \
+  -e "ansible_password=$(op read 'op://AI-DevOps/WinDC/password')" \
   -e "ansible_connection=winrm" \
   -e "ansible_winrm_transport=basic" \
   -e "ansible_winrm_port=5985" \
@@ -227,7 +227,7 @@ cd oci-labs/ansible
 
 ansible-playbook playbooks/lab-ad-cmu.yml \
   -i inventories/ad-cmu-test/hosts.yml \
-  -e "ansible_password=$(op read 'op://Private/WinDC/password')"
+  -e "ansible_password=$(op read 'op://AI-DevOps/WinDC/password')"
 ```
 
 The playbook executes (in order):
@@ -342,7 +342,7 @@ END;
 
 ```bash
 cd oci-labs/terraform/envs/ad-cmu-test
-export TF_VAR_admin_password_secret=$(op read "op://Private/WinDC/password")
+export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
 terraform destroy
 ```
 
