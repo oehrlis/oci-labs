@@ -1,0 +1,36 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: 00_init_environment.ps1.j2
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.06.26
+# Version....: v0.1.0
+# Purpose....: Jinja2 template for 00_init_environment.ps1 deployed by Ansible.
+#              Sets environment variables consumed by all subsequent AD scripts.
+# Notes......: All variables are sourced from the Ansible role defaults/vars.
+#              windows_ad_admin_password must be provided via vault or extra-vars.
+# Reference..: https://github.com/oehrlis/oci-labs / https://github.com/oehrlis/ad-lab
+# ------------------------------------------------------------------------------
+
+$ErrorActionPreference = 'Stop'
+
+# --- Domain configuration -----------------------------------------------------
+$env:AD_DOMAIN        = "{{ windows_ad_domain }}"
+$env:AD_DOMAIN_FQDN   = "{{ windows_ad_domain }}"
+$env:AD_NETBIOS        = "{{ windows_ad_netbios }}"
+$env:AD_COMPANY        = "{{ windows_ad_company }}"
+$env:AD_ADMIN_USER     = "{{ windows_ad_admin_user }}"
+
+# --- Paths --------------------------------------------------------------------
+$env:AD_SCRIPTS_HOME  = "{{ windows_ad_scripts_dest }}"
+$env:AD_LOG_DIR       = "{{ windows_ad_scripts_dest }}\logs"
+
+# --- Sensitive: set via Ansible Vault, not hardcoded here --------------------
+# $env:AD_ADMIN_PASSWORD is expected to be set by the calling script or vault.
+
+# --- Ensure log directory exists ----------------------------------------------
+if (-not (Test-Path $env:AD_LOG_DIR)) {
+    New-Item -ItemType Directory -Path $env:AD_LOG_DIR -Force | Out-Null
+}
+
+Write-Output "Environment initialized: domain={{ windows_ad_domain }}, company={{ windows_ad_company }}"
