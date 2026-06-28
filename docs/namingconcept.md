@@ -65,6 +65,7 @@ Component codes distinguish roles within a given lab or stack:
 | DB Host                 | `db`  |
 | Primary DB Host         | `pri` |
 | Standby DB Host         | `stb` |
+| Windows Domain Ctrl     | `dc`  |
 | OUD Host                | `oud` |
 | WebLogic Server         | `wls` |
 | Monitoring / Tools      | `mon` |
@@ -88,6 +89,7 @@ Stack codes identify the lab or project type. They use a consistent prefix for O
 
 | Lab Type                   | Stack Code |
 | -------------------------- | ---------- |
+| Windows AD / CMU / Kerberos| `windc`    |
 | Oracle DB 19c Engineering  | `odb19eng` |
 | Oracle DB 21c Engineering  | `odb21eng` |
 | Oracle DB 26ai Engineering | `odb26ai`  |
@@ -95,6 +97,7 @@ Stack codes identify the lab or project type. They use a consistent prefix for O
 | Oracle OUD Engineering     | `odbaud`   |
 | Oracle WLS Engineering     | `odbwls`   |
 | Autonomous Database Labs   | `odbadb`   |
+| IAM / MFA OMA Setup        | `mfaoma`   |
 
 ## Name Examples
 

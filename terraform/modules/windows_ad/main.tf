@@ -21,7 +21,7 @@
 # ------------------------------------------------------------------------------
 
 locals {
-  instance_display_name = "ci-${var.lab_name_core}-windc-01"
+  instance_display_name = "ci-${var.lab_name_core}-dc-01"
   hostname_label        = "windc01"
 
   cloud_init = templatefile("${path.module}/templates/windows_ad-cloudinit.yaml.tftpl", {
