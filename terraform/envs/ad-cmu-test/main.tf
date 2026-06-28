@@ -130,7 +130,7 @@ module "windows_ad" {
 
 resource "oci_resource_scheduler_schedule" "windows_ad_stop" {
   compartment_id = var.compartment_ocid
-  display_name   = "sched-${local.lab_name_core}-windc-stop-01"
+  display_name   = "sched-${local.lab_name_core}-dc-stop-01"
   description    = "Daily stop at 18:00 UTC (20:00 CEST / 19:00 CET). Start manually."
   action         = "STOP_RESOURCE"
 
@@ -142,6 +142,26 @@ resource "oci_resource_scheduler_schedule" "windows_ad_stop" {
   }
 
   freeform_tags = local.base_freeform_tags
+}
+
+# ---------------------------------------------------------------------------
+# Wait for cloudbase-init: poll WinRM port 5985 after instance (re)create
+# ---------------------------------------------------------------------------
+
+resource "null_resource" "wait_for_winrm" {
+  depends_on = [module.windows_ad]
+  triggers   = { instance_id = module.windows_ad.instance_id }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      WIN_IP="${module.windows_ad.private_ip}"
+      echo "Waiting for cloudbase-init on $WIN_IP:5985 ..."
+      until nc -z -w 5 "$WIN_IP" 5985 2>/dev/null; do
+        printf '.'; sleep 20
+      done
+      echo " WinRM port open - cloudbase-init complete."
+    EOT
+  }
 }
 
 # --- EOF ----------------------------------------------------------------------

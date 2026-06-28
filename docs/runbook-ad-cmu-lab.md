@@ -6,11 +6,17 @@ and Kerberos authentication testing.
 
 The stack creates:
 
-- VCN with dedicated Windows AD subnet (`10.19.50.0/24`, IGW route)
+- VCN (`10.19.0.0/16`) with dedicated Windows AD subnet (`10.19.50.0/24`, IGW route)
+- DRG VCN attachment for site-to-site VPN connectivity (home lab via deep-thought DRG)
 - Security List with all required AD ports (RDP, WinRM, LDAP/S, Kerberos, DNS, GC)
-- Windows Server 2022 instance (`ci-*-windc-01`, VM.Standard3.Flex)
+- Ingress rules from home CIDRs (`192.168.1.0/24`, `10.8.0.0/24`) for AD/Kerberos
+- Windows Server 2022 instance (`ci-chzh-l-windc-01-dc-01`, VM.Standard.E4.Flex 2 OCPUs / 8 GB)
 - Instance-level NSG for fine-grained port control
 - cloudbase-init bootstrap: WinRM enabled, Administrator password set
+- Resource Scheduler: auto-stop daily 20:00 Europe/Zurich (18:00 UTC), manual start only
+
+Connectivity to the Windows DC uses the existing home lab IPSec VPN
+(UDM site-to-site, managed via `deep-thought/terraform/oci/vpn`). No OCI jumphost needed.
 
 DB-side Kerberos configuration (sqlnet.ora, krb5.conf, keytab extraction) is
 performed after the Ansible role completes, using the AD outputs from this stack.
@@ -21,26 +27,34 @@ performed after the Ansible role completes, using the AD outputs from this stack
 
 ```mermaid
 flowchart TB
-    subgraph OCI["OCI Tenancy"]
+    subgraph HOME["Home Lab (192.168.1.0/24)"]
+        UDM["UDM SE\nSite-to-Site IPSec\n10.19.0.0/16 remote"]
+        DOCKER["Docker / Oracle Client\nKerberos kinit\nCMU connection test"]
+        WG["WireGuard Clients\n10.8.0.0/24"]
+        ANSIBLE["Ansible Control Node\nlab-ad-cmu.yml"]
+        UDM --- DOCKER
+        UDM --- ANSIBLE
+        WG -->|via UDM| UDM
+    end
+
+    subgraph OCI["OCI Tenancy ACE - cmp-oradba-labs"]
+        DRG["DRG\neu-zurich-1"]
+        SCHED["Resource Scheduler\nSTOP 18:00 UTC\n20:00 CET daily\nManual START"]
+
         subgraph VCN["VCN 10.19.0.0/16"]
             subgraph WINSN["Windows Subnet 10.19.50.0/24"]
-                DC["Windows Server 2022\nci-*-windc-01\nVM.Standard3.Flex\n\nAD DS + DNS\nKerberos KDC\nCA (optional)"]
-                NSG["NSG nsg-*-windc-01\nRDP 3389\nWinRM 5985/5986\nLDAP 389/636\nKerberos 88/464\nDNS 53\nGC 3268/3269"]
+                DC["ci-chzh-l-windc-01-dc-01\nVM.Standard.E4.Flex 2 / 8 GB\nWindows Server 2022\nAD DS + DNS\nKerberos KDC\nDomain: oradba.ch"]
+                NSG["NSG nsg-chzh-l-windc-01-dc-01\nRDP 3389  WinRM 5985/5986\nLDAP 389/636  Kerberos 88/464\nDNS 53  GC 3268/3269"]
                 DC --- NSG
-            end
-            subgraph DBSN["DB Subnet 10.19.30.0/24"]
-                ODB["Oracle DB\n(existing or separate stack)\nkrb5.conf + keytab\nsqlnet.ora KERBEROS"]
             end
         end
     end
 
-    ANSIBLE["Ansible Control Node\nlab-ad-cmu.yml\nrole: windows_ad"]
-    ADLAB["ad-lab scripts\ngithub.com/oehrlis/ad-lab\n(separate repo)"]
-
-    ANSIBLE -->|"WinRM 5985"| DC
-    ANSIBLE -->|"copies scripts"| DC
-    ADLAB -.->|"referenced at deploy time"| ANSIBLE
-    DC <-->|"LDAP / Kerberos"| ODB
+    UDM <-->|"IPSec VPN\ntunnel"| DRG
+    DRG --> VCN
+    ANSIBLE -->|"WinRM 5985\nvia VPN"| DC
+    DOCKER -->|"LDAP 389\nKerberos 88\nvia VPN"| DC
+    SCHED -.->|"auto-stop"| DC
 ```
 
 ---
@@ -50,11 +64,14 @@ flowchart TB
 <!-- markdownlint-disable MD013 MD060 -->
 | Component | Resource | Purpose |
 |---|---|---|
-| **Windows Subnet** | `oci_core_subnet` (`sn-*-windows-01`) | Dedicated /24 for the DC; public-capable (public IP assignable) but defaults to private. Routed via IGW for optional internet access. |
-| **Security List** | `oci_core_security_list` (`sl-*-windows-01`) | Subnet-level firewall with all AD/Kerberos ports open from VCN CIDR. Optional external RDP via `allowed_rdp_cidrs`. |
-| **Windows AD Instance** | `oci_core_instance` (`ci-*-windc-01`) | Windows Server 2022 (VM.Standard3.Flex, x86). cloudbase-init enables WinRM on first boot. IMDS legacy endpoints disabled, PV encryption in transit enabled. |
-| **NSG** | `oci_core_network_security_group` (`nsg-*-windc-01`) | Instance-level NSG repeating AD ports. Complements the subnet SL for defence-in-depth. |
-| **ad-lab scripts** | External repo (oehrlis/ad-lab) | PowerShell scripts for AD DS install, user/SPN setup, DNS, CA, and CMU config. Not embedded - referenced at Ansible deploy time. |
+| **VCN** | `oci_core_vcn` (`vcn-chzh-l-windc-01`) | Lab-dedicated VCN, `10.19.0.0/16`. Attached to existing DRG for home lab VPN. |
+| **DRG Attachment** | `oci_core_drg_attachment` (`drga-chzh-l-windc-01`) | Attaches VCN to existing DRG (deep-thought VPN). Routes `192.168.1.0/24`, `10.8.0.0/24` via DRG in Windows route table. |
+| **Windows Subnet** | `oci_core_subnet` (`sn-chzh-l-windc-01`) | Dedicated /24 for the DC; public-capable (public IP assignable) but defaults to private IP only. |
+| **Security List** | `oci_core_security_list` (`sl-chzh-l-windc-01`) | Subnet-level firewall with all AD/Kerberos ports from VCN CIDR + home CIDRs. Optional external RDP via `allowed_rdp_cidrs`. |
+| **Windows AD Instance** | `oci_core_instance` (`ci-chzh-l-windc-01-dc-01`) | Windows Server 2022 (VM.Standard.E4.Flex, 2 OCPUs / 8 GB, x86). cloudbase-init enables WinRM on first boot. IMDS legacy endpoints disabled, PV encryption in transit enabled. |
+| **NSG** | `oci_core_network_security_group` (`nsg-chzh-l-windc-01-dc-01`) | Instance-level NSG repeating AD ports. Defence-in-depth alongside Security List. |
+| **Resource Scheduler** | `oci_resource_scheduler_schedule` (`sched-chzh-l-windc-01-dc-stop-01`) | Daily auto-stop at 18:00 UTC (20:00 CEST / 19:00 CET). Start manually via Console or CLI. |
+| **ad-lab scripts** | External repo (oehrlis/ad-lab) | PowerShell scripts for AD DS install, user/SPN setup, DNS, CA, and CMU config. Referenced at Ansible deploy time. |
 <!-- markdownlint-enable MD013 MD060 -->
 
 ---
@@ -64,7 +81,7 @@ flowchart TB
 <!-- markdownlint-disable MD013 -->
 | Port | Protocol | Service | Required for |
 |---|---|---|---|
-| 3389 | TCP | RDP | Management access (optional direct, via jumphost/VPN in lab) |
+| 3389 | TCP | RDP | Management access (via VPN; no public IP assigned by default) |
 | 5985 | TCP | WinRM HTTP | Ansible management |
 | 5986 | TCP | WinRM HTTPS | Ansible management (encrypted) |
 | 389 | TCP/UDP | LDAP | Oracle DB CMU LDAP queries |
@@ -83,13 +100,14 @@ flowchart TB
 <!-- markdownlint-disable MD013 MD060 -->
 | Requirement | Detail |
 |---|---|
-| OCI Tenancy | Compartment OCID in region with VM.Standard3.Flex availability |
-| OCI CLI configured | `~/.oci/config` with DEFAULT profile |
+| OCI Tenancy | ACE tenancy, compartment `cmp-oradba-labs` (OCID in `terraform.tfvars`) |
+| OCI CLI configured | `~/.oci/config` with `[ACE]` profile |
 | Terraform >= 1.5 | `terraform version` |
-| 1Password CLI (`op`) | For `admin_password_secret` retrieval |
+| oracle/oci provider | Declared as `oracle/oci >= 6.0` in `provider.tf`; child modules have explicit `versions.tf` to avoid defaulting to `hashicorp/oci` |
+| 1Password CLI (`op`) | `op read "op://AI-DevOps/WinDC/password"` for `admin_password_secret` |
+| Home lab VPN active | UDM site-to-site IPSec to OCI DRG (deep-thought); `10.19.0.0/16` added to UDM remote networks |
 | Ansible with ansible.windows | `ansible-galaxy collection install ansible.windows` |
 | ad-lab repo checked out | `git clone https://github.com/oehrlis/ad-lab.git` adjacent to oci-labs |
-| WinRM reachable | Control node must reach Windows DC on port 5985 (VPN or jumphost) |
 <!-- markdownlint-enable MD013 MD060 -->
 
 ---
@@ -111,21 +129,32 @@ git clone https://github.com/oehrlis/ad-lab.git ../../../ad-lab
 
 ## Step 2 - Configure terraform.tfvars
 
-Edit `terraform.tfvars` and fill in the required values:
+`terraform.tfvars` is gitignored (contains compartment OCID). Create from the example
+or copy the existing file. Key values for this stack:
 
 ```hcl
-compartment_ocid = "ocid1.compartment.oc1..aaaa<your-value>"
-region_key       = "chzh"          # eu-zurich-1 → chzh, eu-frankfurt-1 → fra
-domain_name      = "trivadislabs.com"
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaxq7bir4bjy3bzozyjd4idlvharoco3ww5jx5nzzvv6rhcypb6cfa"
+region_key       = "chzh"
+domain_name      = "oradba.ch"
+
+windows_shape      = "VM.Standard.E4.Flex"
+windows_ocpus      = 2
+windows_memory_gbs = 8
+
+drg_id = "ocid1.drg.oc1.eu-zurich-1.aaaaaaaa6lag2i4uv64up6elwntezqd64xbtpcal5nqltps2cxculppgncka"
+home_cidrs = [
+  "192.168.1.0/24",
+  "10.8.0.0/24",
+]
 ```
 
-Leave `admin_password_secret` out of the file - set it at apply time via env var (see Step 4).
+Leave `admin_password_secret` out of the file - set it at apply time via environment variable (see Step 4).
 
-To allow direct RDP from your workstation (optional, lab only):
+To allow direct RDP from a specific external IP (optional, lab only):
 
 ```hcl
-allowed_rdp_cidrs            = ["<your-public-ip>/32"]
-assign_windows_public_ip     = true
+allowed_rdp_cidrs        = ["<your-public-ip>/32"]
+assign_windows_public_ip = true
 ```
 
 ---
@@ -136,11 +165,12 @@ assign_windows_public_ip     = true
 terraform init
 ```
 
+Expected: only `oracle/oci` appears in the lock file. If `hashicorp/oci` appears too,
+delete `.terraform/` and `.terraform.lock.hcl` and re-run `terraform init`.
+
 ---
 
 ## Step 4 - Plan and Apply
-
-Set the Windows Administrator password from 1Password before applying:
 
 ```bash
 export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
@@ -148,8 +178,8 @@ terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
-The apply creates the VCN, subnet, NSG, and the Windows instance. cloudbase-init
-runs on first boot (~5 minutes) and enables WinRM.
+The apply creates the VCN, DRG attachment, subnets, Security List, NSG, Windows instance,
+and Resource Scheduler. cloudbase-init runs on first boot (~5-10 minutes) and enables WinRM.
 
 ---
 
@@ -162,20 +192,63 @@ terraform output
 Key outputs:
 
 ```text
-windows_private_ip   = "10.19.50.x"
-windows_public_ip    = ""            # empty if assign_windows_public_ip = false
-windows_instance_name = "ci-chzh-l-windc-01"
+windows_private_ip    = "10.19.50.x"
+windows_public_ip     = ""
+windows_instance_name = "ci-chzh-l-windc-01-dc-01"
+auto_stop_schedule_id = "ocid1.resourceschedulerschedule.oc1..."
 ```
 
 ---
 
-## Step 6 - Wait for WinRM
+## Step 6 - RDP / Windows App Access
 
-Wait approximately 5-10 minutes for cloudbase-init to complete. Then verify WinRM:
+Connect via VPN (home lab IPSec or WireGuard). No public IP is assigned by default.
+
+| Field | Value |
+|---|---|
+| Host | `terraform output -raw windows_private_ip` (e.g. `10.19.50.x`) |
+| Port | `3389` |
+| Username | `Administrator` |
+| Password | `op read "op://AI-DevOps/WinDC/password"` |
 
 ```bash
-# From a host inside the VCN or via VPN
-ansible windows_dc -i <inventory> -m ansible.windows.win_ping \
+# Get IP
+WIN_IP=$(cd /path/to/oci-labs/terraform/envs/ad-cmu-test && terraform output -raw windows_private_ip)
+
+# Get password
+WIN_PASS=$(op read "op://AI-DevOps/WinDC/password")
+
+# macOS: open Remote Desktop (Microsoft Remote Desktop app)
+open "rdp://full%20address=s:${WIN_IP}:3389&username=s:Administrator"
+```
+
+Or use the Microsoft Remote Desktop app directly:
+- New PC → PC name: `10.19.50.x` → User account: `Administrator` / password from 1Password
+
+---
+
+## Step 7 - Start / Stop (Resource Scheduler)
+
+The instance auto-stops daily at **20:00 Europe/Zurich** (18:00 UTC).
+Start manually when needed:
+
+```bash
+# Start via OCI CLI
+oci compute instance action --profile ACE \
+  --instance-id $(terraform output -raw windows_instance_id) \
+  --action START
+
+# Or via Console: Compute → Instances → ci-chzh-l-windc-01-dc-01 → Start
+```
+
+---
+
+## Step 8 - Wait for WinRM
+
+Wait approximately 5-10 minutes for cloudbase-init to complete, then verify via VPN:
+
+```bash
+ansible all -i <windows_private_ip>, -m ansible.windows.win_ping \
   -e "ansible_host=<windows_private_ip>" \
   -e "ansible_user=Administrator" \
   -e "ansible_password=$(op read 'op://AI-DevOps/WinDC/password')" \
@@ -187,9 +260,12 @@ ansible windows_dc -i <inventory> -m ansible.windows.win_ping \
 
 Expected response: `pong`
 
+If connection refused: check that the home lab VPN is up and `10.19.0.0/16` is in UDM
+remote networks. Then confirm cloudbase-init completed via OCI Console → Instance → Serial Console.
+
 ---
 
-## Step 7 - Create Ansible Inventory
+## Step 9 - Create Ansible Inventory
 
 Create `ansible/inventories/ad-cmu-test/hosts.yml`:
 
@@ -211,16 +287,16 @@ all:
 Create `ansible/inventories/ad-cmu-test/group_vars/windows_dc.yml` (Vault-encrypted):
 
 ```yaml
-windows_ad_domain: "trivadislabs.com"
-windows_ad_netbios: "TRIVADISLABS"
-windows_ad_company: "Trivadis Labs"
+windows_ad_domain: "oradba.ch"
+windows_ad_netbios: "ORADBA"
+windows_ad_company: "OraDBA Labs"
 windows_ad_admin_user: "Administrator"
 windows_ad_scripts_src: "../../../../ad-lab"
 ```
 
 ---
 
-## Step 8 - Run Ansible Role
+## Step 10 - Run Ansible Role
 
 ```bash
 cd oci-labs/ansible
@@ -246,9 +322,9 @@ The playbook executes (in order):
 
 ---
 
-## Step 9 - Verify Active Directory
+## Step 11 - Verify Active Directory
 
-From the Windows DC (RDP or `win_shell`):
+From the Windows DC (RDP via VPN to `10.19.50.x`, or `win_shell`):
 
 ```powershell
 # Check AD DS is running
@@ -265,16 +341,16 @@ Get-ADUser -Filter * -Properties ServicePrincipalNames |
 
 ---
 
-## Step 10 - Configure Oracle DB for CMU / Kerberos
+## Step 12 - Configure Oracle DB for CMU / Kerberos
 
-After the AD is fully configured, set up the Oracle DB server (performed manually
-or via a separate Ansible role on the DB host):
+After the AD is fully configured, set up the Oracle DB server (manually or via a
+separate Ansible role on the DB host):
 
-### 10.1 Kerberos configuration (`/etc/krb5.conf`)
+### 11.1 Kerberos configuration (`/etc/krb5.conf`)
 
 ```ini
 [libdefaults]
-  default_realm = TRIVADISLABS.COM
+  default_realm = ORADBA.CH
   dns_lookup_realm = false
   dns_lookup_kdc = false
   ticket_lifetime = 24h
@@ -282,17 +358,17 @@ or via a separate Ansible role on the DB host):
   forwardable = true
 
 [realms]
-  TRIVADISLABS.COM = {
-    kdc = <windows_private_ip>
-    admin_server = <windows_private_ip>
+  ORADBA.CH = {
+    kdc = 10.19.50.x
+    admin_server = 10.19.50.x
   }
 
 [domain_realm]
-  .trivadislabs.com = TRIVADISLABS.COM
-  trivadislabs.com = TRIVADISLABS.COM
+  .oradba.ch = ORADBA.CH
+  oradba.ch = ORADBA.CH
 ```
 
-### 10.2 sqlnet.ora
+### 11.2 sqlnet.ora
 
 ```ini
 SQLNET.AUTHENTICATION_SERVICES = (BEQ, KERBEROS5)
@@ -302,12 +378,12 @@ SQLNET.KERBEROS5_CC_NAME = FILE:/tmp/kerbcc
 SQLNET.KERBEROS5_CLOCKSKEW = 300
 ```
 
-### 10.3 Extract Kerberos keytab from AD
+### 11.3 Extract Kerberos keytab from AD
 
 Run on the Windows DC (as Domain Admin):
 
 ```powershell
-ktpass -princ oracle/<db-hostname>.trivadislabs.com@TRIVADISLABS.COM `
+ktpass -princ oracle/<db-hostname>.oradba.ch@ORADBA.CH `
        -mapuser oracle_kerberos `
        -crypto AES256-SHA1 `
        -ptype KRB5_NT_PRINCIPAL `
@@ -315,9 +391,9 @@ ktpass -princ oracle/<db-hostname>.trivadislabs.com@TRIVADISLABS.COM `
        -out C:\OraLab\v5srvtab
 ```
 
-Copy `v5srvtab` to the Oracle DB server as `/etc/v5srvtab`, owned by oracle:oinstall, mode 600.
+Copy `v5srvtab` to the Oracle DB server as `/etc/v5srvtab`, owned by `oracle:oinstall`, mode 600.
 
-### 10.4 Oracle DB CMU configuration
+### 11.4 Oracle DB CMU configuration
 
 ```sql
 -- Enable CMU (requires Oracle DB 19c+ or 21c+)
@@ -327,9 +403,9 @@ ALTER SYSTEM SET ldap_directory_sysauth = YES SCOPE=SPFILE;
 -- Configure LDAP server
 BEGIN
   DBMS_LDAP_UTL.CREATE_REGISTRATION_CONTEXT(
-    hostname  => '<windows_private_ip>',
+    hostname  => '10.19.50.x',
     port      => 389,
-    dn        => 'DC=trivadislabs,DC=com',
+    dn        => 'DC=oradba,DC=ch',
     use_ssl   => 'N'
   );
 END;
@@ -346,6 +422,9 @@ export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
 terraform destroy
 ```
 
+This removes VCN, DRG attachment, all subnets, Security Lists, NSG, Windows instance,
+and the Resource Scheduler. The DRG itself is managed by deep-thought and is NOT destroyed.
+
 ---
 
 ## Troubleshooting
@@ -353,10 +432,13 @@ terraform destroy
 <!-- markdownlint-disable MD013 MD060 -->
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `win_ping` fails with connection refused | WinRM not yet ready | Wait 5-10 min after instance start; check cloudbase-init log in OCI Console serial output |
-| `win_ping` fails with auth error | Wrong password or WinRM Basic auth disabled | Verify cloudbase-init ran: check OCI console serial output; re-run with correct password |
-| AD DS install fails (reboot loop) | Insufficient memory | Increase `windows_memory_gbs` to 16+ GB |
-| LDAP port 389 not responding after reboot | AD services slow start | Increase `timeout` in `win_wait_for` task to 600s |
-| Kerberos `kinit` fails on DB host | KDC unreachable or clock skew | Verify VCN routing, check NTP sync on both DC and DB host (`chronyd`) |
-| CMU LDAP queries fail | LDAP port blocked | Verify NSG and Security List allow TCP 389 from DB subnet |
+| `win_ping` connection refused | WinRM not yet ready | Wait 5-10 min after instance start; check cloudbase-init in OCI Console serial output |
+| `win_ping` connection refused (VPN) | VPN tunnel down or wrong remote CIDR | Check UDM VPN status; verify `10.19.0.0/16` is in UDM remote networks |
+| `win_ping` auth error | Wrong password or WinRM Basic auth disabled | Verify cloudbase-init completed; re-run with correct password |
+| AD DS install fails (reboot loop) | Insufficient memory | Increase `windows_memory_gbs` to 16 GB |
+| LDAP port 389 not responding after reboot | AD services slow start | Increase `timeout` in `win_wait_for` to 600s |
+| Kerberos `kinit` fails on DB host | KDC unreachable or clock skew | Check VPN routing to `10.19.50.x`; verify NTP sync (`chronyd`) on both hosts |
+| CMU LDAP queries fail | LDAP port blocked | Check NSG and Security List allow TCP 389 from DB subnet and `home_cidrs` |
+| `terraform apply` 404 NotAuthorized | Wrong OCI profile or `hashicorp/oci` picked over `oracle/oci` | Verify `provider.tf` has `config_file_profile = "ACE"`; delete `.terraform/` and `.terraform.lock.hcl`, re-run `terraform init` |
+| Instance not starting (auto-stop fired) | Resource Scheduler stopped it as scheduled | Start manually: `oci compute instance action --profile ACE --instance-id <ocid> --action START` |
 <!-- markdownlint-enable MD013 MD060 -->

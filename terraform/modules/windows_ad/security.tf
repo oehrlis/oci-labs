@@ -17,7 +17,7 @@
 # ------------------------------------------------------------------------------
 
 locals {
-  nsg_name = "nsg-${var.lab_name_core}-windc-01"
+  nsg_name = "nsg-${var.lab_name_core}-dc-01"
 
   nsg_tcp_rules = {
     rdp          = { port = 3389, description = "RDP" }

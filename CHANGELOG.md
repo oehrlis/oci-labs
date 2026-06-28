@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-06-26
+
+### Changed
+
+- **module/windows_ad**: Shape default changed to `VM.Standard.E4.Flex` (AMD, more available
+  in eu-zurich-1), memory_gbs default reduced to 8 GB, `domain_name` is now a required
+  variable (no default - must be set per env). Instance and NSG names shortened to
+  `*-dc-01` (was `*-windc-01`).
+- **module/windows_ad (cloudinit)**: Removed incorrect `$$` escaping from PowerShell
+  variables in `.tftpl` template - bare `$var` does not need escaping, only `${...}`
+  Terraform interpolations are special. Added RDP firewall rule to bootstrap script.
+- **env/ad-cmu-test**: OCI provider profile changed to `ACE`; `hashicorp/null >= 3.0`
+  added for WinRM readiness probe. Added `null_resource.wait_for_winrm` (polls port
+  5985 via `nc` after instance create). Added `oci_resource_scheduler_schedule` for
+  daily auto-stop at 18:00 UTC. Added `drg_id` + `home_cidrs` variables for
+  site-to-site VPN (UDM home lab → OCI via DRG). Domain set to `oradba.ch`.
+- **docs**: Architecture overview and runbook updated with corrections.
+
+### Added
+
+- **module/windows_ad/versions.tf**: Explicit OCI provider source declaration for module.
+- **module/network/versions.tf**: Explicit OCI provider source declaration for module.
+
 ## [0.2.0] - 2026-06-26
 
 ### Added

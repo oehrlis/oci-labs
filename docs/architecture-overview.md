@@ -6,6 +6,60 @@ compose them with lab-specific parameters.
 
 ---
 
+## Overview Diagram
+
+End-to-end view: home lab connectivity via site-to-site VPN, OCI module composition,
+and the ad-cmu-test lab as a concrete example.
+
+```mermaid
+flowchart TB
+    subgraph HOME["Home Lab"]
+        UDM["UDM SE\nSite-to-Site IPSec\n192.168.1.0/24"]
+        WGCL["WireGuard Clients\n10.8.0.0/24"]
+        ANSIBLE["Ansible\nControl Node"]
+        ORACLIENT["Oracle Client\nDocker Container\nCMU / Kerberos"]
+        WGCL -->|via UDM| UDM
+    end
+
+    subgraph OCI["OCI Tenancy ACE - eu-zurich-1"]
+        DRG["DRG\nSite-to-Site VPN Termination\ndeep-thought/terraform/oci/vpn"]
+        SCHED["Resource Scheduler\nSTOP 18:00 UTC daily\n20:00 Europe/Zurich\nManual START only"]
+
+        subgraph ENV["envs/ad-cmu-test - cmp-oradba-labs"]
+            subgraph MOD_NAME["module: naming"]
+                CORE["lab_name_core\nchzh-l-windc-01\nbase_freeform_tags"]
+            end
+
+            subgraph MOD_NET["module: network"]
+                VCN["vcn-chzh-l-windc-01-net-01\n10.19.0.0/16"]
+                WINSN["sn-chzh-l-windc-01-windows-01\n10.19.50.0/24"]
+                DRGA["DRG Attachment\ndrga-chzh-l-windc-01-01\nroutes: 192.168.1.0/24\n10.8.0.0/24 via DRG"]
+                SL["sl-chzh-l-windc-01-windows-01\nAD + Kerberos ports\nfrom VCN + home_cidrs"]
+                VCN --- WINSN
+                VCN --- DRGA
+                VCN --- SL
+            end
+
+            subgraph MOD_WIN["module: windows_ad"]
+                DC["ci-chzh-l-windc-01-dc-01\nVM.Standard.E4.Flex 2/8\nWindows Server 2022\nDomain: oradba.ch\nAD DS + Kerberos KDC"]
+                NSG["nsg-chzh-l-windc-01-dc-01\nRDP / WinRM / LDAP\nKerberos / DNS / GC"]
+                DC --- NSG
+            end
+        end
+    end
+
+    UDM <-->|"IPSec tunnel\n10.19.0.0/16 remote"| DRG
+    DRG --> DRGA
+    MOD_NAME --> MOD_NET
+    MOD_NAME --> MOD_WIN
+    MOD_NET --> MOD_WIN
+    SCHED -.->|"auto-stop"| DC
+    ANSIBLE -->|"WinRM 5985\nvia VPN"| DC
+    ORACLIENT -->|"LDAP 389\nKerberos 88\nvia VPN"| DC
+```
+
+---
+
 ## Design Principle: Generic Modules, Lab-Specific Envs
 
 ```text
@@ -97,7 +151,7 @@ All OCI resource names follow the pattern:
 {resource_abbrev}-{region}-{env}-{stack}-{component}-{seq}
 ```
 
-Example: `ci-chzh-l-windc-windc-01` (compute instance, Zurich, lab, windc stack)
+Example: `ci-chzh-l-windc-01-dc-01` (compute instance, Zurich, lab, windc stack, lab instance 01, DC component)
 
 The `naming` module produces `lab_name_core = "{region}-{env}-{stack}-{seq}"` which
 all other modules embed into their resource display names.

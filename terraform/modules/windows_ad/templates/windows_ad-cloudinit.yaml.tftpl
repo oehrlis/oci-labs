@@ -8,26 +8,27 @@
 # Version....: v0.1.0
 # Purpose....: cloudbase-init bootstrap for OCI Windows AD lab instance.
 #              Enables WinRM (HTTP+HTTPS), sets admin password, stores domain.
-# Notes......: admin_password_b64 is base64-encoded to avoid tftpl escaping issues.
-#              Rendered by Terraform templatefile() and base64-encoded as user_data.
+# Notes......: admin_password_b64 is base64-encoded to avoid tftpl special-char
+#              issues. Terraform templatefile interpolates dollar-brace sequences;
+#              bare PowerShell $var variables do NOT need escaping.
 # ------------------------------------------------------------------------------
 
-$$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 # Decode admin password (base64 avoids special-char issues in tftpl)
-$$adminPassB64 = '${admin_password_b64}'
-$$adminPass = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($$adminPassB64))
-$$securePass = ConvertTo-SecureString $$adminPass -AsPlainText -Force
+$adminPassB64 = '${admin_password_b64}'
+$adminPass = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($adminPassB64))
+$securePass = ConvertTo-SecureString $adminPass -AsPlainText -Force
 
 # Set and enable Administrator account
 try {
-    Set-LocalUser -Name 'Administrator' -Password $$securePass
+    Set-LocalUser -Name 'Administrator' -Password $securePass
     Enable-LocalUser -Name 'Administrator'
 } catch {
     # Fallback for older WMF versions
-    $$admin = [adsi]"WinNT://./Administrator,user"
-    $$admin.SetPassword($$adminPass)
-    $$admin.SetInfo()
+    $admin = [adsi]"WinNT://./Administrator,user"
+    $admin.SetPassword($adminPass)
+    $admin.SetInfo()
 }
 
 # Store domain and lab name as machine environment variables for AD setup scripts
@@ -45,6 +46,7 @@ winrm set winrm/config/listener?Address=*+Transport=HTTP '@{Port="5985"}'
 # Open firewall for WinRM (5985/5986) and RDP (3389)
 netsh advfirewall firewall add rule name="WinRM HTTP (5985)"  dir=in action=allow protocol=TCP localport=5985
 netsh advfirewall firewall add rule name="WinRM HTTPS (5986)" dir=in action=allow protocol=TCP localport=5986
+netsh advfirewall firewall add rule name="RDP (3389)"         dir=in action=allow protocol=TCP localport=3389
 
 # Restart WinRM to apply all settings
 Restart-Service winrm -Force
