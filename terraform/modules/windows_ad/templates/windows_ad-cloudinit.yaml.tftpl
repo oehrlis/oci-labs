@@ -154,9 +154,10 @@ $scripts = @(
     '11_add_lab_company.ps1',
     '11_add_service_principles.ps1',
     '12_config_dns.ps1',
-    '13_config_ca.ps1',
-    '27_config_cmu.ps1'
+    '13_config_ca.ps1'
 )
+# 27_config_cmu.ps1 is not run automatically - execute manually after AD is up
+# See runbook: docs/runbook-ad-cmu-lab.md
 foreach ($scr in $scripts) {
     Write-Output "Running $scr..."
     $proc = Start-Process powershell.exe `

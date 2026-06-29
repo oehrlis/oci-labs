@@ -6,6 +6,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **module/windows_ad (cloudinit)**: `27_config_cmu.ps1` removed from the automatic
+  phase-2 script list. CMU/Kerberos configuration is now a manual post-deploy step
+  (run via Ansible or RDP after AD is up). This prevents phase-2 from aborting when
+  the CMU script fails due to missing prerequisites.
+
 ### Fixed
 
 - **env/ad-cmu-test**: Ansible inventory (`hosts.yml`) is now written immediately at
