@@ -154,6 +154,12 @@ variable "domain_name" {
   default     = "oradba.ch"
 }
 
+variable "company_name" {
+  type        = string
+  description = "Company name used in AD OU and user creation."
+  default     = "OraDBA Labs"
+}
+
 variable "admin_password_secret" {
   type        = string
   sensitive   = true

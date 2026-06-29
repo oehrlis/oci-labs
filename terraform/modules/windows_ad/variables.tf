@@ -92,6 +92,12 @@ variable "domain_name" {
   description = "Active Directory domain name (FQDN). Set in the env, not the module."
 }
 
+variable "company_name" {
+  type        = string
+  description = "Company name for AD lab (used in OU and user creation)."
+  default     = "OraDBA Labs"
+}
+
 variable "admin_password_secret" {
   type        = string
   sensitive   = true

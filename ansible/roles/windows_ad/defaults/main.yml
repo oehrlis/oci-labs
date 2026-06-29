@@ -19,12 +19,14 @@ windows_ad_netbios: "TRIVADISLABS"
 windows_ad_company: "Trivadis Labs"
 windows_ad_admin_user: "Administrator"
 
-# Path to the ad-lab scripts repo (checkout of https://github.com/oehrlis/ad-lab)
+# Path to the ad-lab repo root (checkout of https://github.com/oehrlis/ad-lab)
 # Override in inventory or extra-vars for the actual path on the control node.
-windows_ad_scripts_src: "{{ playbook_dir }}/../../../../ad-lab"
+windows_ad_scripts_src: "{{ playbook_dir }}/../../../../ad-lab/scripts"
+windows_ad_config_src: "{{ playbook_dir }}/../../../../ad-lab/config"
 
-# Remote destination on the Windows DC for the scripts
+# Remote destination on the Windows DC for the scripts and config
 windows_ad_scripts_dest: "C:\\OraLab\\Scripts"
+windows_ad_config_dest: "C:\\OraLab\\config"
 
 # AD setup scripts executed in order
 windows_ad_scripts:

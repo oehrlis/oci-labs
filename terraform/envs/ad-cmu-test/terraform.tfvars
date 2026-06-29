@@ -36,6 +36,7 @@ windows_subnet_cidr = "10.19.50.0/24"
 
 # Windows AD
 domain_name                  = "oradba.ch"
+company_name                 = "OraDBA Labs"
 instance_image_ocid          = "ocid1.image.oc1.eu-zurich-1.aaaaaaaanrw7bmj2aeab2zvviznxrfvt4w5uxm2j6bmgikmbpp5j5iwbrclq"
 windows_shape                = "VM.Standard.E4.Flex"
 windows_ocpus                = 2

@@ -121,6 +121,7 @@ module "windows_ad" {
   assign_public_ip     = var.assign_windows_public_ip
 
   domain_name           = var.domain_name
+  company_name          = var.company_name
   admin_password_secret = var.admin_password_secret
 }
 
@@ -155,11 +156,17 @@ resource "null_resource" "wait_for_winrm" {
   provisioner "local-exec" {
     command = <<-EOT
       WIN_IP="${module.windows_ad.private_ip}"
-      echo "Waiting for cloudbase-init on $WIN_IP:5985 ..."
+      INVENTORY="${path.root}/../../ansible/inventories/ad-cmu-test/hosts.yml"
+      echo "Waiting for WinRM on $WIN_IP:5985 (cloudbase-init phase 1)..."
       until nc -z -w 5 "$WIN_IP" 5985 2>/dev/null; do
         printf '.'; sleep 20
       done
-      echo " WinRM port open - cloudbase-init complete."
+      echo " WinRM ready - cloudbase-init phase 1 complete."
+      echo "Phase 2 (AD DS promote + lab setup) runs in background after DC reboot."
+      echo "Monitor: C:\\OraLab\\logs\\cloudinit-phase2.log on the instance."
+      echo "Complete marker: C:\\OraLab\\logs\\setup-complete.txt"
+      printf 'all:\n  children:\n    windows_dc:\n      hosts:\n        windc01:\n          ansible_host: "%s"\n' "$WIN_IP" > "$INVENTORY"
+      echo "Ansible inventory updated: $INVENTORY"
     EOT
   }
 }

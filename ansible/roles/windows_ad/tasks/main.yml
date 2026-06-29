@@ -17,17 +17,28 @@
 - name: Verify WinRM connectivity
   ansible.windows.win_ping:
 
-# 2. Create remote scripts directory
+# 2. Create remote directories
 - name: Create scripts destination directory
   ansible.windows.win_file:
     path: "{{ windows_ad_scripts_dest }}"
     state: directory
 
-# 3. Copy ad-lab scripts to the Windows DC
+- name: Create config destination directory
+  ansible.windows.win_file:
+    path: "{{ windows_ad_config_dest }}"
+    state: directory
+
+# 3. Copy ad-lab scripts and config to the Windows DC
 - name: Copy ad-lab scripts to Windows DC
   ansible.windows.win_copy:
     src: "{{ windows_ad_scripts_src }}/"
     dest: "{{ windows_ad_scripts_dest }}\\"
+    recurse: true
+
+- name: Copy ad-lab config to Windows DC
+  ansible.windows.win_copy:
+    src: "{{ windows_ad_config_src }}/"
+    dest: "{{ windows_ad_config_dest }}\\"
     recurse: true
 
 # 4. Render and deploy 00_init_environment.ps1
