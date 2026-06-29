@@ -245,29 +245,107 @@ oci compute instance action --profile ACE \
 
 ## Step 8 - Wait for WinRM
 
-Wait approximately 5-10 minutes for cloudbase-init to complete, then verify via VPN:
+After apply, `terraform apply` blocks until WinRM on port 5985 responds (via the
+`null_resource.wait_for_winrm` provisioner). The Ansible inventory is written
+immediately with the new private IP - before the polling loop - so the inventory
+is always current even if you interrupt the apply early.
+
+Verify connectivity manually once apply completes:
 
 ```bash
-ansible all -i <windows_private_ip>, -m ansible.windows.win_ping \
-  -e "ansible_host=<windows_private_ip>" \
-  -e "ansible_user=Administrator" \
-  -e "ansible_password=$(op read 'op://AI-DevOps/WinDC/password')" \
-  -e "ansible_connection=winrm" \
-  -e "ansible_winrm_transport=basic" \
-  -e "ansible_winrm_port=5985" \
-  -e "ansible_winrm_scheme=http"
+export WIN_PASS=$(op read "op://AI-DevOps/WinDC/password")
+cd /path/to/oci-labs   # always run ansible from the oci-labs repo root
+
+ansible all -i ansible/inventories/ad-cmu-test/ \
+  -e ansible_user=Administrator -e "ansible_password=$WIN_PASS" \
+  -m win_ping
 ```
 
 Expected response: `pong`
 
-If connection refused: check that the home lab VPN is up and `10.19.0.0/16` is in UDM
-remote networks. Then confirm cloudbase-init completed via OCI Console → Instance → Serial Console.
+If connection refused: check VPN is up and `10.19.0.0/16` is in UDM remote networks.
 
 ---
 
-## Step 9 - Create Ansible Inventory
+## Step 8a - Monitor cloudbase-init
 
-Create `ansible/inventories/ad-cmu-test/hosts.yml`:
+cloudbase-init runs in two phases. All commands below require VPN connectivity
+and must be run from the `oci-labs` repo root.
+
+```bash
+export WIN_PASS=$(op read "op://AI-DevOps/WinDC/password")
+```
+
+**Check which log files exist and their sizes:**
+
+```bash
+ansible all -i ansible/inventories/ad-cmu-test/ \
+  -e ansible_user=Administrator -e "ansible_password=$WIN_PASS" \
+  -m win_shell -a "Get-ChildItem C:\\OraLab\\logs | Format-Table Name,LastWriteTime,Length -AutoSize"
+```
+
+Expected progression:
+
+<!-- markdownlint-disable MD013 -->
+| Files present | Phase | Meaning |
+|---|---|---|
+| `cloudinit-phase1.log` (0 B) | Phase 1 starting | WinRM enabled, downloading scripts, installing AD DS role |
+| `cloudinit-phase1.log` (> 0 B), no phase2 log | Phase 1 complete | AD DS installed, instance rebooting into domain promote |
+| `cloudinit-phase2.log` (0 B) | Phase 2 starting | DC rebooted, waiting for AD Web Services |
+| `cloudinit-phase2.log` (> 0 B) | Phase 2 running | AD setup scripts executing |
+| `setup-complete.txt` present | Done | Full lab setup complete |
+<!-- markdownlint-enable MD013 -->
+
+**Tail phase 1 log (AD DS role install, ~5-10 min):**
+
+```bash
+ansible all -i ansible/inventories/ad-cmu-test/ \
+  -e ansible_user=Administrator -e "ansible_password=$WIN_PASS" \
+  -m win_shell -a "Get-Content C:\\OraLab\\logs\\cloudinit-phase1.log -Tail 20 -ErrorAction SilentlyContinue"
+```
+
+**Tail phase 2 log (AD setup scripts, ~5-10 min after reboot):**
+
+```bash
+ansible all -i ansible/inventories/ad-cmu-test/ \
+  -e ansible_user=Administrator -e "ansible_password=$WIN_PASS" \
+  -m win_shell -a "Get-Content C:\\OraLab\\logs\\cloudinit-phase2.log -Tail 30 -ErrorAction SilentlyContinue"
+```
+
+**Check for individual script logs** (each ad-lab script writes its own log via CommonFunctions):
+
+```bash
+ansible all -i ansible/inventories/ad-cmu-test/ \
+  -e ansible_user=Administrator -e "ansible_password=$WIN_PASS" \
+  -m win_shell -a "Get-ChildItem C:\\OraLab\\logs -Filter *.log | Format-Table Name,LastWriteTime,Length -AutoSize"
+```
+
+**Check setup-complete marker:**
+
+```bash
+ansible all -i ansible/inventories/ad-cmu-test/ \
+  -e ansible_user=Administrator -e "ansible_password=$WIN_PASS" \
+  -m win_shell -a "Get-Content C:\\OraLab\\logs\\setup-complete.txt -ErrorAction SilentlyContinue"
+```
+
+---
+
+## Step 9 - Ansible Inventory
+
+The inventory file `ansible/inventories/ad-cmu-test/hosts.yml` is committed to the
+repo. The `null_resource.wait_for_winrm` provisioner overwrites it with the current
+private IP on every `terraform apply` that replaces the instance.
+
+If you need to update the IP manually:
+
+```bash
+# Get current IP from Terraform state
+terraform -chdir=terraform/envs/ad-cmu-test output -raw windows_private_ip
+
+# Update hosts.yml (replace 10.19.50.x with actual IP)
+```
+
+`ansible/inventories/ad-cmu-test/hosts.yml`:
 
 ```yaml
 all:
@@ -276,22 +354,16 @@ all:
       hosts:
         windc01:
           ansible_host: "10.19.50.x"   # from terraform output windows_private_ip
-          ansible_user: Administrator
-          ansible_connection: winrm
-          ansible_winrm_transport: basic
-          ansible_winrm_port: 5985
-          ansible_winrm_scheme: http
-          ansible_winrm_server_cert_validation: ignore
 ```
 
-Create `ansible/inventories/ad-cmu-test/group_vars/windows_dc.yml` (Vault-encrypted):
+WinRM connection parameters are in `group_vars/windows_dc.yml` (already committed):
 
 ```yaml
-windows_ad_domain: "oradba.ch"
-windows_ad_netbios: "ORADBA"
-windows_ad_company: "OraDBA Labs"
-windows_ad_admin_user: "Administrator"
-windows_ad_scripts_src: "../../../../ad-lab"
+ansible_connection: winrm
+ansible_winrm_transport: basic
+ansible_winrm_port: 5985
+ansible_winrm_scheme: http
+ansible_winrm_server_cert_validation: ignore
 ```
 
 ---
@@ -414,12 +486,37 @@ END;
 
 ---
 
+## Redeployment (Replace Instance)
+
+Use `terraform apply -replace` to rebuild the Windows DC without touching the network.
+This destroys and recreates only the compute instance and triggers a fresh cloudbase-init run.
+
+```bash
+cd /path/to/oci-labs
+export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
+
+terraform -chdir=terraform/envs/ad-cmu-test apply \
+  -replace=module.windows_ad.oci_core_instance.windows_ad
+```
+
+What happens:
+1. Old instance is destroyed
+2. New instance is created with a new OCID and new private IP
+3. `null_resource.wait_for_winrm` detects the OCID change (trigger) and re-runs
+4. Ansible inventory `hosts.yml` is updated immediately with the new IP
+5. Provisioner blocks until WinRM on the new IP responds
+
+After apply completes, cloudbase-init phase 1 and phase 2 run automatically.
+Monitor progress using the commands in Step 8a.
+
+---
+
 ## Teardown
 
 ```bash
-cd oci-labs/terraform/envs/ad-cmu-test
+cd /path/to/oci-labs
 export TF_VAR_admin_password_secret=$(op read "op://AI-DevOps/WinDC/password")
-terraform destroy
+terraform -chdir=terraform/envs/ad-cmu-test destroy
 ```
 
 This removes VCN, DRG attachment, all subnets, Security Lists, NSG, Windows instance,
@@ -434,11 +531,16 @@ and the Resource Scheduler. The DRG itself is managed by deep-thought and is NOT
 |---|---|---|
 | `win_ping` connection refused | WinRM not yet ready | Wait 5-10 min after instance start; check cloudbase-init in OCI Console serial output |
 | `win_ping` connection refused (VPN) | VPN tunnel down or wrong remote CIDR | Check UDM VPN status; verify `10.19.0.0/16` is in UDM remote networks |
-| `win_ping` auth error | Wrong password or WinRM Basic auth disabled | Verify cloudbase-init completed; re-run with correct password |
+| `win_ping` auth error | Wrong password or WinRM Basic auth disabled | Verify cloudbase-init completed; re-run with correct password from 1Password |
+| `the specified credentials were rejected` | `$WIN_PASS` env var not set | Run `export WIN_PASS=$(op read "op://AI-DevOps/WinDC/password")` - the variable is not persisted between shell sessions |
+| Ansible `No inventory was parsed` warning | Wrong working directory or wrong inventory path | Always run ansible from oci-labs repo root: `cd /path/to/oci-labs`, then use `-i ansible/inventories/ad-cmu-test/` |
+| Inventory `hosts.yml` has stale IP after redeploy | Provisioner did not run or inventory path was wrong | Terraform provisioner used `path.root` (relative) instead of `abspath(path.root)`. Fixed in current version. Update IP manually: `terraform -chdir=terraform/envs/ad-cmu-test output -raw windows_private_ip` |
+| Phase 2 script `27_config_cmu.ps1` fails with exit code 1 | Script error inside child process | Check individual script log: `Get-Content C:\\OraLab\\logs\\27_config_cmu.log`. The phase2 transcript only captures the parent process; each ad-lab script writes its own log via CommonFunctions |
 | AD DS install fails (reboot loop) | Insufficient memory | Increase `windows_memory_gbs` to 16 GB |
-| LDAP port 389 not responding after reboot | AD services slow start | Increase `timeout` in `win_wait_for` to 600s |
+| `cloudinit-phase2.log` is 0 bytes, never grows | AD Web Services not starting | Phase 2 is waiting for AD; check if DC rebooted successfully via OCI Console serial output |
+| LDAP port 389 not responding after reboot | AD services slow start | Wait up to 10 min after reboot; phase2 retries every 20 s up to 300 s |
 | Kerberos `kinit` fails on DB host | KDC unreachable or clock skew | Check VPN routing to `10.19.50.x`; verify NTP sync (`chronyd`) on both hosts |
 | CMU LDAP queries fail | LDAP port blocked | Check NSG and Security List allow TCP 389 from DB subnet and `home_cidrs` |
 | `terraform apply` 404 NotAuthorized | Wrong OCI profile or `hashicorp/oci` picked over `oracle/oci` | Verify `provider.tf` has `config_file_profile = "ACE"`; delete `.terraform/` and `.terraform.lock.hcl`, re-run `terraform init` |
-| Instance not starting (auto-stop fired) | Resource Scheduler stopped it as scheduled | Start manually: `oci compute instance action --profile ACE --instance-id <ocid> --action START` |
+| Instance not starting (auto-stop fired) | Resource Scheduler stopped it as scheduled | `oci compute instance action --profile ACE --instance-id $(terraform -chdir=terraform/envs/ad-cmu-test output -raw windows_instance_id) --action START` |
 <!-- markdownlint-enable MD013 MD060 -->
