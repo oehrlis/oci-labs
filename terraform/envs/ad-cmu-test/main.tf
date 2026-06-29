@@ -156,7 +156,7 @@ resource "null_resource" "wait_for_winrm" {
   provisioner "local-exec" {
     command = <<-EOT
       WIN_IP="${module.windows_ad.private_ip}"
-      INVENTORY="${path.root}/../../ansible/inventories/ad-cmu-test/hosts.yml"
+      INVENTORY="${abspath(path.root)}/../../ansible/inventories/ad-cmu-test/hosts.yml"
       printf 'all:\n  children:\n    windows_dc:\n      hosts:\n        windc01:\n          ansible_host: "%s"\n' "$WIN_IP" > "$INVENTORY"
       echo "Ansible inventory updated: $INVENTORY"
       echo "Waiting for WinRM on $WIN_IP:5985 (cloudbase-init phase 1)..."
