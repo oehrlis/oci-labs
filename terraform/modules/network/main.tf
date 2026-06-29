@@ -277,16 +277,16 @@ resource "oci_core_route_table" "app" {
   freeform_tags = var.freeform_tags
 }
 
-# Windows subnet uses IGW (public-capable) so optional public IP assignment works
+# Windows subnet: NAT gateway for outbound internet (no public IP needed)
 resource "oci_core_route_table" "windows" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.this.id
   display_name   = local.windows_rt_name
 
   dynamic "route_rules" {
-    for_each = var.internet_gateway_enabled ? [1] : []
+    for_each = var.nat_gateway_enabled ? [1] : []
     content {
-      network_entity_id = oci_core_internet_gateway.igw[0].id
+      network_entity_id = oci_core_nat_gateway.nat[0].id
       destination       = "0.0.0.0/0"
       destination_type  = "CIDR_BLOCK"
     }

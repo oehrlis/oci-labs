@@ -4,33 +4,63 @@
 # Name.......: 00_init_environment.ps1.j2
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.06.26
-# Version....: v0.1.0
+# Version....: v0.2.0
 # Purpose....: Jinja2 template for 00_init_environment.ps1 deployed by Ansible.
-#              Sets environment variables consumed by all subsequent AD scripts.
-# Notes......: All variables are sourced from the Ansible role defaults/vars.
-#              windows_ad_admin_password must be provided via vault or extra-vars.
+#              Sets all variables required by ad-lab scripts (01_install_ad_role.ps1
+#              and subsequent scripts). Replaces the file/config-based init from the
+#              original ad-lab so all values come from Ansible inventory/vars.
+# Notes......: windows_ad_admin_password must be supplied via --extra-vars or vault.
 # Reference..: https://github.com/oehrlis/oci-labs / https://github.com/oehrlis/ad-lab
 # ------------------------------------------------------------------------------
 
 $ErrorActionPreference = 'Stop'
 
-# --- Domain configuration -----------------------------------------------------
-$env:AD_DOMAIN        = "{{ windows_ad_domain }}"
-$env:AD_DOMAIN_FQDN   = "{{ windows_ad_domain }}"
-$env:AD_NETBIOS        = "{{ windows_ad_netbios }}"
-$env:AD_COMPANY        = "{{ windows_ad_company }}"
-$env:AD_ADMIN_USER     = "{{ windows_ad_admin_user }}"
+# --- Domain configuration (consumed by 01_install_ad_role.ps1 + others) ------
+$NetworkDomainName       = "{{ windows_ad_domain }}"
+$netbiosDomain           = "{{ windows_ad_netbios }}"
+$ADDomainMode            = "Default"
+$Company                 = "{{ windows_ad_company }}"
 
-# --- Paths --------------------------------------------------------------------
-$env:AD_SCRIPTS_HOME  = "{{ windows_ad_scripts_dest }}"
-$env:AD_LOG_DIR       = "{{ windows_ad_scripts_dest }}\logs"
+# --- Network ------------------------------------------------------------------
+$ServerAddress           = ""
+$Subnet                  = ""
+$DNS1ClientServerAddress = "8.8.8.8"
+$DNS2ClientServerAddress = "4.4.4.4"
 
-# --- Sensitive: set via Ansible Vault, not hardcoded here --------------------
-# $env:AD_ADMIN_PASSWORD is expected to be set by the calling script or vault.
+# --- Password -----------------------------------------------------------------
+$PlainPassword           = "{{ windows_ad_admin_password }}"
+$SecurePassword          = ConvertTo-SecureString -AsPlainText $PlainPassword -Force
+$PasswordLength          = 15
 
-# --- Ensure log directory exists ----------------------------------------------
+# --- People / Groups OUs (used by 11_add_lab_company.ps1) --------------------
+$People                  = "People"
+$Groups                  = "Groups"
+
+# --- Script paths (relative to deployed scripts directory) -------------------
+$ScriptPath              = "{{ windows_ad_scripts_dest }}"
+$ConfigPath              = Join-Path -Path (Split-Path $ScriptPath -Parent) -ChildPath "config"
+$DefaultPWDFile          = Join-Path -Path $ConfigPath -ChildPath "default_pwd_windows.txt"
+$DefaultConfigFile       = Join-Path -Path $ConfigPath -ChildPath "default_configuration.txt"
+$UserCSVFile             = Join-Path -Path $ConfigPath -ChildPath "users_ad.csv"
+$HostCSVFile             = Join-Path -Path $ConfigPath -ChildPath "hosts.csv"
+$RootCAFile              = Join-Path -Path $ConfigPath -ChildPath "rootCA.cer"
+
+# --- Oracle paths (used by install scripts) ----------------------------------
+$OracleBase              = "C:\u00\app\oracle"
+$InstantClientVersion    = "19.11.0.0.0"
+
+# --- Environment variables (convenience aliases for env-aware scripts) --------
+$env:AD_DOMAIN           = "{{ windows_ad_domain }}"
+$env:AD_DOMAIN_FQDN      = "{{ windows_ad_domain }}"
+$env:AD_NETBIOS          = "{{ windows_ad_netbios }}"
+$env:AD_COMPANY          = "{{ windows_ad_company }}"
+$env:AD_ADMIN_USER       = "{{ windows_ad_admin_user }}"
+$env:AD_SCRIPTS_HOME     = "{{ windows_ad_scripts_dest }}"
+$env:AD_LOG_DIR          = "{{ windows_ad_scripts_dest }}\logs"
+
+# --- Ensure log directory exists ---------------------------------------------
 if (-not (Test-Path $env:AD_LOG_DIR)) {
     New-Item -ItemType Directory -Path $env:AD_LOG_DIR -Force | Out-Null
 }
 
-Write-Output "Environment initialized: domain={{ windows_ad_domain }}, company={{ windows_ad_company }}"
+Write-Output "Environment initialized: domain={{ windows_ad_domain }}, netbios={{ windows_ad_netbios }}, company={{ windows_ad_company }}"

@@ -24,9 +24,13 @@ locals {
   instance_display_name = "ci-${var.lab_name_core}-dc-01"
   hostname_label        = "windc01"
 
+  netbios_name = upper(split(".", var.domain_name)[0])
+
   cloud_init = templatefile("${path.module}/templates/windows_ad-cloudinit.yaml.tftpl", {
     admin_password_b64 = base64encode(var.admin_password_secret)
     domain_name        = var.domain_name
+    netbios_name       = local.netbios_name
+    company_name       = var.company_name
     lab_name_core      = var.lab_name_core
   })
 }

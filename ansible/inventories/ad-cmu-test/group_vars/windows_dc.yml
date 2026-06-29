@@ -1,0 +1,11 @@
+windows_ad_domain: "oradba.ch"
+windows_ad_netbios: "ORADBA"
+windows_ad_company: "OraDBA Labs"
+windows_ad_admin_user: "Administrator"
+
+# WinRM connection settings
+ansible_connection: winrm
+ansible_winrm_transport: basic
+ansible_winrm_port: 5985
+ansible_winrm_scheme: http
+ansible_winrm_server_cert_validation: ignore
