@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **env/ad-cmu-test**: Ansible inventory (`hosts.yml`) is now written immediately at
+  the start of `null_resource.wait_for_winrm` provisioner, before the WinRM polling
+  loop. Previously the IP was only written after WinRM became reachable, leaving the
+  inventory stale when apply was interrupted or run without VPN connectivity.
+- **env/ad-cmu-test**: Inventory `hosts.yml` added to version control with current
+  private IP (`10.19.50.145`) for the `windc01` host.
+
 ## [0.2.1] - 2026-06-26
 
 ### Changed

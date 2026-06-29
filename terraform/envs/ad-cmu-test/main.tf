@@ -157,6 +157,8 @@ resource "null_resource" "wait_for_winrm" {
     command = <<-EOT
       WIN_IP="${module.windows_ad.private_ip}"
       INVENTORY="${path.root}/../../ansible/inventories/ad-cmu-test/hosts.yml"
+      printf 'all:\n  children:\n    windows_dc:\n      hosts:\n        windc01:\n          ansible_host: "%s"\n' "$WIN_IP" > "$INVENTORY"
+      echo "Ansible inventory updated: $INVENTORY"
       echo "Waiting for WinRM on $WIN_IP:5985 (cloudbase-init phase 1)..."
       until nc -z -w 5 "$WIN_IP" 5985 2>/dev/null; do
         printf '.'; sleep 20
@@ -165,8 +167,6 @@ resource "null_resource" "wait_for_winrm" {
       echo "Phase 2 (AD DS promote + lab setup) runs in background after DC reboot."
       echo "Monitor: C:\\OraLab\\logs\\cloudinit-phase2.log on the instance."
       echo "Complete marker: C:\\OraLab\\logs\\setup-complete.txt"
-      printf 'all:\n  children:\n    windows_dc:\n      hosts:\n        windc01:\n          ansible_host: "%s"\n' "$WIN_IP" > "$INVENTORY"
-      echo "Ansible inventory updated: $INVENTORY"
     EOT
   }
 }
