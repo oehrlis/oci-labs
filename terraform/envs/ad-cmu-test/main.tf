@@ -132,14 +132,17 @@ module "windows_ad" {
 resource "oci_resource_scheduler_schedule" "windows_ad_stop" {
   compartment_id = var.compartment_ocid
   display_name   = "sched-${local.lab_name_core}-dc-stop-01"
-  description    = "Daily stop at 18:00 UTC (20:00 CEST / 19:00 CET). Start manually."
+  description    = "Daily stop at 18:00 UTC (20:00 CEST / 19:00 CET). Start manually. Targets all instances in compartment cmp-oradba-labs."
   action         = "STOP_RESOURCE"
 
   recurrence_type    = "CRON"
   recurrence_details = "0 18 * * *"
 
-  resources {
-    id = module.windows_ad.instance_id
+  resource_filters {
+    attribute = "RESOURCE_TYPE"
+    value {
+      value = "instance"
+    }
   }
 
   freeform_tags = local.base_freeform_tags

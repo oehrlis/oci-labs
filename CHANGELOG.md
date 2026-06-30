@@ -8,6 +8,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **env/ad-cmu-test**: Resource Scheduler switched from fixed `resources { id = instance_id }`
+  to `resource_filters { RESOURCE_TYPE=instance }`. Scheduler now targets all compute
+  instances in the compartment by type, not by OCID, so it survives instance replacement
+  without requiring a `terraform apply` to re-sync. Note: `FREEFORM_TAG` is not supported
+  by the OCI provider; tag-based filtering requires defined tags.
 - **module/windows_ad (cloudinit)**: `27_config_cmu.ps1` removed from the automatic
   phase-2 script list. CMU/Kerberos configuration is now a manual post-deploy step
   (run via Ansible or RDP after AD is up). This prevents phase-2 from aborting when
