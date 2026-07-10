@@ -1,0 +1,53 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Purpose....: Variable values template for ad-cmu-test stack.
+#              Copy to terraform.tfvars and fill in your values.
+#              terraform.tfvars is git-ignored - never commit it.
+# Notes......: admin_password_secret via:
+#              export TF_VAR_admin_password_secret=$(op read "op://vault/item/password")
+#              terraform apply
+# ------------------------------------------------------------------------------
+
+# Core
+compartment_ocid = "ocid1.compartment.oc1..xxx"
+region_key       = "chzh"
+environment_code = "l"
+stack_code       = "windc"
+lab_instance     = 1
+
+common_freeform_tags = {
+  project = "oradba-labs"
+  owner   = "<your-github-handle>"
+  stack   = "windc"
+}
+
+# Network
+vcn_cidr            = "10.19.0.0/16"
+public_subnet_cidr  = "10.19.10.0/24"
+private_subnet_cidr = "10.19.20.0/24"
+windows_subnet_cidr = "10.19.50.0/24"
+
+# Uncomment to allow direct RDP from your IP:
+# allowed_rdp_cidrs = ["<your-ip>/32"]
+
+# Windows AD
+domain_name                  = "example.com"
+company_name                 = "Example Labs"
+instance_image_ocid          = "ocid1.image.oc1.eu-zurich-1.xxx"
+windows_shape                = "VM.Standard.E4.Flex"
+windows_ocpus                = 2
+windows_memory_gbs           = 8
+windows_boot_volume_size_gbs = 100
+assign_windows_public_ip     = false
+
+# admin_password_secret is NOT set here - use TF_VAR_admin_password_secret
+
+# VPN / DRG - site-to-site IPSec
+drg_id = "ocid1.drg.oc1.eu-zurich-1.xxx"
+home_cidrs = [
+  "192.168.0.0/24",
+]
+# --- EOF ----------------------------------------------------------------------

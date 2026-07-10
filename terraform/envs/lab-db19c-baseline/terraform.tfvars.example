@@ -1,0 +1,21 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, CH
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Purpose....: Variable values template for lab-db19c-baseline stack.
+#              Copy to terraform.tfvars and fill in your values.
+#              terraform.tfvars is git-ignored - never commit it.
+# ------------------------------------------------------------------------------
+
+tenancy_ocid     = "ocid1.tenancy.oc1..xxx"
+user_ocid        = "ocid1.user.oc1..xxx"
+fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+private_key_path = "~/.oci/oci_api_key.pem"
+
+region           = "eu-zurich-1"
+compartment_ocid = "ocid1.compartment.oc1..xxx"
+
+ssh_public_key = "<your-ssh-public-key>"
+bootstrap_url  = "<your-object-storage-par-url>"
+# --- EOF ----------------------------------------------------------------------

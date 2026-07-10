@@ -1,0 +1,14 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, CH
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Purpose....: Variable values template for odb19eng-single stack.
+#              Copy to terraform.tfvars and fill in your values.
+#              terraform.tfvars is git-ignored - never commit it.
+# ------------------------------------------------------------------------------
+
+compartment_ocid    = "ocid1.compartment.oc1..xxx"
+region_key          = "chzh"
+ssh_authorized_keys = "<your-ssh-public-key>"
+# --- EOF ----------------------------------------------------------------------
