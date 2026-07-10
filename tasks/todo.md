@@ -39,7 +39,7 @@
 
 ### Validierung
 
-- [ ] AD-Domain `oradba.ch` pruefen: ad-lab Scripts erwarten ggf. `oradba.ch` hardcoded
+- [ ] ad-lab Scripts auf `oradba.ch` / `ORADBACH` pruefen (defaults/main.yml angepasst)
 - [ ] WinRM von Home-Lab erreichbar via DRG/VPN (nach DRG-Attachment)
 - [ ] Oracle DB CMU/Kerberos Konfiguration auf DB-Server (krb5.conf, sqlnet.ora, keytab)
 

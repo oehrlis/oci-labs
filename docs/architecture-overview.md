@@ -122,7 +122,7 @@ oci-labs/
 
 ### What does NOT belong in modules
 
-- Domain names (`oradba.ch`, `oradba.ch`) - set in env
+- Domain names (e.g. `oradba.ch`) - set in env
 - Tenancy / compartment OCIDs - set in env
 - VPN / DRG OCIDs - set in env
 - Resource Scheduler schedules - set in env (lab lifecycle varies per env)
