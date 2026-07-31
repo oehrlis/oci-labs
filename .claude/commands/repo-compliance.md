@@ -1,0 +1,1 @@
+../../../ai-toolkit/claude/commands/repo-compliance.md

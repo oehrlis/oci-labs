@@ -1,0 +1,1 @@
+../../../ai-toolkit/claude/rules/shell-scripts.md
