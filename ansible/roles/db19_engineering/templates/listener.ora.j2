@@ -1,0 +1,19 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: Oracle Net listener configuration for the lab host.
+# Notes..: ADR-based diagnostics; no dynamic registration overrides. The
+#          listener stays in the base home during an out-of-place patch and is
+#          restarted from the target home afterwards.
+#-------------------------------------------------------------------------------
+
+{{ db19_listener_name }} =
+  (DESCRIPTION_LIST =
+    (DESCRIPTION =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = {{ ansible_facts['hostname'] }})(PORT = {{ db19_listener_port }}))
+      (ADDRESS = (PROTOCOL = IPC)(KEY = EXTPROC{{ db19_listener_port }}))
+    )
+  )
+
+ADR_BASE_{{ db19_listener_name }} = {{ oracle_base }}

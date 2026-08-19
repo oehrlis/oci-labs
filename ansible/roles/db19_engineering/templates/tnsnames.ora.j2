@@ -1,0 +1,26 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: Oracle Net service names for the lab database {{ oracle_sid }}.
+#-------------------------------------------------------------------------------
+
+{{ oracle_sid }} =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ ansible_facts['hostname'] }})(PORT = {{ db19_listener_port }}))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = {{ oracle_sid }})
+    )
+  )
+{% if db19_create_as_cdb %}
+
+{{ db19_pdb_name }} =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ ansible_facts['hostname'] }})(PORT = {{ db19_listener_port }}))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = {{ db19_pdb_name | lower }})
+    )
+  )
+{% endif %}

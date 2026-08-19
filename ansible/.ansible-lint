@@ -1,0 +1,37 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: .ansible-lint
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: ansible-lint configuration for the oci-labs playbooks and roles.
+# Notes......: Run with: ansible-lint roles/ playbooks/
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+skip_list:
+  # var-naming[no-role-prefix] demands that every variable inside a role carries
+  # the full role name as prefix, e.g. db19_engineering_oracle_sid.
+  #
+  # That is wrong for this repository. A deliberate subset of role variables is
+  # a cross-layer contract, not role-private state:
+  #
+  #   oracle_sid, oracle_base, db_base_ru, db_target_ru,
+  #   oracle_home_base, oracle_home_target
+  #     -> written by Terraform (envs/cpu-patch-test) into the generated
+  #        inventory as group vars and consumed by db19_engineering. Prefixing
+  #        them with a role name would break that contract and tie the
+  #        inventory to one specific role.
+  #
+  #   mos_username, mos_password, mos_csi
+  #     -> run-time inputs supplied from 1Password via -e, not role internals.
+  #
+  #   ssh_port, ssh_listen_address, ssh_password_auth (role base_ssh)
+  #     -> shared SSH settings, intentionally addressable from a playbook.
+  #
+  # Roles use a short, stable prefix instead (db19_, oradba_, ...), which keeps
+  # variable names readable without pretending they are private.
+  - var-naming[no-role-prefix]

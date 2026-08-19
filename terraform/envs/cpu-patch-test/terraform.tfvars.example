@@ -1,0 +1,84 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Purpose....: Variable values template for the cpu-patch-test stack.
+#              Copy to terraform.tfvars and fill in your values.
+#              terraform.tfvars is git-ignored - never commit it.
+# Notes......: ssh_public_key is NOT set here. Provide it via
+#              TF_VAR_ssh_public_key (see .env.example) so the key never
+#              ends up in a file that could be committed.
+# ------------------------------------------------------------------------------
+
+# Provider / tenancy
+# Base compartment - existing, never created or deleted by Terraform.
+# Alternative: comment this out and set compartment_name + tenancy_ocid instead.
+oci_config_profile = "TRIVADIS"
+compartment_ocid   = "ocid1.compartment.oc1..xxx"
+
+# Core / naming  ->  chzh-l-cpupt-01
+region_key       = "chzh"
+environment_code = "l"
+stack_code       = "cpupt"
+lab_instance     = 1
+
+common_freeform_tags = {
+  project = "oradba-labs"
+  owner   = "<your-github-handle>"
+  stack   = "cpupt"
+}
+
+# Network
+vcn_cidr            = "10.29.0.0/16"
+public_subnet_cidr  = "10.29.10.0/24"
+private_subnet_cidr = "10.29.20.0/24"
+db_subnet_cidr      = "10.29.30.0/24"
+
+enable_flow_logs            = true
+flow_log_retention_duration = 30
+
+# Required for SSH access when assign_public_ip = true. Default is [] - no
+# external SSH at all, which locks you out of a public-IP host.
+allowed_ssh_cidrs = ["203.0.113.10/32"]
+
+# Optional site-to-site VPN via an existing DRG
+# drg_id     = "ocid1.drg.oc1.eu-zurich-1.xxx"
+# home_cidrs = ["192.168.0.0/24"]
+
+# DB hosts
+lab_count                    = 1
+db_host_shape                = "VM.Standard.E4.Flex"
+db_host_ocpus                = 2
+db_host_memory_gbs           = 16
+db_host_boot_volume_size_gbs = 200
+assign_public_ip             = true
+
+# Optional extra volume - engineering labs only, not needed for CPU tests
+attach_data_volume   = false
+data_volume_size_gbs = 100
+
+# Auto-stop is off by default: an AutoUpgrade run must not be interrupted.
+enable_auto_stop = false
+# auto_stop_cron = "0 18 * * *"
+
+# Oracle DB / patch level - consumed by the Ansible layer
+oracle_sid   = "CPUDB"
+db_base_ru   = "19.31"
+db_target_ru = "19.32"
+
+# Filesystem roots. Separate directories today, separate mount points whenever a
+# lab needs them - /u00 binaries, /u01 data, /u02 archive.
+db_oracle_root = "/u00"
+db_oracle_data = "/u01"
+db_oracle_arch = "/u02"
+
+# Leave empty to derive:
+#   ORACLE_BASE  /u00/app/oracle
+#   ORACLE_HOMEs /u00/app/oracle/product/<ru>/dbhome_1
+db_oracle_base        = ""
+db_oracle_home_base   = ""
+db_oracle_home_target = ""
+
+# ssh_public_key is NOT set here - use TF_VAR_ssh_public_key
+# --- EOF ----------------------------------------------------------------------

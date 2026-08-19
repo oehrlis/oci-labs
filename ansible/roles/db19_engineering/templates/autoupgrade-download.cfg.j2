@@ -1,0 +1,28 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: AutoUpgrade download config - fetch the media for RU {{ db19_home_ru }}.
+# Notes..: Mirrors the download configs in cpu-patch-tests (patches/au/*.cfg).
+#          Oracle cannot auto-download the 19c BASE image; with gold_image=NO
+#          the file {{ db19_base_image_zip }} must already be staged.
+#          Only DOWNLOAD_FOLDER is set - AutoUpgrade 26.5 rejects a config that
+#          provides both FOLDER and DOWNLOAD_FOLDER:
+#            "Configuration parameter FOLDER is deprecated and must not be
+#             provided together with DOWNLOAD_FOLDER."
+#          gold_image is NOT accepted on a download job - AutoUpgrade 26.5 fails
+#          with "Failed to process the gold_image parameter for prefix dl1". It
+#          belongs on the create_home job only.
+#-------------------------------------------------------------------------------
+
+global.global_log_dir={{ db19_autoupgrade_log_dir }}
+global.keystore={{ db19_autoupgrade_keystore_dir }}
+global.download_folder={{ db19_stage_dir }}
+
+dl1.platform={{ db19_autoupgrade_platform }}
+dl1.target_version={{ db19_major_release }}
+dl1.patch=RU:{{ db19_home_ru }},{{ db19_autoupgrade_patch_list }}
+# Mandatory for a download job: with the default AUTO, AutoUpgrade 26.5 aborts
+# with "Failed to process the gold_image parameter for prefix dl1".
+dl1.gold_image=NO
+dl1.download=YES

@@ -1,0 +1,247 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/download.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Download the Oracle media for a given Release Update from MOS.
+# Notes......: Called once per RU - for the base RU during install, and again
+#              for the target RU during a CPU test. Requires the auto-login
+#              keystore from credentials.yml.
+#              Caveat: Oracle states that for 19c and 21c "AutoUpgrade Patching
+#              cannot automatically download this base image". A 19c home can
+#              therefore only be built without a manually staged
+#              LINUX.X64_193000_db_home.zip when a gold image is available from
+#              the Oracle Updater service (gold_image=AUTO, LINUX.X64 only).
+#              This file checks for that and fails with a clear message rather
+#              than letting create_home die halfway.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Set the Release Update to download
+  ansible.builtin.set_fact:
+    db19_home_ru: "{{ db19_home_ru | default(db_base_ru) }}"
+
+# ---------------------------------------------------------------------------
+# 0. Skip everything when this RU is already staged
+# ---------------------------------------------------------------------------
+# Two reasons, both learned the hard way:
+#   - re-downloading 4.7 GB per run is pointless
+#   - AutoUpgrade keeps job/recovery state under global_log_dir. After a deploy
+#     that intentionally keeps its Guaranteed Restore Point
+#     (drop_grp_after_patching=no) the job stays open, and any further
+#     AutoUpgrade invocation aborts with "There is an unfinished execution of a
+#     deploy mode". A completed download must therefore not be repeated.
+
+- name: Check for the download stamp of this RU
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}"
+  register: db19_download_stamp
+
+- name: Report that the media are already staged
+  ansible.builtin.debug:
+    msg: >-
+      Media for RU {{ db19_home_ru }} already staged
+      ({{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}) - skipping
+      download. Remove the stamp to force a re-download.
+  when: db19_download_stamp.stat.exists
+
+# ---------------------------------------------------------------------------
+# 1. Gold image first - it contains the base release, so nothing else is needed
+# ---------------------------------------------------------------------------
+
+- name: Render the gold-image download config
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.template:
+    src: autoupgrade-download-gold.cfg.j2
+    dest: "{{ db19_autoupgrade_config_dir }}/download-gold-{{ db19_home_ru }}.cfg"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+  when:
+    - not db19_download_stamp.stat.exists
+    - db19_try_gold_image | bool
+
+- name: Attempt the gold-image download for RU {{ db19_home_ru }}
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }}
+      -config {{ db19_autoupgrade_config_dir }}/download-gold-{{ db19_home_ru }}.cfg
+      -patch -mode download -noconsole
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: db19_gold_download
+  changed_when: db19_gold_download.rc == 0
+  failed_when: false
+  async: 10800
+  poll: 30
+  when:
+    - not db19_download_stamp.stat.exists
+    - db19_try_gold_image | bool
+
+- name: Record whether the gold-image path worked
+  ansible.builtin.set_fact:
+    db19_gold_image_used: >-
+      {{ (db19_try_gold_image | bool)
+         and (db19_gold_download.rc | default(1) == 0) }}
+
+- name: Report that the gold-image path is unavailable
+  ansible.builtin.debug:
+    msg:
+      - "Gold-image download failed - falling back to individual patches plus a staged base image."
+      - "Reason: {{ (db19_gold_download.stderr | default('') | trim) | truncate(200) }}"
+      - "This is expected while the Oracle Updater service rejects 19c gold images."
+  when:
+    - db19_try_gold_image | bool
+    - not (db19_gold_image_used | bool)
+
+- name: Report that the gold image was used
+  ansible.builtin.debug:
+    msg: "Gold image obtained - no separate base image needed."
+  when: db19_gold_image_used | bool
+
+# ---------------------------------------------------------------------------
+# 2. Fallback - individual patches (gold_image=NO), base image staged separately
+# ---------------------------------------------------------------------------
+
+- name: Render the AutoUpgrade download config
+
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.template:
+    src: autoupgrade-download.cfg.j2
+    dest: "{{ db19_autoupgrade_config_dir }}/download-{{ db19_home_ru }}.cfg"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+
+- name: Download the media for RU {{ db19_home_ru }}
+  when:
+    - not db19_download_stamp.stat.exists
+    - not (db19_gold_image_used | bool)
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }}
+      -config {{ db19_autoupgrade_config_dir }}/download-{{ db19_home_ru }}.cfg
+      -patch -mode download -noconsole
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: db19_download
+  changed_when: db19_download.rc == 0
+  async: 10800
+  poll: 60
+
+- name: Report the download outcome
+  ansible.builtin.debug:
+    msg: "{{ (db19_download.stdout_lines | default([]))[-20:] }}"
+  when: not (db19_gold_image_used | bool)
+
+- name: List the staged media
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns:
+      - "*.zip"
+    recurse: true
+  register: db19_staged_media
+
+- name: Report the staged media
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_staged_media.files | map(attribute='path') | map('basename') | list }}
+
+# ---------------------------------------------------------------------------
+# Base image - the one thing AutoUpgrade cannot fetch for 19c
+# ---------------------------------------------------------------------------
+
+- name: Check whether the base image is already staged
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
+  register: db19_base_image_stat
+
+# Accept both PAR shapes: a bucket pre-authenticated request ends with "/" and
+# needs the object name appended, whereas a single-object PAR already points at
+# the file and must be used verbatim.
+- name: Resolve the base image URL
+  ansible.builtin.set_fact:
+    db19_base_image_effective_url: >-
+      {{ db19_base_image_url ~ db19_base_image_zip
+         if db19_base_image_url.endswith('/')
+         else db19_base_image_url }}
+  when: db19_base_image_url | length > 0
+
+- name: Stage the base image from db19_base_image_url
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.get_url:
+    url: "{{ db19_base_image_effective_url }}"
+    dest: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    timeout: 120
+  no_log: true
+  register: db19_base_image_dl
+  retries: 3
+  delay: 10
+  until: db19_base_image_dl is succeeded
+  when:
+    - not (db19_gold_image_used | bool)
+    - not db19_base_image_stat.stat.exists
+    - db19_base_image_url | length > 0
+
+- name: Re-check the base image after staging
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
+  register: db19_base_image_final
+
+- name: Look for a gold image instead
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns: "*goldimage*.zip"
+  register: db19_gold_image_found
+
+- name: Assert a base image or a gold image is available for create_home
+  ansible.builtin.assert:
+    that:
+      - (db19_gold_image_used | bool)
+        or db19_base_image_final.stat.exists
+        or (db19_gold_image_found.files | length > 0)
+    fail_msg: >-
+      Neither {{ db19_base_image_zip }} nor a gold image is present in
+      {{ db19_stage_dir }}, so create_home cannot build an ORACLE_HOME.
+      AutoUpgrade cannot download the 19c base image, and the Oracle Updater
+      service offers no gold image for this RU (verified for 19.31 and 19.32).
+      Fix one of these:
+        1. set db19_base_image_url to an OCI bucket pre-authenticated request
+           (or any HTTP location) that serves {{ db19_base_image_zip }}
+        2. copy {{ db19_base_image_zip }} into {{ db19_stage_dir }} by hand
+      Download source:
+      https://www.oracle.com/database/technologies/oracle19c-linux-downloads.html
+    success_msg: >-
+      Software source for create_home is available
+      ({{ db19_base_image_final.stat.exists | ternary(db19_base_image_zip, 'gold image') }}).
+
+- name: Stamp this RU as fully staged
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    content: |
+      RU {{ db19_home_ru }} staged {{ ansible_date_time.iso8601 | default('unknown') }}
+      gold_image_used={{ db19_gold_image_used | default(false) }}
+  when: not db19_download_stamp.stat.exists

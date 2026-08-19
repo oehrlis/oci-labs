@@ -1,0 +1,40 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: Start and stop Oracle listeners and databases on boot and shutdown.
+# Notes..: Delegates to oradba's own wrapper rather than reimplementing dbstart:
+#            oradba_services_root.sh start   -> listeners + all databases
+#          The wrapper runs oradba_services.sh as {{ oracle_os_user }} and picks
+#          up every database flagged :Y in /etc/oratab, so enabling a database
+#          for autostart stays an oratab edit and nothing else.
+#
+#          TODO: this unit belongs upstream in oradba, next to
+#          oradba_services_root.sh - same as the dbca/response-file templates.
+#          Remove it here once oradba ships it.
+#
+#          Type=oneshot + RemainAfterExit=yes: the wrapper returns once the
+#          databases are open, so systemd must not treat that as a crash.
+#          TimeoutStartSec=0 because opening a large CDB can exceed any sane
+#          default and being killed half-way is worse than waiting.
+#-------------------------------------------------------------------------------
+
+[Unit]
+Description=Oracle listeners and databases (oradba)
+Documentation=https://github.com/oehrlis/oradba
+After=network-online.target local-fs.target remote-fs.target disable-thp.service
+Wants=network-online.target
+RequiresMountsFor={{ oracle_root }} {{ oracle_data }} {{ oracle_arch }}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=0
+TimeoutStopSec={{ db19_service_stop_timeout }}
+ExecStart={{ db19_oradba_dir }}/bin/oradba_services_root.sh start
+ExecStop={{ db19_oradba_dir }}/bin/oradba_services_root.sh stop
+User=root
+Environment=ORACLE_USER={{ oracle_os_user }}
+
+[Install]
+WantedBy=multi-user.target

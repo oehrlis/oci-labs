@@ -1,0 +1,193 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/patch.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Quarterly CPU test - patch out-of-place from the base RU to the
+#              target RU using AutoUpgrade.
+# Notes......: Three steps, all AutoUpgrade:
+#                1. download the target RU media
+#                2. create_home for the target ORACLE_HOME
+#                3. deploy - move the database from source_home to target_home
+#              Oracle constraint: the source database must be on an EARLIER RU
+#              than the target. AutoUpgrade does NOT move the listener, so the
+#              role stops it from the old home and starts it from the new one.
+#              The old home is left in place for rollback testing.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the base ORACLE_HOME exists before patching
+  become: true
+  ansible.builtin.stat:
+    path: "{{ oracle_home_base }}/bin/oracle"
+  register: db19_base_home_stat
+
+- name: Fail early when there is nothing to patch
+  ansible.builtin.assert:
+    that:
+      - db19_base_home_stat.stat.exists
+    fail_msg: >-
+      Base ORACLE_HOME {{ oracle_home_base }} does not exist - run the generic
+      install phase first (--tags install).
+    success_msg: "Base home {{ oracle_home_base }} present, patching to {{ db_target_ru }}."
+
+# ---------------------------------------------------------------------------
+# 1. Download the target RU media
+# ---------------------------------------------------------------------------
+
+- name: Download the media for the target Release Update
+  ansible.builtin.include_tasks: download.yml
+  vars:
+    db19_home_ru: "{{ db_target_ru }}"
+
+# ---------------------------------------------------------------------------
+# 2. Create the target ORACLE_HOME
+# ---------------------------------------------------------------------------
+
+- name: Create the target ORACLE_HOME
+  ansible.builtin.include_tasks: create_home.yml
+  vars:
+    db19_home_ru: "{{ db_target_ru }}"
+    db19_home_path: "{{ oracle_home_target }}"
+
+# ---------------------------------------------------------------------------
+# 3. Move the database to the target home
+# ---------------------------------------------------------------------------
+
+- name: Capture the patch level before the move
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_base }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0
+      select version_full from v$instance;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_version_before
+  changed_when: false
+  failed_when: false
+
+- name: Report the patch level before the move
+  ansible.builtin.debug:
+    msg: "Before: {{ db19_version_before.stdout | trim }}"
+
+- name: Render the AutoUpgrade deploy config
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.template:
+    src: autoupgrade-deploy.cfg.j2
+    dest: "{{ db19_autoupgrade_config_dir }}/deploy-{{ db_base_ru }}-to-{{ db_target_ru }}.cfg"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+
+- name: Analyze the deploy job (prechecks only, no changes)
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }}
+      -config {{ db19_autoupgrade_config_dir }}/deploy-{{ db_base_ru }}-to-{{ db_target_ru }}.cfg
+      -patch -mode analyze -noconsole
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: db19_deploy_analyze
+  changed_when: false
+
+- name: Report the deploy analyze outcome
+  ansible.builtin.debug:
+    msg: "{{ (db19_deploy_analyze.stdout_lines | default([]))[-20:] }}"
+
+- name: Stop the listener in the base home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_base }}/bin/lsnrctl stop {{ db19_listener_name }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oracle_home_base }}/network/admin"
+  register: db19_listener_stop
+  changed_when: db19_listener_stop.rc == 0
+  failed_when: false
+
+- name: Move the database out-of-place to the target home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }}
+      -config {{ db19_autoupgrade_config_dir }}/deploy-{{ db_base_ru }}-to-{{ db_target_ru }}.cfg
+      -patch -mode deploy -noconsole
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: db19_deploy
+  changed_when: db19_deploy.rc == 0
+  async: 21600
+  poll: 60
+
+- name: Report the deploy outcome
+  ansible.builtin.debug:
+    msg: "{{ (db19_deploy.stdout_lines | default([]))[-30:] }}"
+
+# ---------------------------------------------------------------------------
+# Move the Oracle Net configuration to the target home
+# ---------------------------------------------------------------------------
+
+- name: Ensure network/admin exists in the target home
+  become: true
+  ansible.builtin.file:
+    path: "{{ oracle_home_target }}/network/admin"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+
+- name: Deploy listener.ora into the target home
+  become: true
+  ansible.builtin.template:
+    src: listener.ora.j2
+    dest: "{{ oracle_home_target }}/network/admin/listener.ora"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+
+- name: Deploy tnsnames.ora into the target home
+  become: true
+  ansible.builtin.template:
+    src: tnsnames.ora.j2
+    dest: "{{ oracle_home_target }}/network/admin/tnsnames.ora"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+
+- name: Start the listener from the target home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_target }}/bin/lsnrctl start {{ db19_listener_name }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
+  register: db19_listener_start_target
+  changed_when: db19_listener_start_target.rc == 0
+
+- name: Point oratab at the target home
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_sid }}:"
+    line: "{{ oracle_sid }}:{{ oracle_home_target }}:Y"
+    state: present

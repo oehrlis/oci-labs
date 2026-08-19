@@ -1,0 +1,82 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/autoupgrade.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Install autoupgrade.jar and report its version.
+# Notes......: AutoUpgrade drives every software operation in this role -
+#              media download, ORACLE_HOME creation, and out-of-place patching.
+#              It runs before any ORACLE_HOME exists, so it uses the OS Java
+#              (db19_java_package), not the JDK inside ORACLE_HOME.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Ensure the AutoUpgrade directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_autoupgrade_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0775"
+
+- name: Download autoupgrade.jar
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.get_url:
+    url: "{{ db19_autoupgrade_url }}"
+    dest: "{{ db19_autoupgrade_jar }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    force: "{{ db19_autoupgrade_force_download | default(false) | bool }}"
+  register: db19_autoupgrade_jar_dl
+  retries: 3
+  delay: 10
+  until: db19_autoupgrade_jar_dl is succeeded
+
+- name: Query the AutoUpgrade version
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }} -version"
+  register: db19_autoupgrade_version
+  changed_when: false
+
+- name: Report the AutoUpgrade version
+  ansible.builtin.debug:
+    msg: "{{ db19_autoupgrade_version.stdout_lines }}"
+
+# regex_findall returns [] on no match; regex_search with capture groups raises.
+- name: Extract the AutoUpgrade version
+  ansible.builtin.set_fact:
+    db19_autoupgrade_ver: >-
+      {{ ((db19_autoupgrade_version.stdout | default('')) ~ ' ' ~ (db19_autoupgrade_version.stderr | default('')))
+         | regex_findall('build\.version\s+([0-9]+)\.([0-9]+)') | first | default(['0', '0']) }}
+
+- name: Split the AutoUpgrade version into major and minor
+  ansible.builtin.set_fact:
+    db19_autoupgrade_major: "{{ db19_autoupgrade_ver[0] | int }}"
+    db19_autoupgrade_minor: "{{ db19_autoupgrade_ver[1] | int }}"
+
+- name: Assert the AutoUpgrade version supports create_home on a fresh server
+  ansible.builtin.assert:
+    that:
+      - db19_autoupgrade_major | int > db19_autoupgrade_min_major | int
+        or (db19_autoupgrade_major | int == db19_autoupgrade_min_major | int
+            and db19_autoupgrade_minor | int >= db19_autoupgrade_min_minor | int)
+    fail_msg: >-
+      AutoUpgrade {{ db19_autoupgrade_major }}.{{ db19_autoupgrade_minor }} is older
+      than the required {{ db19_autoupgrade_min_major }}.{{ db19_autoupgrade_min_minor }}.
+      create_home exists from 24.7, but home_settings.inventory_location and
+      inventory_group - which this role needs on a host without /etc/oraInst.loc -
+      only arrived in 25.3. Re-run with -e db19_autoupgrade_force_download=true to
+      fetch a newer jar. Raw version output:
+      {{ db19_autoupgrade_version.stdout | default('') }}
+    success_msg: >-
+      AutoUpgrade {{ db19_autoupgrade_major }}.{{ db19_autoupgrade_minor }} supports
+      create_home with explicit inventory settings.

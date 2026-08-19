@@ -1,0 +1,48 @@
+#cloud-config
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: oracle_db_host-cloudinit.yaml.tftpl
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Minimal bootstrap for an Oracle Linux 8 database lab host.
+# Notes......: Deliberately minimal - only what Ansible needs to take over:
+#              hostname, python3, git, and the oradba scripts. All OS
+#              prerequisites and the Oracle install live in the Ansible role
+#              db19_engineering (Gate 2), not here.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+preserve_hostname: false
+hostname: ${hostname}
+fqdn: ${hostname}
+
+timezone: Europe/Zurich
+
+package_update: false
+
+packages:
+  - git
+  - python3
+  - unzip
+  - tmux
+
+write_files:
+  # Keep the OCI hostname agent from overwriting our hostname on reboot.
+  - path: /etc/oci-hostname.conf
+    permissions: '0644'
+    content: |
+      PRESERVE_HOSTINFO=2
+
+runcmd:
+  # Clone the oradba environment scripts. Ansible re-runs this idempotently,
+  # cloud-init only makes them available for a first manual look.
+  - [ /bin/bash, -c, "test -d ${oradba_install_dir}/.git || git clone --depth 1 ${oradba_repo_url} ${oradba_install_dir}" ]
+  # Marker file: Terraform / Ansible poll for this to know cloud-init finished.
+  - [ /bin/bash, -c, "date -Is > /var/log/oradba-cloudinit-complete" ]
+
+final_message: "oradba cloud-init finished after $UPTIME seconds"
+
+# --- EOF ----------------------------------------------------------------------

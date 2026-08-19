@@ -36,8 +36,8 @@ output "db_subnet_id" {
 }
 
 output "app_subnet_id" {
-  description = "OCID of the App subnet."
-  value       = oci_core_subnet.app.id
+  description = "OCID of the App subnet (null when create_app_subnet = false)."
+  value       = one(oci_core_subnet.app[*].id)
 }
 
 output "log_group_id" {
@@ -46,8 +46,8 @@ output "log_group_id" {
 }
 
 output "windows_subnet_id" {
-  description = "OCID of the Windows AD subnet."
-  value       = oci_core_subnet.windows.id
+  description = "OCID of the Windows AD subnet (null when create_windows_subnet = false)."
+  value       = one(oci_core_subnet.windows[*].id)
 }
 
 output "drg_attachment_id" {

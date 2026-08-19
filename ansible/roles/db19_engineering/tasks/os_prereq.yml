@@ -1,0 +1,416 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/os_prereq.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Oracle Linux 8 prerequisites for an Oracle Database 19c install.
+# Notes......: oracle-database-preinstall-19c does the real work - it creates
+#              the oracle user and the oinstall/dba/oper/backupdba/dgdba/kmdba
+#              groups, writes the kernel parameters to
+#              /etc/sysctl.d/99-oracle-database-preinstall-19c-sysctl.conf and
+#              the resource limits to
+#              /etc/security/limits.d/oracle-database-preinstall-19c.conf, and
+#              pulls in the required libraries. This file only verifies the
+#              outcome and adds what the RPM does not cover.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the host runs Oracle Linux 8
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+      - ansible_facts['distribution_major_version'] == '8'
+    fail_msg: >-
+      This role targets Oracle Linux 8. Detected
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+      Oracle 19.3.0 cannot be installed on OL9.
+    success_msg: "Oracle Linux {{ ansible_facts['distribution_version'] }} detected."
+
+- name: Install the Oracle Database preinstall RPM
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ db19_preinstall_package }}"
+    state: present
+  register: db19_preinstall_result
+
+- name: Install additional lab packages
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ db19_extra_packages }}"
+    state: present
+
+- name: Install optional convenience packages
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ db19_optional_packages }}"
+    state: present
+  register: db19_optional_install
+  failed_when: false
+  changed_when: db19_optional_install.rc | default(1) == 0
+
+- name: Report optional packages that are unavailable
+  ansible.builtin.debug:
+    msg: >-
+      Optional packages not installed: {{ db19_optional_install.failures | default([]) | join(', ') }}
+      - these live in EPEL, which is not enabled on a stock OL8 image. Harmless.
+  when: db19_optional_install.failures | default([]) | length > 0
+
+- name: Install Java, expect, and a supported Python
+  become: true
+  ansible.builtin.dnf:
+    name:
+      - "{{ db19_java_package }}"
+      - "{{ db19_expect_package }}"
+      - "{{ db19_python_package }}"
+    state: present
+
+- name: Query the Java version
+  ansible.builtin.command: "{{ db19_java_bin }} -version"
+  register: db19_java_version
+  changed_when: false
+
+# java writes its version banner to stderr, but do not rely on that - join both
+# streams. regex_findall returns [] when nothing matches, whereas regex_search
+# with a capture group raises on no match, which hides the real value.
+- name: Determine the Java major version
+  ansible.builtin.set_fact:
+    db19_java_major: >-
+      {{ ((db19_java_version.stderr | default('')) ~ ' ' ~ (db19_java_version.stdout | default('')))
+         | regex_findall('version "([0-9]+)') | first | default(0) }}
+
+- name: Assert the Java version is in the range AutoUpgrade supports
+  ansible.builtin.assert:
+    that:
+      - db19_java_major | int >= db19_java_min_major | int
+    fail_msg: >-
+      Oracle documents AutoUpgrade as compatible with JDK 8 to JDK 11.
+      Detected major version "{{ db19_java_major }}" from:
+      {{ (db19_java_version.stderr | default('')) ~ (db19_java_version.stdout | default('')) }}
+    success_msg: "Java major version {{ db19_java_major }} is supported by AutoUpgrade."
+
+# ---------------------------------------------------------------------------
+# Verify what the preinstall RPM created, rather than recreating it
+# ---------------------------------------------------------------------------
+
+- name: Gather the oracle OS user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ oracle_os_user }}"
+    fail_key: false
+
+- name: Assert the oracle OS user exists
+  ansible.builtin.assert:
+    that:
+      - getent_passwd[oracle_os_user] is defined
+      - getent_passwd[oracle_os_user] is not none
+    fail_msg: >-
+      OS user "{{ oracle_os_user }}" is missing. The preinstall RPM
+      {{ db19_preinstall_package }} should have created it.
+    success_msg: "OS user {{ oracle_os_user }} exists."
+
+- name: Ensure the oracle user is a member of the required groups
+  become: true
+  ansible.builtin.user:
+    name: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    groups:
+      - "{{ oracle_os_group_dba }}"
+      - "{{ oracle_os_group_oper }}"
+    append: true
+    state: present
+
+# ---------------------------------------------------------------------------
+# Passwordless sudo
+# ---------------------------------------------------------------------------
+# Lets AutoUpgrade run root.sh / orainstRoot.sh itself instead of printing them
+# and relying on a follow-up Ansible task. Validated with visudo before it is
+# installed, so a syntax error can never lock sudo out.
+
+- name: Grant passwordless sudo to the lab users
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/99-oradba-lab
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+    content: |
+      # Managed by Ansible role db19_engineering - do not edit by hand.
+      # AutoUpgrade needs the Oracle software owner to sudo without a password so
+      # its ROOTSH stage can run root.sh and orainstRoot.sh unattended.
+      {% for u in db19_sudo_nopasswd_users %}
+      Defaults:{{ u }} !requiretty
+      {{ u }} ALL=(ALL) NOPASSWD: ALL
+      {% endfor %}
+
+- name: Verify each lab user can sudo without a password
+  become: true
+  # -U lists another user's privileges and cannot be combined with -u.
+  ansible.builtin.command: "sudo -n -l -U {{ item }}"
+  register: db19_sudo_check
+  changed_when: false
+  failed_when: "'NOPASSWD: ALL' not in db19_sudo_check.stdout"
+  loop: "{{ db19_sudo_nopasswd_users }}"
+
+- name: Read the kernel parameters written by the preinstall RPM
+  become: true
+  ansible.builtin.stat:
+    path: /etc/sysctl.d/99-{{ db19_preinstall_package }}-sysctl.conf
+  register: db19_sysctl_file
+
+- name: Assert the preinstall RPM wrote its kernel parameters
+  ansible.builtin.assert:
+    that:
+      - db19_sysctl_file.stat.exists
+    fail_msg: >-
+      Kernel parameter file from {{ db19_preinstall_package }} not found. Do not
+      hand-roll shmall/shmmax here - reinstall the RPM instead.
+    success_msg: "Kernel parameters are managed by {{ db19_preinstall_package }}."
+
+- name: Read the resource limits written by the preinstall RPM
+  become: true
+  ansible.builtin.stat:
+    path: /etc/security/limits.d/{{ db19_preinstall_package }}.conf
+  register: db19_limits_file
+
+- name: Assert the preinstall RPM wrote its resource limits
+  ansible.builtin.assert:
+    that:
+      - db19_limits_file.stat.exists
+    fail_msg: >-
+      Resource limits file from {{ db19_preinstall_package }} not found.
+    success_msg: "Resource limits are managed by {{ db19_preinstall_package }}."
+
+# ---------------------------------------------------------------------------
+# SELinux
+# ---------------------------------------------------------------------------
+# Oracle's own AutoUpgrade walkthrough for a fresh OL8 server sets
+# SELINUX=disabled and reboots. This role defaults to "permissive", which still
+# logs denials. Set db19_selinux_state=enforcing to keep the OCI image default.
+
+- name: Read the current SELinux mode
+  become: true
+  ansible.builtin.command: getenforce
+  register: db19_selinux_current
+  changed_when: false
+  failed_when: false
+
+# ansible.posix.selinux needs libselinux Python bindings, and Oracle Linux 8
+# ships those only for the platform Python 3.6 - not for the python3.11 this
+# role runs under. Managing the config file and setenforce directly avoids the
+# dependency entirely.
+- name: Set the persistent SELinux state
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/selinux/config
+    regexp: '^SELINUX='
+    line: "SELINUX={{ db19_selinux_state }}"
+    state: present
+  register: db19_selinux_config
+
+- name: Apply the SELinux mode to the running system
+  become: true
+  ansible.builtin.command: >-
+    setenforce {{ (db19_selinux_state == 'enforcing') | ternary('1', '0') }}
+  when:
+    - db19_selinux_state in ['enforcing', 'permissive']
+    - (db19_selinux_current.stdout | default('') | lower) != db19_selinux_state
+  changed_when: true
+
+# enforcing <-> permissive takes effect immediately via setenforce. Only a
+# transition to or from "disabled" needs a reboot.
+- name: Reboot to complete the SELinux transition
+  become: true
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+    msg: "Reboot by Ansible role db19_engineering to apply SELinux {{ db19_selinux_state }}"
+  when:
+    - db19_selinux_reboot | bool
+    - db19_selinux_config is changed
+    - db19_selinux_state == 'disabled' or (db19_selinux_current.stdout | default('') | lower) == 'disabled'
+
+# ---------------------------------------------------------------------------
+# Items the preinstall RPM does not cover
+# ---------------------------------------------------------------------------
+
+- name: Disable transparent hugepages for the running system
+  become: true
+  ansible.builtin.command:
+    cmd: /bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled'
+  register: db19_thp_now
+  changed_when: false
+  failed_when: false
+
+- name: Install a systemd unit to disable transparent hugepages persistently
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/disable-thp.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible role db19_engineering - do not edit by hand.
+      # Oracle requires transparent hugepages to be disabled; explicit
+      # hugepages stay enabled and are sized by the preinstall RPM defaults.
+      [Unit]
+      Description=Disable Transparent Huge Pages for Oracle Database
+      DefaultDependencies=no
+      After=sysinit.target local-fs.target
+      Before=oracle-db.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled'
+      ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/defrag'
+
+      [Install]
+      WantedBy=basic.target
+  notify: Reload systemd daemon
+
+- name: Enable the transparent hugepages unit
+  become: true
+  ansible.builtin.systemd:
+    name: disable-thp.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Check whether firewalld is running
+  become: true
+  ansible.builtin.command: systemctl is-active firewalld
+  register: db19_firewalld
+  changed_when: false
+  failed_when: false
+
+# ansible.posix.firewalld also needs Python firewall bindings, unavailable for
+# python3.11 on OL8 - drive firewall-cmd directly instead.
+- name: Check whether the listener port is already open
+  become: true
+  ansible.builtin.command: "firewall-cmd --permanent --query-port={{ db19_listener_port }}/tcp"
+  register: db19_fw_query
+  changed_when: false
+  failed_when: false
+  when: db19_firewalld.stdout | default('') | trim == 'active'
+
+- name: Open the Oracle Net listener port in firewalld
+  become: true
+  ansible.builtin.command: "firewall-cmd --permanent --add-port={{ db19_listener_port }}/tcp"
+  register: db19_fw_add
+  changed_when: "'success' in db19_fw_add.stdout"
+  when:
+    - db19_firewalld.stdout | default('') | trim == 'active'
+    - db19_fw_query.rc | default(1) != 0
+
+- name: Reload firewalld
+  become: true
+  ansible.builtin.command: firewall-cmd --reload
+  changed_when: true
+  when: db19_fw_add is changed
+
+# ---------------------------------------------------------------------------
+# Filesystem layout
+# ---------------------------------------------------------------------------
+
+- name: Create the Oracle directory structure
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0775"
+  loop:
+    # Three roots: /u00 binaries, /u01 data, /u02 archive. Separate directories
+    # today, separate mount points whenever a lab needs them.
+    - "{{ oracle_root }}"
+    - "{{ oracle_data }}"
+    - "{{ oracle_arch }}"
+    - "{{ oracle_base }}"
+    - "{{ oracle_inventory }}"
+    - "{{ oracle_base }}/etc"
+    - "{{ oracle_base }}/admin"
+    - "{{ oracle_base }}/cfgtoollogs"
+    - "{{ oracle_base }}/local"
+    - "{{ db19_autoupgrade_log_dir }}"
+    - "{{ db19_autoupgrade_config_dir }}"
+    - "{{ db19_datafile_dir }}"
+    - "{{ db19_recovery_dir }}"
+    - "{{ db19_archive_dir }}"
+    - "{{ db19_stage_dir }}"
+
+- name: Create the AutoUpgrade keystore directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_autoupgrade_keystore_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0700"
+
+- name: Ensure /etc/oratab exists and is owned by oracle
+  become: true
+  ansible.builtin.file:
+    path: /etc/oratab
+    state: touch
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0664"
+    modification_time: preserve
+    access_time: preserve
+
+# ---------------------------------------------------------------------------
+# Free space - an Oracle home plus staged media needs real room
+# ---------------------------------------------------------------------------
+# The OCI OL8 image sizes its root partition at ~45 GB whatever the boot volume
+# size, so the extra capacity is unpartitioned and invisible to the filesystem.
+
+- name: Check for the OCI growfs helper
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_growfs_command }}"
+  register: db19_growfs_stat
+  when: db19_grow_root_filesystem | bool
+
+- name: Grow the root filesystem to fill the boot volume
+  become: true
+  ansible.builtin.command: "{{ db19_growfs_command }} -y"
+  register: db19_growfs
+  changed_when: "'CHANGED: partition' in (db19_growfs.stdout | default(''))"
+  failed_when:
+    - db19_growfs.rc != 0
+    - "'no space left to grow' not in (db19_growfs.stdout | default('') | lower)"
+  when:
+    - db19_grow_root_filesystem | bool
+    - db19_growfs_stat.stat.exists | default(false)
+
+- name: Report the filesystem growth
+  ansible.builtin.debug:
+    msg: >-
+      {{ (db19_growfs.stdout_lines | default([]))
+         | select('search', '(?i)(CHANGED: partition|extended successfully)') | list }}
+  when: db19_growfs is defined and db19_growfs is changed
+
+# GNU df rejects -P together with --output, so use --output alone. The target is
+# always Oracle Linux, so GNU coreutils semantics are safe here.
+- name: Determine free space below oracle_base
+  ansible.builtin.command:
+    cmd: "df --block-size=1G --output=avail {{ oracle_base }}"
+  register: db19_free_space
+  changed_when: false
+
+- name: Assert there is enough free space for the install
+  vars:
+    _free_gb: "{{ db19_free_space.stdout_lines[-1] | trim | int }}"
+  ansible.builtin.assert:
+    that:
+      - _free_gb | int >= db19_min_free_gb | int
+    fail_msg: >-
+      Only {{ _free_gb }} GB free below {{ oracle_base }},
+      {{ db19_min_free_gb }} GB required. Increase
+      db_host_boot_volume_size_gbs in the Terraform stack.
+    success_msg: "{{ _free_gb }} GB free below {{ oracle_base }}."

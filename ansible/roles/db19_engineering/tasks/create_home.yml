@@ -1,0 +1,149 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/create_home.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Create an ORACLE_HOME at a given RU via AutoUpgrade create_home.
+# Notes......: Reused for both homes - the caller sets db19_home_ru and
+#              db19_home_path. No runInstaller, no response file: AutoUpgrade
+#              extracts the image, applies the RU and companion patches, and
+#              registers the home in the inventory.
+#              AutoUpgrade runs root.sh and orainstRoot.sh itself only when the
+#              oracle user has passwordless sudo. It does not here, so the role
+#              runs them explicitly afterwards - AutoUpgrade prints them to the
+#              console and to <log_dir>/create_home_1/<job>/rootsh/rootsh.log
+#              rather than blocking.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Set the home to create
+  ansible.builtin.set_fact:
+    db19_home_ru: "{{ db19_home_ru | default(db_base_ru) }}"
+    db19_home_path: "{{ db19_home_path | default(oracle_home_base) }}"
+
+- name: Check whether a central inventory is already registered
+  become: true
+  ansible.builtin.stat:
+    path: /etc/oraInst.loc
+  register: db19_orainst_loc
+
+- name: Check whether the ORACLE_HOME already exists
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_home_path }}/bin/oracle"
+  register: db19_home_stat
+
+- name: Report that the ORACLE_HOME already exists
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_home_path }} already contains an oracle binary - skipping
+      create_home. Remove the home and deregister it from the inventory for a
+      clean rebuild.
+  when: db19_home_stat.stat.exists
+
+- name: Create the ORACLE_HOME with AutoUpgrade
+  when: not db19_home_stat.stat.exists
+  block:
+    - name: Ensure the parent directory of the ORACLE_HOME exists
+      become: true
+      ansible.builtin.file:
+        path: "{{ db19_home_path | dirname }}"
+        state: directory
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0775"
+
+    - name: Render the create_home config for RU {{ db19_home_ru }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.template:
+        src: autoupgrade-create-home.cfg.j2
+        dest: "{{ db19_autoupgrade_config_dir }}/create-home-{{ db19_home_ru }}.cfg"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0644"
+
+    # No -mode analyze here: analyze is the deploy-style precheck and requires a
+    # sid. A create_home config has no database, so AutoUpgrade stops with
+    # "No sid was specified in the user configuration file". The deploy step in
+    # patch.yml does run analyze, because there a sid exists.
+    - name: Create the ORACLE_HOME at RU {{ db19_home_ru }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: >-
+          {{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }}
+          -config {{ db19_autoupgrade_config_dir }}/create-home-{{ db19_home_ru }}.cfg
+          -patch -mode create_home -noconsole
+      environment:
+        ORACLE_BASE: "{{ oracle_base }}"
+      register: db19_create_home
+      changed_when: db19_create_home.rc == 0
+      async: 14400
+      poll: 60
+
+    - name: Report the create_home outcome
+      ansible.builtin.debug:
+        msg: "{{ (db19_create_home.stdout_lines | default([]))[-30:] }}"
+
+# ---------------------------------------------------------------------------
+# Root scripts - the oracle user has no passwordless sudo on this host
+# ---------------------------------------------------------------------------
+
+- name: Look for orainstRoot.sh (first install on this host only)
+  become: true
+  ansible.builtin.stat:
+    path: "{{ oracle_inventory }}/orainstRoot.sh"
+  register: db19_orainstroot
+
+- name: Run orainstRoot.sh
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ oracle_inventory }}/orainstRoot.sh"
+  register: db19_orainstroot_run
+  changed_when: db19_orainstroot_run.rc == 0
+  when:
+    - db19_orainstroot.stat.exists
+    - not db19_orainst_loc.stat.exists
+    - not db19_home_stat.stat.exists
+
+- name: Look for root.sh in the new ORACLE_HOME
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_home_path }}/root.sh"
+  register: db19_rootsh
+
+# root.sh is not idempotent in the reporting sense - it succeeds every time and
+# would show as "changed" forever. Run it only for a home this run created.
+- name: Run root.sh for the new ORACLE_HOME
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ db19_home_path }}/root.sh"
+  register: db19_rootsh_run
+  changed_when: db19_rootsh_run.rc == 0
+  when:
+    - db19_rootsh.stat.exists
+    - not db19_home_stat.stat.exists
+
+- name: Verify the ORACLE_HOME reports the expected version
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ db19_home_path }}/OPatch/opatch lsinventory -oh {{ db19_home_path }}"
+  environment:
+    ORACLE_HOME: "{{ db19_home_path }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: db19_home_inventory
+  changed_when: false
+  failed_when: false
+
+- name: Report the patch level of the new ORACLE_HOME
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_home_inventory.stdout_lines | default([])
+         | select('search', '(?i)(Oracle Database|Release Update|Patch  *[0-9]+ *:)')
+         | list }}

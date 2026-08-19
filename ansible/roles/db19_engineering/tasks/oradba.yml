@@ -1,0 +1,175 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/oradba.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Install the oradba environment toolset from its release installer.
+# Notes......: oradba is the RUNTIME layer only - environment discovery, aliases,
+#              service and backup wrappers. It performs no OS setup and no
+#              software install; those are handled natively by this role.
+#
+#              Install method: the self-contained installer published as a
+#              GitHub release asset (oradba_install.sh). The git repository is
+#              the source tree and its installer is built, not committed - so
+#              cloning it and looking for bin/oradba_install.sh does not work.
+#              The legacy oradba_init scripts are not used at all.
+# Reference..: https://github.com/oehrlis/oradba
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Ensure the download staging directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_stage_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0775"
+
+# cloud-init on older revisions of this lab cloned the repository here. The
+# installer expects to own its prefix, so remove a stale checkout.
+- name: Look for a stale git checkout at the oradba prefix
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_oradba_dir }}/.git"
+  register: db19_oradba_stale_git
+
+- name: Remove the stale git checkout
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_oradba_dir }}"
+    state: absent
+  when: db19_oradba_stale_git.stat.exists
+
+- name: Download the oradba prerequisite checker
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.get_url:
+    url: "{{ db19_oradba_check_url | trim }}"
+    dest: "{{ db19_stage_dir }}/oradba_check.sh"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0750"
+  register: db19_oradba_check_dl
+  failed_when: false
+  when: db19_oradba_run_check | bool
+
+- name: Run the oradba prerequisite checker
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ db19_stage_dir }}/oradba_check.sh"
+  register: db19_oradba_check
+  changed_when: false
+  failed_when: false
+  when:
+    - db19_oradba_run_check | bool
+    - db19_oradba_check_dl is succeeded
+    - not (db19_oradba_check_dl.failed | default(false))
+
+- name: Report the prerequisite check result
+  ansible.builtin.debug:
+    msg: "{{ (db19_oradba_check.stdout_lines | default([]))[-15:] }}"
+  when: db19_oradba_check.stdout_lines is defined
+
+# The installer is not idempotent - it reports success every time and would show
+# up as "changed" on every run, masking real drift.
+- name: Check whether oradba is already installed
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_oradba_dir }}/bin/oradba_dbctl.sh"
+  register: db19_oradba_installed
+
+- name: Download the oradba installer
+  become: true
+  ansible.builtin.get_url:
+    url: "{{ db19_oradba_install_url | trim }}"
+    dest: "{{ db19_stage_dir }}/oradba_install.sh"
+    owner: root
+    group: root
+    mode: "0750"
+  register: db19_oradba_installer_dl
+  retries: 3
+  delay: 5
+  until: db19_oradba_installer_dl is succeeded
+  when: not db19_oradba_installed.stat.exists or (db19_oradba_force_install | bool)
+
+# Run as root: the prefix lives under /opt. The installer auto-detects
+# ORACLE_BASE, and supports being run before Oracle Database is installed.
+- name: Install oradba into the target prefix
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ db19_stage_dir }}/oradba_install.sh --prefix {{ db19_oradba_dir }}"
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: db19_oradba_install
+  changed_when: db19_oradba_install.rc == 0
+  when: not db19_oradba_installed.stat.exists or (db19_oradba_force_install | bool)
+
+- name: Report the installer output
+  ansible.builtin.debug:
+    msg: "{{ (db19_oradba_install.stdout_lines | default([]))[-20:] }}"
+  when: db19_oradba_install is changed
+
+- name: Ensure the oradba tree is owned by the oracle user
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_oradba_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    recurse: true
+  when: db19_oradba_install is changed
+
+- name: Confirm oradba is installed
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_oradba_dir }}"
+  register: db19_oradba_final
+
+- name: Assert the oradba prefix exists
+  ansible.builtin.assert:
+    that:
+      - db19_oradba_final.stat.exists
+      - db19_oradba_final.stat.isdir
+    fail_msg: "oradba installation did not create {{ db19_oradba_dir }}."
+    success_msg: "oradba installed at {{ db19_oradba_dir }}."
+
+# ---------------------------------------------------------------------------
+# Autostart on boot
+# ---------------------------------------------------------------------------
+# oratab :Y alone starts nothing - something has to call dbstart. oradba ships
+# the wrapper (oradba_services_root.sh) but no systemd unit, so the role
+# provides one. See the template header: it belongs upstream.
+
+- name: Install the oradba services systemd unit
+  become: true
+  ansible.builtin.template:
+    src: oradba-services.service.j2
+    dest: "/etc/systemd/system/{{ db19_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: db19_service_unit
+  when: db19_service_enabled | bool
+
+- name: Enable the oradba services unit
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ db19_service_name }}.service"
+    enabled: true
+    daemon_reload: true
+  when: db19_service_enabled | bool
+
+# Deliberately not started here: at this point in the generic phase no database
+# exists yet. create_db registers it in oratab, and the unit takes over on the
+# next boot.
+- name: Report the autostart configuration
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_service_name }}.service enabled - starts listeners and every
+      database flagged :Y in /etc/oratab on boot.
+  when: db19_service_enabled | bool

@@ -1,0 +1,33 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: AutoUpgrade create_home config for ORACLE_HOME {{ db19_home_path }}
+#          at Release Update {{ db19_home_ru }}.
+# Notes..: Parameter names follow the Oracle "Patch Parameters for the
+#          AutoUpgrade Configuration File" reference. The keystore must NOT
+#          live below global_log_dir, hence the separate etc/ location.
+#          inventory_location and inventory_group are mandatory here: a fresh
+#          lab host has no /etc/oraInst.loc, and without them AutoUpgrade
+#          fails with "unable to derive the necessary inventory details".
+#-------------------------------------------------------------------------------
+
+global.global_log_dir={{ db19_autoupgrade_log_dir }}
+global.keystore={{ db19_autoupgrade_keystore_dir }}
+
+install1.patch=RU:{{ db19_home_ru }},{{ db19_autoupgrade_patch_list }}
+install1.folder={{ db19_stage_dir }}
+install1.target_home={{ db19_home_path }}
+install1.target_version={{ db19_major_release }}
+install1.platform={{ db19_autoupgrade_platform }}
+install1.download={{ db19_autoupgrade_download }}
+install1.gold_image={{ db19_autoupgrade_gold_image }}
+install1.patch_node=localhost
+
+install1.home_settings.oracle_base={{ oracle_base }}
+install1.home_settings.edition={{ db19_edition | lower }}
+install1.home_settings.inventory_location={{ oracle_inventory }}
+install1.home_settings.inventory_group={{ oracle_os_group_install }}
+install1.home_settings.osdba_group={{ oracle_os_group_dba }}
+install1.home_settings.osoper_group={{ oracle_os_group_oper }}
+install1.home_settings.binopt.uniaud={{ db19_enable_unified_audit | ternary('yes', 'no') }}

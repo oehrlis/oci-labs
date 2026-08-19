@@ -57,6 +57,26 @@ variable "db_subnet_cidr" {
   default     = "10.19.30.0/24"
 }
 
+variable "create_app_subnet" {
+  type        = bool
+  description = <<-EOT
+    Create the App subnet with its route table, security list, and flow log.
+    Default true for backward compatibility - stacks that do not need it should
+    set this to false so no unused subnet (and no CIDR constraint) is imposed.
+  EOT
+  default     = true
+}
+
+variable "create_windows_subnet" {
+  type        = bool
+  description = <<-EOT
+    Create the Windows AD subnet with its route table, security list, and flow
+    log. Only the Windows AD lab needs this; default true for backward
+    compatibility.
+  EOT
+  default     = true
+}
+
 variable "app_subnet_cidr" {
   type        = string
   description = "CIDR block for the App subnet."

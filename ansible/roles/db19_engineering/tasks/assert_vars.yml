@@ -1,0 +1,49 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/assert_vars.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Fail fast on missing or contradictory role input.
+# Notes......: Runs under the "always" tag so a step-by-step run on a test VM
+#              is validated the same way as a full run.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the lab database name is set and valid
+  ansible.builtin.assert:
+    that:
+      - oracle_sid is defined
+      - oracle_sid | length > 0
+      - oracle_sid | length <= 12
+      - oracle_sid is match('^[A-Za-z][A-Za-z0-9]*$')
+    fail_msg: >-
+      oracle_sid must be 1-12 alphanumeric characters starting with a letter,
+      got "{{ oracle_sid | default('') }}". Set it per lab via the Terraform
+      variable oracle_sid or -e oracle_sid=MYDB.
+    success_msg: "Lab database name: {{ oracle_sid }}"
+
+- name: Assert the base and target Release Updates differ
+  ansible.builtin.assert:
+    that:
+      - db_base_ru is defined
+      - db_target_ru is defined
+      - db_base_ru != db_target_ru
+    fail_msg: >-
+      db_base_ru and db_target_ru must both be set and must differ - an
+      out-of-place patch test needs two distinct Release Updates
+      (got base "{{ db_base_ru | default('') }}",
+      target "{{ db_target_ru | default('') }}").
+    success_msg: "Patch path: {{ db_base_ru }} -> {{ db_target_ru }}"
+
+- name: Assert the two ORACLE_HOME paths differ
+  ansible.builtin.assert:
+    that:
+      - oracle_home_base != oracle_home_target
+    fail_msg: >-
+      oracle_home_base and oracle_home_target must differ - out-of-place
+      patching installs the target RU into a separate home.
+    success_msg: "Base home {{ oracle_home_base }}, target home {{ oracle_home_target }}"

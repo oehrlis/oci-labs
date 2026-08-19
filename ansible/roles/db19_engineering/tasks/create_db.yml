@@ -1,0 +1,168 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/create_db.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Create the lab database and its Oracle Net configuration.
+# Notes......: A default seeded-template database is enough for a CPU test; the
+#              database NAME is a per-lab parameter (oracle_sid). Created as a
+#              CDB with one PDB by default so datapatch is exercised across
+#              CDB$ROOT, PDB$SEED and the PDB.
+#              Passwords go through a 0600 response file, never the command
+#              line, so they cannot leak via "ps".
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the SYS password was supplied
+  ansible.builtin.assert:
+    that:
+      - db19_sys_password | length > 0
+    fail_msg: >-
+      db19_sys_password is empty. Supply it at run time, for example:
+      -e db19_sys_password="$(op read 'op://secrets/<cpu-lab-db>/password')"
+    success_msg: "SYS password supplied."
+  no_log: true
+
+- name: Check whether the database is already registered in oratab
+  become: true
+  ansible.builtin.command:
+    cmd: "grep -c '^{{ oracle_sid }}:' /etc/oratab"
+  register: db19_oratab_check
+  changed_when: false
+  failed_when: false
+
+- name: Set a fact for whether the database already exists
+  ansible.builtin.set_fact:
+    db19_db_exists: "{{ (db19_oratab_check.stdout | default('0') | trim | int) > 0 }}"
+
+- name: Report that the database already exists
+  ansible.builtin.debug:
+    msg: >-
+      Database {{ oracle_sid }} is already registered in /etc/oratab - skipping
+      creation. Drop it first if you want a clean rebuild.
+  when: db19_db_exists
+
+# ---------------------------------------------------------------------------
+# Oracle Net configuration
+# ---------------------------------------------------------------------------
+
+- name: Ensure the network/admin directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ oracle_home_base }}/network/admin"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+
+- name: Deploy listener.ora
+  become: true
+  ansible.builtin.template:
+    src: listener.ora.j2
+    dest: "{{ oracle_home_base }}/network/admin/listener.ora"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+
+- name: Deploy tnsnames.ora
+  become: true
+  ansible.builtin.template:
+    src: tnsnames.ora.j2
+    dest: "{{ oracle_home_base }}/network/admin/tnsnames.ora"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+
+- name: Check the listener status
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_base }}/bin/lsnrctl status {{ db19_listener_name }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oracle_home_base }}/network/admin"
+  register: db19_listener_status
+  changed_when: false
+  failed_when: false
+
+- name: Start the listener
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_base }}/bin/lsnrctl start {{ db19_listener_name }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oracle_home_base }}/network/admin"
+  register: db19_listener_start
+  changed_when: db19_listener_start.rc == 0
+  when: db19_listener_status.rc != 0
+
+# ---------------------------------------------------------------------------
+# Database creation
+# ---------------------------------------------------------------------------
+
+- name: Create the dbca response file
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.template:
+    src: dbca.rsp.j2
+    dest: "{{ oracle_base }}/etc/dbca_{{ oracle_sid }}.rsp"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0600"
+  no_log: true
+  when: not db19_db_exists
+
+- name: Run dbca to create the database
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ oracle_home_base }}/bin/dbca -silent -createDatabase
+      -responseFile {{ oracle_base }}/etc/dbca_{{ oracle_sid }}.rsp
+      -ignorePreReqs
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+    TNS_ADMIN: "{{ oracle_home_base }}/network/admin"
+    CV_ASSUME_DISTID: "{{ db19_cv_assume_distid }}"
+    PATH: "{{ oracle_home_base }}/bin:/usr/local/bin:/usr/bin:/bin"
+  register: db19_dbca
+  changed_when: db19_dbca.rc == 0
+  async: 7200
+  poll: 60
+  when: not db19_db_exists
+
+- name: Report the dbca outcome
+  ansible.builtin.debug:
+    msg: "{{ (db19_dbca.stdout_lines | default([]))[-10:] }}"
+  when: not db19_db_exists
+
+- name: Remove the dbca response file
+  become: true
+  ansible.builtin.file:
+    path: "{{ oracle_base }}/etc/dbca_{{ oracle_sid }}.rsp"
+    state: absent
+
+# Only on first creation. Re-running create_db after an out-of-place patch must
+# NOT point oratab back at the base home - that would make the autostart unit
+# open the database from the old ORACLE_HOME and break verify. patch.yml owns
+# the oratab entry from the move onwards.
+- name: Ensure the database is registered in oratab for autostart
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_sid }}:"
+    line: "{{ oracle_sid }}:{{ oracle_home_base }}:Y"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0664"
+    state: present
+  when: not db19_db_exists

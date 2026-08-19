@@ -1,0 +1,22 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: requirements.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Ansible collection requirements for the oci-labs playbooks.
+# Notes......: Install with: ansible-galaxy collection install -r requirements.yml
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+collections:
+  # ansible.posix.selinux and ansible.posix.firewalld - db19_engineering
+  - name: ansible.posix
+    version: ">=1.5.0"
+
+  # ansible.windows / community.windows - windows_ad role (ad-cmu-test stack)
+  - name: ansible.windows
+    version: ">=2.0.0"

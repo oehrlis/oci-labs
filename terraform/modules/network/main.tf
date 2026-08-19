@@ -261,6 +261,8 @@ resource "oci_core_route_table" "db" {
 }
 
 resource "oci_core_route_table" "app" {
+  count = var.create_app_subnet ? 1 : 0
+
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.this.id
   display_name   = local.app_rt_name
@@ -279,6 +281,8 @@ resource "oci_core_route_table" "app" {
 
 # Windows subnet: NAT gateway for outbound internet (no public IP needed)
 resource "oci_core_route_table" "windows" {
+  count = var.create_windows_subnet ? 1 : 0
+
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.this.id
   display_name   = local.windows_rt_name
@@ -494,6 +498,8 @@ resource "oci_core_security_list" "db" {
 }
 
 resource "oci_core_security_list" "app" {
+  count = var.create_app_subnet ? 1 : 0
+
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.this.id
   display_name   = local.app_sl_name
@@ -541,6 +547,8 @@ resource "oci_core_security_list" "app" {
 
 # Windows AD: specific AD port ingress from VCN + optional external RDP
 resource "oci_core_security_list" "windows" {
+  count = var.create_windows_subnet ? 1 : 0
+
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.this.id
   display_name   = local.windows_sl_name
@@ -713,13 +721,15 @@ resource "oci_core_subnet" "db" {
 }
 
 resource "oci_core_subnet" "app" {
+  count = var.create_app_subnet ? 1 : 0
+
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.this.id
   cidr_block                 = var.app_subnet_cidr
   display_name               = local.app_subnet_name
   dns_label                  = "app"
-  route_table_id             = oci_core_route_table.app.id
-  security_list_ids          = [oci_core_security_list.app.id]
+  route_table_id             = oci_core_route_table.app[0].id
+  security_list_ids          = [oci_core_security_list.app[0].id]
   prohibit_public_ip_on_vnic = true
 
   freeform_tags = var.freeform_tags
@@ -727,13 +737,15 @@ resource "oci_core_subnet" "app" {
 
 # public-capable (prohibit_public_ip = false) so the module can optionally assign a public IP
 resource "oci_core_subnet" "windows" {
+  count = var.create_windows_subnet ? 1 : 0
+
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.this.id
   cidr_block                 = var.windows_subnet_cidr
   display_name               = local.windows_subnet_name
   dns_label                  = "win"
-  route_table_id             = oci_core_route_table.windows.id
-  security_list_ids          = [oci_core_security_list.windows.id]
+  route_table_id             = oci_core_route_table.windows[0].id
+  security_list_ids          = [oci_core_security_list.windows[0].id]
   prohibit_public_ip_on_vnic = false
 
   freeform_tags = var.freeform_tags
@@ -751,13 +763,16 @@ resource "oci_logging_log_group" "net" {
 
 # Flow Logs pro Subnet (public / private / db / app)
 locals {
-  flow_log_targets = {
-    public  = oci_core_subnet.public.id
-    private = oci_core_subnet.private.id
-    db      = oci_core_subnet.db.id
-    app     = oci_core_subnet.app.id
-    windows = oci_core_subnet.windows.id
-  }
+  # Only subnets that actually exist get a flow log.
+  flow_log_targets = merge(
+    {
+      public  = oci_core_subnet.public.id
+      private = oci_core_subnet.private.id
+      db      = oci_core_subnet.db.id
+    },
+    var.create_app_subnet ? { app = oci_core_subnet.app[0].id } : {},
+    var.create_windows_subnet ? { windows = oci_core_subnet.windows[0].id } : {},
+  )
 }
 
 resource "oci_logging_log" "vcn_flow" {

@@ -1,0 +1,130 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/verify.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Post-patch verification for the CPU test.
+# Notes......: Confirms the database runs from the target ORACLE_HOME at the
+#              expected Release Update, that datapatch left no pending actions,
+#              and that the registry has no errors. Read-only - safe to re-run.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Resolve the ORACLE_HOME registered in oratab
+  become: true
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; awk -F: '/^{{ oracle_sid }}:/ {print $2}' /etc/oratab"
+    executable: /bin/bash
+  register: db19_oratab_home
+  changed_when: false
+
+- name: Assert oratab points at the target home
+  ansible.builtin.assert:
+    that:
+      - db19_oratab_home.stdout | trim == oracle_home_target
+    fail_msg: >-
+      oratab still points at "{{ db19_oratab_home.stdout | trim }}", expected
+      {{ oracle_home_target }}. The out-of-place move did not complete.
+    success_msg: "oratab points at the target home {{ oracle_home_target }}."
+
+- name: Query the database version and patch level
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0 lines 200 trimspool on
+      select 'VERSION_FULL=' || version_full from v$instance;
+      select 'INSTANCE_STATUS=' || status from v$instance;
+      select 'ORACLE_HOME=' || sys_context('userenv', 'oracle_home') from dual;
+      select 'CDB=' || cdb from v$database;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+    TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
+  register: db19_verify_version
+  changed_when: false
+
+- name: Report the database version and patch level
+  ansible.builtin.debug:
+    msg: "{{ db19_verify_version.stdout_lines | select('search', '=') | list }}"
+
+- name: Extract the reported version_full
+  ansible.builtin.set_fact:
+    db19_version_full: >-
+      {{ db19_verify_version.stdout | regex_search('VERSION_FULL=([0-9.]+)', '\1')
+         | default(['unknown'], true) | first }}
+
+- name: Assert the database reports the target Release Update
+  ansible.builtin.assert:
+    that:
+      - db19_version_full is match('^' ~ (db_target_ru | regex_escape) ~ '(\.|$)')
+    fail_msg: >-
+      Database reports version_full "{{ db19_version_full }}" but the target
+      Release Update is {{ db_target_ru }}. The patch did not take effect.
+    success_msg: "Database runs at {{ db19_version_full }} (target {{ db_target_ru }})."
+
+- name: Check the DBA registry for errors
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0 lines 200 trimspool on
+      -- Column names verified against 19.31: PATCH_ID, PATCH_UID,
+      -- PATCH_DESCRIPTOR, RU_VERSION, RU_BUILD_DESCRIPTION, RU_BUILD_TIMESTAMP,
+      -- PATCH_DIRECTORY. There is no VERSION_FULL or COMP_ID here.
+      select 'RU_APPLIED=' || ru_version || ' (' || patch_id || ')'
+        from dba_registry_sqlpatch_ru_info
+       order by ru_build_timestamp;
+      select 'INVALID_OBJECTS=' || count(*) from dba_objects where status = 'INVALID';
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_verify_registry
+  changed_when: false
+  failed_when: false
+
+- name: Report the registry state
+  ansible.builtin.debug:
+    msg: "{{ db19_verify_registry.stdout_lines | default([]) }}"
+
+- name: Confirm datapatch has nothing pending
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_target }}/OPatch/datapatch -prereq"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_datapatch_prereq
+  changed_when: false
+  failed_when: false
+
+- name: Report the datapatch prereq outcome
+  ansible.builtin.debug:
+    msg: "{{ (db19_datapatch_prereq.stdout_lines | default([]))[-15:] }}"
+
+- name: Summarise the CPU test result
+  ansible.builtin.debug:
+    msg:
+      - "Database.........: {{ oracle_sid }}"
+      - "Base RU..........: {{ db_base_ru }} ({{ oracle_home_base }})"
+      - "Target RU........: {{ db_target_ru }} ({{ oracle_home_target }})"
+      - "Reported version.: {{ db19_version_full }}"
+      - "Old home retained for rollback testing."

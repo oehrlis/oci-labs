@@ -1,0 +1,106 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Entry point for the db19_engineering role.
+# Notes......: Two phases, split by tag.
+#
+#              GENERIC (reusable for any Oracle 19c lab):
+#                prereq       OS prerequisites, users, directories, Java
+#                oradba       oradba environment toolset (runtime layer)
+#                autoupgrade  install autoupgrade.jar
+#                credentials  load MOS credentials into the AutoUpgrade keystore
+#                download     download base image + base RU from MOS
+#                create_home  create the base ORACLE_HOME (AutoUpgrade create_home)
+#                create_db    create the lab database and listener
+#
+#              CPU TEST (quarterly, out-of-place):
+#                patch        download target RU, create target home, move the DB
+#                verify       confirm the database runs from the target home
+#
+#              Every step is independently runnable so the flow can be
+#              stepped through by hand on a test VM:
+#                ansible-playbook ... --tags prereq
+#                ansible-playbook ... --tags create_home
+#
+#              The coarse tags "install" (whole generic phase) and "patch"
+#              (whole CPU phase) wrap the granular ones.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Validate role input variables
+  ansible.builtin.import_tasks: assert_vars.yml
+  tags:
+    - always
+
+# ---------------------------------------------------------------------------
+# Generic phase - identical for every Oracle 19c lab
+# ---------------------------------------------------------------------------
+
+- name: Oracle Linux 8 prerequisites
+  ansible.builtin.import_tasks: os_prereq.yml
+  tags:
+    - install
+    - prereq
+
+- name: Install the oradba environment toolset
+  ansible.builtin.import_tasks: oradba.yml
+  when: db19_oradba_enabled | bool
+  tags:
+    - install
+    - oradba
+
+- name: Install AutoUpgrade
+  ansible.builtin.import_tasks: autoupgrade.yml
+  tags:
+    - install
+    - patch
+    - autoupgrade
+
+- name: Configure My Oracle Support credentials
+  ansible.builtin.import_tasks: credentials.yml
+  tags:
+    - install
+    - patch
+    - credentials
+
+- name: Download the base release image and base RU
+  ansible.builtin.import_tasks: download.yml
+  tags:
+    - install
+    - download
+
+- name: Create the base ORACLE_HOME
+  ansible.builtin.import_tasks: create_home.yml
+  vars:
+    db19_home_ru: "{{ db_base_ru }}"
+    db19_home_path: "{{ oracle_home_base }}"
+  tags:
+    - install
+    - create_home
+
+- name: Create the lab database
+  ansible.builtin.import_tasks: create_db.yml
+  tags:
+    - install
+    - create_db
+
+# ---------------------------------------------------------------------------
+# CPU test phase - quarterly out-of-place patch
+# ---------------------------------------------------------------------------
+
+- name: Patch out-of-place to the target Release Update
+  ansible.builtin.import_tasks: patch.yml
+  tags:
+    - patch
+
+- name: Verify the patch level
+  ansible.builtin.import_tasks: verify.yml
+  tags:
+    - patch
+    - verify

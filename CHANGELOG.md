@@ -6,8 +6,175 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Makefile**: new at the repository root. Lint targets (`lint-terraform`,
+  `lint-ansible`, `lint-yaml`, `lint-markdown`, `lint-shell`, `check-version`),
+  the cpu-patch-test lab lifecycle (`cpu-lab-init/plan/apply/install/patch/
+  verify/destroy/cycle`), plus `cpu-lab-step TAG=<tag>` for single-step runs on a
+  test VM. Version and release targets follow the OraDBA standard. Each lab
+  target auto-sources `terraform/envs/cpu-patch-test/.env`; `op read` is called
+  inside recipe bodies only, never at parse time.
+- **env/cpu-patch-test**: new Terraform stack for quarterly Oracle CPU patch
+  testing. Oracle Linux 8 hosts, `lab_count`-parametrised, deploys into an
+  existing base compartment (resolvable by OCID or by name plus `tenancy_ocid`).
+  Generates the Ansible inventory into `ansible/inventories/generated/` so host
+  IPs stay out of git, generates the database SYS password (`random_password`)
+  and a dedicated lab SSH keypair (`tls_private_key`), and authorises the
+  operator's own key from `~/.ssh/id_ed25519.pub` alongside it.
+- **module/oracle_db_host**: new module for N identical Oracle Linux 8 database
+  hosts. Enforces the Accenture standards unconditionally
+  (`is_pv_encryption_in_transit_enabled`, `are_legacy_imds_endpoints_disabled`)
+  on instances and volume attachments. Instance NSG allows SSH from the VCN CIDR
+  plus opt-in external CIDRs, and the Oracle Net listener intra-VCN only.
+  Optional data volume per host. Minimal cloud-init - Ansible does the rest.
+- **role/db19_engineering**: implemented (was an empty stub). Native Ansible OS
+  prerequisites built on `oracle-database-preinstall-19c`, then AutoUpgrade for
+  every software operation: `-mode download`, `-mode create_home` for both the
+  base and target ORACLE_HOME, and `-mode deploy` for the out-of-place move.
+  Split into a generic phase (reusable for any 19c lab) and the quarterly CPU
+  phase, with a tag per step so the flow can be driven one step at a time.
+  The legacy `oradba_init` scripts are deliberately not invoked; `oradba` is
+  installed as the runtime/environment layer only.
+- **playbook/lab-cpu-patch.yml**: entry point for the lab, targets the
+  `cpu_patch_hosts` group from the generated inventory.
+- **ansible/requirements.yml**: collection requirements (`ansible.posix` for
+  `selinux` and `firewalld`, `ansible.windows` for the AD lab).
+- **ansible/.ansible-lint**: skips `var-naming[no-role-prefix]` with the
+  reasoning documented in the file - a deliberate subset of role variables
+  (`oracle_sid`, `db_base_ru`, `db_target_ru`, `oracle_home_base`,
+  `oracle_home_target`) is the Terraform-to-Ansible contract and must not carry
+  a role-name prefix.
+- **.markdownlint.json**: OraDBA markdown standard (line length 120, MD033 off,
+  MD024 siblings only).
+- **docs/runbook-cpu-patch-lab.md**: runbook for a full CPU quarter cycle -
+  architecture, prerequisites, the six steps, variable and secret reference, and
+  a troubleshooting section.
+
 ### Changed
 
+- **role/db19_engineering (measured behaviour)**: the role was built and then
+  verified end-to-end against a live Oracle Linux 8.10 host with AutoUpgrade
+  26.5. Findings encoded as defaults and comments so they are not rediscovered:
+  - Oracle Linux 8 ships Python 3.6, which ansible-core 2.18+ rejects on a
+    managed node. The playbook bootstraps `python3.11` with `ansible.builtin.raw`
+    before gathering facts, and the inventory sets `ansible_python_interpreter`.
+  - `ansible.posix.selinux` and `ansible.posix.firewalld` need Python bindings
+    that OL8 only ships for its platform Python 3.6. Both replaced with
+    `lineinfile` + `setenforce` and `firewall-cmd`, so the role has no collection
+    dependency at all.
+  - The OCI OL8 image partitions only ~45 GB regardless of boot volume size, so a
+    200 GB volume leaves ~23 GB free below ORACLE_BASE. `oci-growfs` now grows it
+    to 189 GB before the free-space assertion.
+  - AutoUpgrade serves only the current and previous Release Update. `RU:19.26`
+    to `RU:19.30` report "Cannot find the latest Release Update"; only 19.31 and
+    19.32 resolve. `db_base_ru` therefore defaults to `19.31` (previous), not
+    `19.28`, and the lab runs previous RU to current RU.
+  - AutoUpgrade cannot download the 19c base image. `gold_image` is rejected
+    outright on a download job ("Failed to process the gold_image parameter",
+    all prefixes, `AUTO` and `YES`); `gold_image=YES` never contacts Oracle at
+    all (it looks for a local image); only `create_home` + `AUTO` queries the
+    Oracle Updater, where `/v2/patchplanner/requests` returned HTTP 500 on 6 of
+    6 calls while `/registration` succeeded 16 of 16. New variable
+    `db_base_image_url` stages `LINUX.X64_193000_db_home.zip` from an OCI
+    pre-authenticated request instead; `gold_image` stays `AUTO` so a working
+    Updater service is used automatically once available.
+  - `-mode analyze` requires a `sid` and cannot be used to pre-check a
+    `create_home` config; it is used only for the deploy step.
+  - `-load_password` needs a real TTY (piped stdin hits EOF at the command loop)
+    and prompts for a keystore password first, then the MOS secret twice. Driven
+    with `expect`; the keystore password is generated by Terraform.
+  - `oradba` installs from its GitHub release asset (`oradba_install.sh
+    --prefix`), not from a git clone - the repository is a source tree whose
+    installer is built, not committed. Installed to `$ORACLE_BASE/local/oradba`.
+- **env/cpu-patch-test**: filesystem roots split into `db_oracle_root` (`/u00`,
+  binaries), `db_oracle_data` (`/u01`) and `db_oracle_arch` (`/u02`). Separate
+  directories on one filesystem for now, so any of them can be moved onto a
+  dedicated volume later without changing a path. Generates the AutoUpgrade
+  keystore password alongside the database SYS password, and hands the lab SSH
+  private key to Ansible through the generated inventory.
+
+- **role/db19_engineering**: passwordless sudo for `oracle` and `opc` via
+  `/etc/sudoers.d/99-oradba-lab`, validated with `visudo -cf` before install.
+  AutoUpgrade's ROOTSH stage then runs `root.sh` and `orainstRoot.sh` itself
+  instead of printing them for a follow-up task.
+- **role/db19_engineering**: new systemd unit `oradba-services.service` starting
+  listeners and every database flagged `:Y` in `/etc/oratab` on boot, delegating
+  to oradba's own `oradba_services_root.sh` rather than reimplementing dbstart.
+  Without it the database stayed down after a reboot - `oratab :Y` alone starts
+  nothing. TODO: belongs upstream in oradba next to the wrapper, same as the
+  response-file templates.
+- **role/db19_engineering**: gold-image path is attempted first and falls back
+  automatically. `download.yml` runs a config shaped like the known-good 26ai one
+  (job-level `folder`, no `gold_image`, no `global.download_folder`); on failure
+  it reports the reason and falls back to individual patches plus a base image
+  staged from `db19_base_image_url`. Once the Oracle Updater service serves 19c
+  gold images again this needs no code change.
+- **role/db19_engineering (fixed)**: `db19_autoupgrade_download` was used both as
+  a config variable and as a `register:` target. A registered result is a host
+  fact and outranks a role default, so the whole module result dict was written
+  into the generated AutoUpgrade config:
+  `patch1.download={'changed': False, 'msg': 'HTTP Error 304: Not Modified', ...}`
+  Register renamed to `db19_autoupgrade_jar_dl`; the hazard is documented at the
+  variable and the defaults were audited for further collisions (none).
+- **role/db19_engineering (fixed)**: the deploy config now pins
+  `patch1.gold_image=NO`. Without an explicit value AutoUpgrade resolves it
+  internally and fails on the broken 19c path with "Failed to process the
+  gold_image parameter for prefix patch1".
+- **role/db19_engineering (fixed)**: `verify.yml` queried a non-existent column.
+  `dba_registry_sqlpatch_ru_info` has PATCH_ID, PATCH_UID, PATCH_DESCRIPTOR,
+  RU_VERSION, RU_BUILD_DESCRIPTION, RU_BUILD_TIMESTAMP, PATCH_DIRECTORY - there is
+  no VERSION_FULL. Would have failed at the end of a 40-minute patch run.
+- **Makefile**: `cpu-lab-par` / `cpu-lab-par-list` / `cpu-lab-par-revoke` manage a
+  short-lived single-object pre-authenticated request for the 19c base image
+  (`ObjectRead`, `PAR_DAYS ?= 7`), verifying `HTTP 200` and the content length
+  before writing anything to `.env`.
+- **Makefile**: `cpu-lab-progress` / `cpu-lab-watch` / `cpu-lab-logs` report the
+  running step via `tools/cpu-lab-progress.sh`, run with `--become` because the
+  Oracle directories are unreadable by `opc` and `find`/`du` otherwise return
+  nothing - which looks exactly like a stalled job.
+- **Makefile**: `cpu-lab-allow-ip` re-points the SSH allow-list at the current
+  egress IP using `-target` on the NSG rules only, so it cannot trigger the
+  pending shape resize (and its reboot) as a side effect.
+- **Makefile**: `cpu-lab-bastion-session` / `-tunnel` / `-list` for OCI Bastion
+  port-forwarding sessions, plus `ANSIBLE_EXTRA` on every Ansible target so the
+  playbooks can be pointed at a forwarded local port.
+- **env/cpu-patch-test**: optional OCI Bastion (`enable_bastion`, default false).
+  IAM-authorised sessions instead of a source-IP allow-list, which also allows
+  running the host with no public IP at all.
+- **env/cpu-patch-test**: `db_host_ocpus` 2 -> 8 and `db_host_memory_gbs` 16 -> 32.
+  Database creation took ~38 minutes on 2 OCPUs; the dominant cost is datapatch
+  across CDB$ROOT, PDB$SEED and each PDB, which is CPU-bound.
+
+- **role/db19_engineering (fixed)**: re-running the install phase after a patch
+  rewrote `/etc/oratab` from the target home back to the base home
+  (`19.32` -> `19.31`). The autostart unit would then have opened the database
+  from the old ORACLE_HOME and `verify` would have failed. The oratab task now
+  runs only on first creation; from the out-of-place move onwards `patch.yml`
+  owns the entry.
+- **role/db19_engineering (fixed)**: `download` is skipped entirely when
+  `.download-complete-<RU>` exists in the staging directory. Besides avoiding a
+  pointless 4.7 GB re-download, this is required for idempotency: AutoUpgrade
+  keeps job state under `global_log_dir`, and after a deploy that deliberately
+  keeps its Guaranteed Restore Point (`drop_grp_after_patching=no`) the job stays
+  open, so any further invocation aborts with "There is an unfinished execution
+  of a deploy mode".
+- **role/db19_engineering (fixed)**: `root.sh` and `orainstRoot.sh` now run only
+  for a home created in the same play, and the oradba installer only when
+  `bin/oradba_dbctl.sh` is absent (or `db19_oradba_force_install=true`). Both
+  previously reported `changed` on every run, masking real drift.
+
+- **module/network**: App and Windows AD subnets are now optional, via
+  `create_app_subnet` and `create_windows_subnet` (both default `true`, so
+  existing stacks are unaffected). Their route table, security list, subnet, and
+  flow log are all gated, and `flow_log_targets` is built with `merge()` so only
+  existing subnets get a log. `app_subnet_id` and `windows_subnet_id` use
+  `one(...)` and return `null` when the subnet is not created.
+  Reason: the module previously created all five subnets unconditionally, so a
+  stack that did not override `app_subnet_cidr` / `windows_subnet_cidr` silently
+  inherited the `10.19.x` defaults. In a VCN with a different CIDR that fails at
+  apply time with `400-InvalidParameter, Specified CIDR block ... is not
+  contained in its respective VCN CIDR blocks`.
 - **env/ad-cmu-test**: Resource Scheduler switched from fixed `resources { id = instance_id }`
   to `resource_filters { RESOURCE_TYPE=instance }`. Scheduler now targets all compute
   instances in the compartment by type, not by OCID, so it survives instance replacement

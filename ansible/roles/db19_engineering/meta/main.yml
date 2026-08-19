@@ -1,0 +1,33 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: meta/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.19
+# Version....: v0.1.0
+# Purpose....: Role metadata for db19_engineering.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+galaxy_info:
+  role_name: db19_engineering
+  author: Stefan Oehrli
+  description: >-
+    Oracle Database 19c on Oracle Linux 8 - OS prerequisites, ORACLE_HOME
+    creation via AutoUpgrade create_home, database creation, and out-of-place
+    RU patching for CPU test labs.
+  license: Apache-2.0
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+  galaxy_tags:
+    - oracle
+    - database
+    - autoupgrade
+    - patching
+
+dependencies: []

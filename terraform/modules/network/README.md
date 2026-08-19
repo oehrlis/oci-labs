@@ -21,12 +21,23 @@ Provision an Oracle Cloud VCN with public/private/DB/App subnets, security lists
 - `wireguard_port` (number): WireGuard UDP port. Default: `51820`.
 - `allow_public_http_https` (bool): Allow inbound HTTP/HTTPS on public subnet. Default: `false`.
 
+### Optional subnets
+
+- `create_app_subnet` (bool, default `true`): create the App subnet with its
+  route table, security list, and flow log.
+- `create_windows_subnet` (bool, default `true`): create the Windows AD subnet
+  with its route table, security list, and flow log.
+
+Set both to `false` in stacks that only need public / private / db. Leaving them
+enabled also imposes their default CIDRs (`10.19.40.0/24`, `10.19.50.0/24`),
+which fails in a VCN with a different CIDR range.
+
 ## Outputs
 - `vcn_id`: OCID of the created VCN.
 - `public_subnet_id`: OCID of the public subnet.
 - `private_subnet_id`: OCID of the private subnet.
 - `db_subnet_id`: OCID of the DB subnet.
-- `app_subnet_id`: OCID of the App subnet.
+- `app_subnet_id`: OCID of the App subnet, `null` when `create_app_subnet = false`.
 - `log_group_id`: OCID of the network log group.
 
 ## Usage

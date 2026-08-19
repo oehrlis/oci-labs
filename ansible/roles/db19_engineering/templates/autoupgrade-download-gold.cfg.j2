@@ -1,0 +1,30 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: AutoUpgrade download config for the GOLD IMAGE path, RU {{ db19_home_ru }}.
+# Notes..: Deliberately shaped like the known-good 26ai config:
+#            - job-level "folder", NOT global.download_folder
+#            - NO gold_image parameter at all - AutoUpgrade defaults to using a
+#              gold image and adds OCW itself ("the Gold Image always includes
+#              the latest OCW fixes")
+#          A gold image contains the base release, so this path needs no
+#          separately staged LINUX.X64_193000_db_home.zip.
+#
+#          As of 2026-08-19 this fails for target_version=19 with
+#          "Failed to process the gold_image parameter for prefix dl1" while
+#          target_version=23 succeeds - reproduced on two hosts and two operating
+#          systems with AutoUpgrade 26.5. A 19.32 gold image downloaded fine on
+#          2026-08-18, so this is a service-side regression, not a config error.
+#          download.yml therefore treats a failure here as expected and falls
+#          back; it will start working again with no code change.
+#-------------------------------------------------------------------------------
+
+global.global_log_dir={{ db19_autoupgrade_log_dir }}
+global.keystore={{ db19_autoupgrade_keystore_dir }}
+
+dl1.folder={{ db19_stage_dir }}
+dl1.platform={{ db19_autoupgrade_platform }}
+dl1.target_version={{ db19_major_release }}
+dl1.patch=RU:{{ db19_home_ru }},{{ db19_autoupgrade_patch_list }}
+dl1.download=YES

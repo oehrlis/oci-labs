@@ -15,6 +15,10 @@
 # Ansible generated inventory
 ansible/inventories/generated/
 
+# ansible-lint / ansible-compat cache
+ansible/.ansible/
+.ansible/
+
 # Build artifacts
 dist/
 

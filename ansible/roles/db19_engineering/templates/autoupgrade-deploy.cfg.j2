@@ -1,0 +1,31 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: AutoUpgrade deploy config - move {{ oracle_sid }} out-of-place from
+#          {{ oracle_home_base }} ({{ db_base_ru }})
+#       to {{ oracle_home_target }} ({{ db_target_ru }}).
+# Notes..: sid is required in deploy mode. source_home + target_home + sid is
+#          what actually moves the database; there is no separate "move" flag.
+#          Oracle constraint: the source database must be on an EARLIER RU than
+#          the target. The listener is NOT moved by AutoUpgrade - the role
+#          handles that separately.
+#-------------------------------------------------------------------------------
+
+global.global_log_dir={{ db19_autoupgrade_log_dir }}
+global.keystore={{ db19_autoupgrade_keystore_dir }}
+
+patch1.sid={{ oracle_sid }}
+patch1.source_home={{ oracle_home_base }}
+patch1.target_home={{ oracle_home_target }}
+patch1.folder={{ db19_stage_dir }}
+patch1.patch=RU:{{ db_target_ru }},{{ db19_autoupgrade_patch_list }}
+patch1.download={{ db19_autoupgrade_download }}
+# Pinned explicitly: with no gold_image value AutoUpgrade resolves it internally
+# and fails on the broken 19c path with
+#   "Failed to process the gold_image parameter for prefix patch1"
+# The media are already staged locally at this point, so a gold image is not
+# wanted here anyway.
+patch1.gold_image={{ db19_deploy_gold_image }}
+patch1.patch_node=localhost
+patch1.drop_grp_after_patching={{ db19_drop_grp_after_patching | ternary('yes', 'no') }}

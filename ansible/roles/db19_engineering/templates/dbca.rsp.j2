@@ -1,0 +1,39 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role db19_engineering - do not edit by hand.
+# Purpose: dbca silent response file for the lab database {{ oracle_sid }}.
+# Notes..: Contains passwords - written with mode 0600 and removed after use.
+#          Passwords are kept out of the dbca command line so they never show
+#          up in "ps" output.
+#-------------------------------------------------------------------------------
+
+responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_v19.0.0
+gdbName={{ oracle_sid }}
+sid={{ oracle_sid }}
+databaseConfigType=SI
+createAsContainerDatabase={{ db19_create_as_cdb | lower }}
+{% if db19_create_as_cdb %}
+numberOfPDBs={{ db19_number_of_pdbs }}
+{% if db19_number_of_pdbs | int > 0 %}
+pdbName={{ db19_pdb_name }}
+pdbAdminPassword={{ db19_sys_password }}
+{% endif %}
+{% endif %}
+templateName={{ db19_dbca_template }}
+sysPassword={{ db19_sys_password }}
+systemPassword={{ db19_sys_password }}
+emConfiguration=NONE
+datafileDestination={{ db19_datafile_dir }}
+recoveryAreaDestination={{ db19_recovery_dir }}
+recoveryAreaSize={{ db19_recovery_size_mb }}
+storageType=FS
+characterSet={{ db19_character_set }}
+nationalCharacterSet=AL16UTF16
+listeners={{ db19_listener_name }}
+initParams=sga_target={{ db19_sga_target_mb }}M,pga_aggregate_target={{ db19_pga_aggregate_target_mb }}M,db_recovery_file_dest_size={{ db19_recovery_size_mb }}M
+automaticMemoryManagement=false
+redoLogFileSize={{ db19_redo_log_size_mb }}
+enableArchive={{ db19_enable_archivelog | lower }}
+sampleSchema=false
+useOMF=true
