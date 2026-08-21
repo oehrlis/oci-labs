@@ -255,29 +255,40 @@ cpu-lab-show: guard-terraform ## Show the saved tfplan in human-readable form
 	  { echo "❌ No saved plan at $(CPU_ENV_DIR)/$(CPU_PLAN_FILE) - run 'make cpu-lab-plan'"; exit 1; }
 	$(Q)cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" show "$(CPU_PLAN_FILE)"
 
+# ------------------------------------------------------------------------------
+# Ansible secrets
+# ------------------------------------------------------------------------------
+# Secrets go to Ansible in a 0600 JSON file, never on the command line. An argv
+# is world-readable through ps, so "-e mos_password=..." exposed the MOS account
+# and the database SYS password to every local user for the whole run - and an
+# AutoUpgrade run lasts an hour.
+#
+# The values reach python3 through the environment rather than argv for the same
+# reason; /proc/<pid>/environ and "ps -E" are owner-restricted, argv is not.
+# The trap removes the file on success, error and Ctrl-C alike.
+define cpu_lab_ansible_secrets
+umask 077; \
+mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password 2>/dev/null || echo '')"; \
+ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password 2>/dev/null || echo '')"; \
+vars_file="$$(mktemp "$${TMPDIR:-/tmp}/cpu-lab-vars.XXXXXX")"; \
+trap 'rm -f "$$vars_file"' EXIT INT TERM; \
+MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" \
+  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"]}, open(sys.argv[1], "w"))' "$$vars_file"
+endef
+
 .PHONY: cpu-lab-install
 cpu-lab-install: guard-ansible guard-op guard-cpu-env ## Install OS prereqs + Oracle 19c at the base RU
-	$(Q)mos_user="$$("$(OP)" read '$(OP_MOS_USER)')"; \
-	  mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')"; \
-	  sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password)"; \
-	  ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password)"; \
+	$(Q)$(cpu_lab_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
-	    --tags install \
-	    -e mos_username="$$mos_user" \
-	    -e mos_password="$$mos_pass" \
-	    -e db19_autoupgrade_keystore_password="$$ks_pass" \
-	    -e db19_sys_password="$$sys_pass" $(ANSIBLE_EXTRA)
+	    --tags install -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-patch
 cpu-lab-patch: guard-ansible guard-op guard-cpu-env ## Run the AutoUpgrade out-of-place patch to the target RU
-	$(Q)mos_user="$$("$(OP)" read '$(OP_MOS_USER)')"; \
-	  mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')"; \
-	  ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password)"; \
+	$(Q)$(cpu_lab_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
-	    --tags patch \
-	    -e mos_username="$$mos_user" \
-	    -e mos_password="$$mos_pass" \
-	    -e db19_autoupgrade_keystore_password="$$ks_pass" $(ANSIBLE_EXTRA)
+	    --tags patch -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-verify
 cpu-lab-verify: guard-ansible guard-cpu-env ## Verify the post-patch state (read-only)
@@ -286,16 +297,9 @@ cpu-lab-verify: guard-ansible guard-cpu-env ## Verify the post-patch state (read
 .PHONY: cpu-lab-step
 cpu-lab-step: guard-ansible guard-op guard-cpu-env ## Run a single tag: make cpu-lab-step TAG=create_home
 	@[[ -n "$(TAG)" ]] || { echo "❌ TAG is required, e.g. make cpu-lab-step TAG=prereq"; exit 1; }
-	$(Q)mos_user="$$("$(OP)" read '$(OP_MOS_USER)')"; \
-	  mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')"; \
-	  sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password 2>/dev/null || echo '')"; \
-	  ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password 2>/dev/null || echo '')"; \
+	$(Q)$(cpu_lab_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
-	    --tags "$(TAG)" \
-	    -e mos_username="$$mos_user" \
-	    -e mos_password="$$mos_pass" \
-	    -e db19_autoupgrade_keystore_password="$$ks_pass" \
-	    -e db19_sys_password="$$sys_pass" $(ANSIBLE_EXTRA)
+	    --tags "$(TAG)" -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-output
 cpu-lab-output: guard-terraform ## Show Terraform outputs for the lab
@@ -399,6 +403,68 @@ cpu-lab-par-revoke: guard-oci ## Revoke the base-image PARs on the bucket and cl
 	  done; \
 	  $(drop_base_image_url)
 	@echo "✅ PAR(s) revoked and removed from $(CPU_ENV_FILE)"
+
+# ==============================================================================
+# Gold images
+# ==============================================================================
+# A self-made gold image is the only gold-image route that works for 19c - the
+# Oracle Update Advisor answers HTTP 500 for target_version=19 (see the runbook).
+# The artifact is built during a create_home run on the lab host and pushed from
+# there: it is several GB and the host is in the same region as the bucket.
+#
+# Naming scheme, decided 2026-08-21:
+#   goldimage-db-<version>-<platform>-<edition>-<date>.zip
+#   goldimage-db-<version>-<platform>-<edition>-<date>.patchset.json
+# Underscores inside the version because AutoUpgrade rejects dots in
+# CREATE_GOLD_IMAGE. The manifest carries the resolved patch set and the
+# artifact checksum, so the image describes itself a quarter later.
+
+GOLD_PAR_NAME  := cpu-lab-goldimage-write
+GOLD_PAR_HOURS ?= 2
+
+.PHONY: cpu-lab-goldimage-push
+cpu-lab-goldimage-push: guard-oci guard-ansible guard-cpu-env ## Push the gold image built on the lab host into the orarepo bucket
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  profile="$${profile:-TRIVADIS}"; \
+	  expires="$$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=$(GOLD_PAR_HOURS))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))')"; \
+	  echo "Minting a write PAR on $(PAR_BUCKET), valid $(GOLD_PAR_HOURS)h (expires $$expires)"; \
+	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
+	      --bucket-name "$(PAR_BUCKET)" --name "$(GOLD_PAR_NAME)" \
+	      --access-type AnyObjectWrite --time-expires "$$expires" \
+	      --query 'data."full-path"' --raw-output)"; \
+	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
+	  echo "  PAR     : $$(echo "$$uri" | sed 's#/p/[^/]*/#/p/<token>/#')"; \
+	  rc=0; \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
+	    --tags goldimage_push -e db19_gold_image_par="$$uri" $(ANSIBLE_EXTRA) || rc=$$?; \
+	  cd - >/dev/null; \
+	  echo "Revoking the write PAR"; \
+	  ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
+	      --query 'data[?name==`$(GOLD_PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
+	  for id in $$ids; do \
+	    "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
+	  done; \
+	  exit $$rc
+	@echo "✅ Gold image and manifest pushed - list with: make cpu-lab-goldimage-list"
+
+.PHONY: cpu-lab-goldimage-list
+cpu-lab-goldimage-list: guard-oci ## List the gold images in the orarepo bucket
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  profile="$${profile:-TRIVADIS}"; \
+	  "$(OCI)" --profile "$$profile" os object list --bucket-name "$(PAR_BUCKET)" \
+	    --prefix goldimage-db- \
+	    --query 'data[].{name:name,size:size,modified:"time-modified"}' --output table
+
+.PHONY: cpu-lab-rollback
+cpu-lab-rollback: guard-ansible guard-cpu-env ## Roll the database back to the pre-patch restore point and the old home
+	@echo "⚠️  Rollback flashes the database back to the Guaranteed Restore Point"
+	@echo "    taken before the patch and restarts it from the base home."
+	@if [[ "$(YES)" != "1" ]]; then \
+	  read -r -p "    Continue? [y/N] " a; [[ "$$a" == "y" ]] || { echo "aborted"; exit 1; }; \
+	fi
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
+	  --tags rollback $(ANSIBLE_EXTRA)
+	@echo "✅ Rollback done - the lab runs from the base home again"
 
 # ==============================================================================
 # OCI Bastion sessions
@@ -507,17 +573,20 @@ cpu-lab-allow-ip: guard-terraform ## Re-point the SSH allow-list at your current
 	@echo "✅ SSH allow-list updated - the instance was not touched"
 
 .PHONY: cpu-lab-progress
+# When the host is reached through a Bastion tunnel instead of its public IP,
+# pass the override through, e.g.
+#   make cpu-lab-progress ANSIBLE_EXTRA="-e ansible_host=127.0.0.1 -e ansible_port=2222"
 cpu-lab-progress: guard-ansible guard-cpu-env ## Snapshot of the running step on the lab host
 	$(Q)cd "$(ANSIBLE_DIR)" && ANSIBLE_HOST_KEY_CHECKING=False ansible \
 	  -i "$(CPU_INVENTORY)" cpu_patch_hosts \
-	  -m script -a "../$(PROGRESS_SCRIPT)" --become 2>&1 \
+	  -m script -a "../$(PROGRESS_SCRIPT)" --become $(ANSIBLE_EXTRA) 2>&1 \
 	  | python3 -c 'import sys,re,json;t=sys.stdin.read();m=re.search(r"\"stdout_lines\": (\[.*?\n    \])",t,re.S);print("\n".join(json.loads(m.group(1))) if m else t.strip())'
 
 .PHONY: cpu-lab-watch
 cpu-lab-watch: ## Poll cpu-lab-progress every INTERVAL seconds (default 30, Ctrl-C to stop)
 	@echo "Polling every $(INTERVAL)s - Ctrl-C to stop"
 	$(Q)while true; do \
-	  $(MAKE) --no-print-directory cpu-lab-progress || true; \
+	  $(MAKE) --no-print-directory cpu-lab-progress ANSIBLE_EXTRA="$(ANSIBLE_EXTRA)" || true; \
 	  sleep $(INTERVAL); \
 	done
 
