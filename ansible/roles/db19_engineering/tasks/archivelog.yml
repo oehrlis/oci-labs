@@ -1,0 +1,147 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/archivelog.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Put the lab database into ARCHIVELOG mode with flashback enabled.
+# Notes......: Not cosmetic - the CPU test does not work without it. AutoUpgrade
+#              takes a guaranteed restore point before an out-of-place move and
+#              refuses to start when it cannot:
+#
+#                GRP106: AutoUpgrade Patching is unable to proceed because
+#                database is not in ARCHIVE LOG mode and guarantee restore point
+#                cannot be taken (default behavior). In order to proceed either
+#                put the database in ARCHIVE LOG mode and enable database
+#                flashback or add entry restoration=no in the configuration file.
+#
+#              Measured 2026-08-21: the deploy aborts after 22 seconds in stage
+#              GRP. The alternative, restoration=no, would buy a patch run at the
+#              price of the rollback - and the way back is half of what a CPU
+#              test is meant to demonstrate. So: ARCHIVELOG.
+#
+#              This also matches what the databases under test look like in
+#              production, which a lab claiming to represent them should.
+#
+#              Idempotent: checks LOG_MODE and FLASHBACK_ON first and does
+#              nothing when both are already in place. Enabling ARCHIVELOG needs
+#              a bounce through MOUNT, so this must not run while a patch job is
+#              in flight.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Resolved once: a per-task "vars" entry that defaults a variable to itself is a
+# recursive template and Ansible aborts with "Recursive loop detected".
+- name: Resolve the home to run the change from
+  ansible.builtin.set_fact:
+    db19_archivelog_home: "{{ db19_archivelog_home | default(oracle_home_base) }}"
+
+- name: Read the current log mode and flashback state
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ db19_archivelog_home }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0
+      select 'LOG_MODE=' || log_mode || ' FLASHBACK=' || flashback_on
+        from v$database;
+      select 'FRA=' || nvl(value, 'unset') from v$parameter
+       where name = 'db_recovery_file_dest';
+      exit
+      SQL
+    executable: /bin/bash
+  environment: &archivelog_env
+    ORACLE_HOME: "{{ db19_archivelog_home }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_archivelog_state
+  changed_when: false
+
+- name: Determine what still has to be enabled
+  ansible.builtin.set_fact:
+    db19_needs_archivelog: >-
+      {{ not (db19_archivelog_state.stdout is search('LOG_MODE=ARCHIVELOG')) }}
+    db19_needs_flashback: >-
+      {{ not (db19_archivelog_state.stdout is search('FLASHBACK=YES')) }}
+    db19_fra_configured: >-
+      {{ not (db19_archivelog_state.stdout is search('FRA=unset')) }}
+
+- name: Report the current state
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_archivelog_state.stdout_lines | map('trim') | select | list }}
+      - archivelog {{ db19_needs_archivelog | ternary('has to be enabled', 'already on') }},
+      flashback {{ db19_needs_flashback | ternary('has to be enabled', 'already on') }}
+
+- name: Require a fast recovery area before enabling flashback
+  ansible.builtin.assert:
+    that:
+      - db19_fra_configured | bool
+    fail_msg: >-
+      db_recovery_file_dest is unset, so flashback logging has nowhere to write.
+      dbca sets it from db19_recovery_dir - check that the database was created
+      with a recovery area destination.
+  when: db19_needs_flashback | bool
+
+# One bounce for both changes: ARCHIVELOG can only be set in MOUNT, and
+# flashback is enabled in the same state, so doing them together costs one
+# restart instead of two.
+- name: Enable ARCHIVELOG and flashback
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ db19_archivelog_home }}/bin/sqlplus -s / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      shutdown immediate
+      startup mount
+      {% if db19_needs_archivelog | bool %}
+      alter database archivelog;
+      {% endif %}
+      {% if db19_needs_flashback | bool %}
+      alter database flashback on;
+      {% endif %}
+      alter database open;
+      alter pluggable database all open;
+      exit
+      SQL
+    executable: /bin/bash
+  environment: *archivelog_env
+  register: db19_archivelog_change
+  changed_when: db19_archivelog_change.rc == 0
+  when: (db19_needs_archivelog | bool) or (db19_needs_flashback | bool)
+
+- name: Confirm the database is ready for a guaranteed restore point
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ db19_archivelog_home }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0
+      select 'LOG_MODE=' || log_mode || ' FLASHBACK=' || flashback_on
+             || ' STATUS=' || open_mode
+        from v$database;
+      exit
+      SQL
+    executable: /bin/bash
+  environment: *archivelog_env
+  register: db19_archivelog_final
+  changed_when: false
+
+- name: Assert ARCHIVELOG and flashback are active
+  ansible.builtin.assert:
+    that:
+      - db19_archivelog_final.stdout is search('LOG_MODE=ARCHIVELOG')
+      - db19_archivelog_final.stdout is search('FLASHBACK=YES')
+      - db19_archivelog_final.stdout is search('STATUS=READ WRITE')
+    fail_msg: >-
+      The database is not ready for a guaranteed restore point:
+      {{ db19_archivelog_final.stdout | trim }}. AutoUpgrade will abort the
+      out-of-place move in stage GRP.
+    success_msg: "{{ db19_archivelog_final.stdout | trim }}"

@@ -389,7 +389,15 @@ db19_pdb_name: PDB1
 
 # Archive log mode. Not required for datapatch or an out-of-place move; enable
 # only when the test itself needs recoverability.
-db19_enable_archivelog: false
+# ARCHIVELOG is mandatory for this lab, not a preference: AutoUpgrade takes a
+# guaranteed restore point before an out-of-place move and aborts in stage GRP
+# with GRP106 when it cannot ("database is not in ARCHIVE LOG mode"). Measured
+# 2026-08-21 - the deploy dies after 22 seconds. The alternative would be
+# restoration=no in the deploy config, which buys the patch run at the price of
+# the rollback, and the way back is half of what a CPU test demonstrates.
+# dbca creates the database this way; archivelog.yml is the idempotent safety
+# net for a database that already exists.
+db19_enable_archivelog: true
 
 # dbca template. General_Purpose.dbc is the seeded default template.
 # General_Purpose.dbc is the seeded template shipped with the home, so the

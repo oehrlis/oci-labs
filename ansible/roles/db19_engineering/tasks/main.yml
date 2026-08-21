@@ -90,6 +90,13 @@
     - install
     - create_db
 
+- name: Ensure the database can take a guaranteed restore point
+  ansible.builtin.import_tasks: archivelog.yml
+  tags:
+    - install
+    - create_db
+    - archivelog
+
 # ---------------------------------------------------------------------------
 # CPU test phase - quarterly out-of-place patch
 # ---------------------------------------------------------------------------
