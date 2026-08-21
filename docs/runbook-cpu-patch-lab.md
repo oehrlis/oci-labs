@@ -86,49 +86,240 @@ ansible-galaxy collection install -r ansible/requirements.yml
 ## The Oracle 19c base image
 
 AutoUpgrade downloads every **patch** automatically, but **not** the 19c base
-image. Verified on 2026-08-19 with AutoUpgrade 26.5 and working MOS credentials:
+image, and it cannot obtain a 19c gold image either. Root cause, measured
+2026-08-21 with AutoUpgrade 26.5.260807 on the lab host and on macOS, same
+keystore, same minute:
 
-<!-- markdownlint-disable MD013 -->
+<!-- markdownlint-disable MD013 MD060 -->
 
-| Attempt | Result |
-| --- | --- |
-| `create_home` + `gold_image=AUTO` | `A usable base image file is not found in /opt/stage` |
-| `create_home` + `gold_image=YES`/`ALL` | `Unable to find any Gold Image containing the requested patches` |
-| any download job with `gold_image` != `NO` | `Failed to process the gold_image parameter for prefix <p>` |
+| `target_version` | Path taken | Result |
+| --- | --- | --- |
+| `19` | `isGoldImageServiceTargetRelease` -> Oracle Update Advisor -> `POST /v2/patchplanner/requests` | HTTP 500, reported as `Failed to process the gold_image parameter for prefix <p>` |
+| `19` with `gold_image=YES` | `allOrYes` -> same Updater call | identical HTTP 500 |
+| `19.32` | rejected at parse time | `target_version ... needs to be a single version (i.e. 19)` |
+| `21` / `23` | Updater skipped: `The Oracle Update Advisor service is not used for target release 23. The YES setting is used.` | gold image straight from ARU, works |
 
 <!-- markdownlint-restore -->
 
-The gold-image route would otherwise be ideal - the AutoUpgrade 26.2 notes state
-that 19c gold images "include the base release as well which otherwise you would
-need to download separately". It is currently blocked server side, visible only
-in `<log_dir>/cfgtoollogs/patch/auto/aru/ous.log`:
+So 19 is the only release whose gold-image resolution goes through the Update
+Advisor, and that endpoint is broken server side - `/v2/patchplanner/registration`
+answers normally, only `/v2/patchplanner/requests` returns 500. AutoUpgrade then
+fails to parse the plain-text body as JSON (`Unexpected char 73`, the `I` of
+`Internal Server Error`) and surfaces a service outage as a configuration error.
+The full trace is in `<log_dir>/cfgtoollogs/patch/auto/aru/ous.log`.
 
-```text
-transport.oracle.com/v2/patchplanner/registration   16 calls   OK
-transport.oracle.com/v2/patchplanner/requests        6 calls   ALL HTTP 500
-  -> UpdaterInfoPerPrefix{latestVersion='N/A', versionToUse='N/A'}
-```
+Consequences for the lab:
 
-Until that is resolved, stage `LINUX.X64_193000_db_home.zip` via
-`db_base_image_url`. The file already exists in the tenancy - bucket `orarepo`,
-namespace `trivadisbdsxsp`, 3'059'705'302 bytes:
+- every **download** job pins `gold_image=NO` - with `AUTO` the job dies at
+  config-parse time
+- `create_home` keeps `gold_image=AUTO`, which is proven: the Updater returns
+  `UpdaterInfoPerPrefix{latestVersion='N/A'}`, AutoUpgrade shrugs and validates
+  the staged base image instead
+- `db19_try_gold_image` is `false` - for 19c a gold-image download is a
+  guaranteed failed run. Flip it to `true` once Oracle fixes the endpoint
+
+Until then, stage `LINUX.X64_193000_db_home.zip` via `db_base_image_url`. The
+file already exists in the tenancy - bucket `orarepo`, namespace
+`trivadisbdsxsp`, 3'059'705'302 bytes:
 
 ```bash
-oci --profile TRIVADIS os preauth-request create --bucket-name orarepo \
-  --name cpu-lab-base-image-19c --object-name LINUX.X64_193000_db_home.zip \
-  --access-type ObjectRead --time-expires 2026-08-26T12:00:00.000Z
+make cpu-lab-par PAR_DAYS=7
 ```
 
 Keep the expiry short (7 days) so the pre-authenticated request stays inside
-Accenture monitoring thresholds. Put the returned URI in `.env`:
+Accenture monitoring thresholds. The target writes the URI into `.env` itself;
+by hand it is:
 
 ```bash
 export TF_VAR_db_base_image_url="https://<namespace>.objectstorage.<region>.oci.customer-oci.com/p/<token>/n/<ns>/b/orarepo/o/LINUX.X64_193000_db_home.zip"
 ```
 
 Both PAR shapes work: a bucket PAR ending in `/o/` gets the filename appended, a
-single-object PAR is used verbatim. `gold_image` stays at `AUTO`, so a working
-Updater service is picked up automatically with no code change.
+single-object PAR is used verbatim.
+
+## Patch lists - base versus target
+
+The two homes answer two different questions, so they are requested differently.
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Home | Variable | Value | Rationale |
+| --- | --- | --- | --- |
+| base (control) | `db19_patch_list_base` | `RU:<base_ru>,JDK,OPATCH,OJVM,DPBP` | every component named - the control group must be reproducible. OJVM is included on purpose: without it the base keeps the 2019 OJVM from the base image and the test measures a six-year OJVM jump on top of the quarterly delta |
+| target (test) | `db19_patch_list_target` | `RECOMMENDED:<target_ru>,JDK` | what Oracle actually recommends for the quarter: RU set alone in a plain quarter, RU plus MRP when there is one |
+
+<!-- markdownlint-restore -->
+
+Measured on 2026-08-21, both with full downloads:
+
+```text
+RU:19.31,JDK,OPATCH,OJVM,DPBP   -> RU 39034528, JDK BP 39791916,
+                                   OPatch 6880880, OJVM 19.31,
+                                   DPBP 39196236
+RECOMMENDED:19.32,JDK           -> RU 39472050, OJVM 39222882,
+                                   MRP 39834034, DPBP 39657094,
+                                   OPatch 6880880, JDK BP 39791916
+```
+
+Two things to know about `RECOMMENDED`:
+
+- it does **not** include the JDK bundle patch, hence the explicit `,JDK` -
+  without it the target home would regress against a base built with JDK
+- the version is mandatory. `RU:19.32,RECOMMENDED` is rejected ("when the PATCH
+  parameter specifies a version for RECOMMENDED, the same version must be
+  specified for RU") and a bare `RECOMMENDED` silently resolves to the latest
+  RU, which would make the target non-deterministic
+
+And one caveat about the base: the `JDK` keyword resolves to the *current* JDK
+bundle patch, not one pinned to the base RU - a 19.31 base pulled JDK BP
+`19.0.0.0.260818` on 2026-08-21. The patch labels are fixed, one patch number is
+not. That is why every download writes its resolved set out:
+
+```text
+/opt/stage/patchset-<RU>.json   verbatim manifest incl. SHA-1 / SHA-256
+/opt/stage/patchset-<RU>.txt    one line per patch, plus MRP yes/no
+```
+
+The summary is also printed during the run. It is scoped to the RU of that job -
+AutoUpgrade accumulates `patches_info.json` when several download jobs share one
+folder, so the report filters the manifest by the files the job itself fetched.
+
+## What the verification checks, and what it produces
+
+A patch can fail at four different places, so the verification looks at four
+levels. The lab is destroyed after a test, which means an Ansible stdout is not
+a result - every level ends up in an artifact.
+
+### Levels and criteria
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Level | Check | Source | Pass criterion | Gate |
+| --- | --- | --- | --- | --- |
+| binary | resolved patches present in the home | `opatch lsinventory` | every patch number from `patchset-<target>.json` is listed | soft |
+| sql | version | `v$instance.version_full` | matches the target Release Update | **hard** |
+| sql | every applied patch succeeded | `dba_registry_sqlpatch` | no row other than `SUCCESS` | **hard** |
+| sql | nothing left to do | `datapatch -prereq` | reports nothing to apply or roll back | **hard** |
+| container | every PDB at the root's level | `cdb_registry_sqlpatch` | each container's applied patch set equals the root's | **hard** |
+| objects | no new invalid objects | `dba_objects` vs baseline | delta to the pre-patch baseline is not positive | soft |
+| components | components valid | `dba_registry` | every component `VALID` or `OPTION OFF` | soft |
+| runtime | listener serves the database | `lsnrctl status` | a service for the SID is registered | soft |
+| smoke | PL/SQL compiles and runs | throwaway package in the PDB | returns its sentinel value, no invalid objects | soft |
+| smoke | OJVM compiles and runs | Java stored procedure | returns its sentinel value | soft |
+| smoke | Data Pump round trip | export, drop, import a 100-row table | 100 rows back | soft |
+| rollback | a way back exists | `v$restore_point` | a guaranteed restore point is present | reported |
+
+<!-- markdownlint-restore -->
+
+The **hard** criteria fail the play, everything else is collected and reported
+even after a hard failure - a red run must still leave a complete report behind.
+That is also why the artifacts are written and fetched *before* the gate.
+
+Invalid objects are judged as a **delta**, never as an absolute: an object that
+was already invalid before the patch is not a patch defect, and "zero invalid
+objects" is not a realistic criterion on a real database. The baseline is taken
+at the start of the patch phase, from the source home, with the same query set.
+
+### Artifacts
+
+```text
+on the lab host, in the stage directory
+  snapshot-baseline-<SID>.json      pre-patch state
+  snapshot-post-<SID>.json          post-patch state
+  patchset-<RU>.json / .txt         resolved patch set per Release Update
+  cputest-<SID>-<base>-to-<target>-<date>.json    machine readable result
+  cputest-<SID>-<base>-to-<target>-<date>.md      report to hand on
+
+on the control node
+  ansible/reports/<host>/           all of the above, fetched before the gate
+```
+
+`ansible/reports/` is git-ignored - a run is output, not source. Commit one
+deliberately when it is worth keeping as a reference.
+
+### The smoke test
+
+Registered patches say nothing about whether the patched code still runs, so
+each patched component gets one canary in a throwaway schema inside the PDB:
+PL/SQL for the Release Update, a Java stored procedure for OJVM, and an
+export/import round trip for the Data Pump bundle patch. The schema is dropped
+again, so the next baseline is not polluted. Disable with
+`db19_run_smoke=false`.
+
+### Rollback
+
+Not part of the standard run - it adds roughly half an hour and makes the cycle
+more fragile. The deploy keeps its guaranteed restore point
+(`db19_drop_grp_after_patching=false`), and the verification reports that the
+restore point exists. Exercising it is a separate, deliberate step:
+
+```bash
+make cpu-lab-rollback          # asks for confirmation, YES=1 to skip
+```
+
+It shuts the database down from the target home, points `oratab` back at the
+base home before anything can start again, flashes back, opens resetlogs, opens
+the PDBs, and asserts that the database reports the base Release Update.
+
+## Gold images - build, name, publish
+
+For 19c a **self-made** gold image is the only gold-image route that works, and
+it is unrelated to the broken Oracle Update Advisor. It does not remove the need
+for the base-image pre-authenticated request: the first artifact still has to be
+built from `LINUX.X64_193000_db_home.zip`. Afterwards the bucket serves the gold
+image instead, and a home installs in about two minutes rather than thirteen.
+
+### When to build one
+
+The gold image is produced **after a successful test, from the validated target
+home**: quarter N tests base 19.31 against target 19.32, and once that is green,
+19.32 becomes the gold image and therefore the base for quarter N+1. The
+artifact is only ever built from a Release Update the lab has actually verified.
+
+```bash
+# during the initial build of a base home
+make cpu-lab-install ANSIBLE_EXTRA="-e db19_gold_image_create=true"
+
+# publish it, then list what is in the bucket
+make cpu-lab-goldimage-push
+make cpu-lab-goldimage-list
+```
+
+`cpu-lab-goldimage-push` mints a short-lived write pre-authenticated request,
+uploads from the lab host (same region as the bucket, so the artifact never
+travels over the operator's uplink), and revokes the request afterwards.
+
+### Naming
+
+```text
+goldimage-db-<version>-<platform>-<edition>-<date>.zip
+goldimage-db-<version>-<platform>-<edition>-<date>.patchset.json
+
+e.g. goldimage-db-19_31_0_0_0-linux-x64-ee-20260821.zip
+```
+
+The version carries underscores because AutoUpgrade rejects dots outright:
+"The CREATE_GOLD_IMAGE parameter must resolve to a file name containing only
+letters, numbers, underscores, hyphens, and the .zip suffix". Underscores inside
+the version and hyphens between the scheme fields also keep the field boundaries
+unambiguous. There is deliberately no `latest` alias - a gold image is always
+referenced explicitly.
+
+The manifest next to the artifact carries the resolved patch set of the Release
+Update it was built from, the artifact checksum, the AutoUpgrade build and the
+requested patch list. Without it a gold image is an opaque zip whose content
+nobody can state a quarter later.
+
+### Building a home from one
+
+```bash
+make cpu-lab-install ANSIBLE_EXTRA="\
+  -e db19_gold_image_file=goldimage-db-19_31_0_0_0-linux-x64-ee-20260821.zip \
+  -e db19_gold_image_url=<read PAR for that object>"
+```
+
+The role stages the artifact like the base image and hands AutoUpgrade
+`patch=GOLDIMAGE:<file>` instead of a patch list.
 
 ## Release Update availability
 
@@ -351,9 +542,11 @@ An IPv6 address cannot be used - the VCN is IPv4-only.
 ### AutoUpgrade cannot find a base image
 
 Oracle states that for 19c and 21c "AutoUpgrade Patching cannot automatically
-download this base image". A home can be built media-free only when a gold image
-is available from the Oracle Updater service (`LINUX.X64` only), which is why
-`db19_autoupgrade_gold_image` defaults to `AUTO`.
+download this base image". A home could be built media-free only from a gold
+image out of the Oracle Update Advisor, and for 19c that service currently
+answers HTTP 500 - see "The Oracle 19c base image" above.
+`db19_autoupgrade_gold_image` stays at `AUTO` for `create_home` because that path
+tolerates the failure; download jobs pin `NO`.
 
 If `download` reports no base or gold image, stage the base zip once:
 
@@ -362,8 +555,12 @@ scp -i .ssh/cpu-lab LINUX.X64_193000_db_home.zip opc@<ip>:/tmp/
 ssh -i .ssh/cpu-lab opc@<ip> 'sudo mv /tmp/LINUX.X64_193000_db_home.zip /opt/stage/ && sudo chown oracle:oinstall /opt/stage/*.zip'
 ```
 
-Alternatively move `db_base_ru` to the oldest RU that has a gold image, which
-removes the manual media step entirely.
+Alternatively build the base home once and keep it as a **self-made** gold image
+(`install1.create_gold_image=<name>.zip` on a `create_home` run, then
+`install1.patch=GOLDIMAGE:<name>.zip` on every later host). That is independent
+of the broken Update Advisor - it still needs the base image once to create the
+artifact, but afterwards a home installs in about two minutes instead of
+twenty-five.
 
 ### AutoUpgrade version too old
 

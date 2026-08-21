@@ -8,51 +8,84 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Makefile**: new at the repository root. Lint targets (`lint-terraform`,
-  `lint-ansible`, `lint-yaml`, `lint-markdown`, `lint-shell`, `check-version`),
-  the cpu-patch-test lab lifecycle (`cpu-lab-init/plan/apply/install/patch/
-  verify/destroy/cycle`), plus `cpu-lab-step TAG=<tag>` for single-step runs on a
-  test VM. Version and release targets follow the OraDBA standard. Each lab
-  target auto-sources `terraform/envs/cpu-patch-test/.env`; `op read` is called
-  inside recipe bodies only, never at parse time.
-- **env/cpu-patch-test**: new Terraform stack for quarterly Oracle CPU patch
-  testing. Oracle Linux 8 hosts, `lab_count`-parametrised, deploys into an
-  existing base compartment (resolvable by OCID or by name plus `tenancy_ocid`).
-  Generates the Ansible inventory into `ansible/inventories/generated/` so host
-  IPs stay out of git, generates the database SYS password (`random_password`)
-  and a dedicated lab SSH keypair (`tls_private_key`), and authorises the
-  operator's own key from `~/.ssh/id_ed25519.pub` alongside it.
-- **module/oracle_db_host**: new module for N identical Oracle Linux 8 database
-  hosts. Enforces the Accenture standards unconditionally
-  (`is_pv_encryption_in_transit_enabled`, `are_legacy_imds_endpoints_disabled`)
-  on instances and volume attachments. Instance NSG allows SSH from the VCN CIDR
-  plus opt-in external CIDRs, and the Oracle Net listener intra-VCN only.
-  Optional data volume per host. Minimal cloud-init - Ansible does the rest.
-- **role/db19_engineering**: implemented (was an empty stub). Native Ansible OS
-  prerequisites built on `oracle-database-preinstall-19c`, then AutoUpgrade for
-  every software operation: `-mode download`, `-mode create_home` for both the
-  base and target ORACLE_HOME, and `-mode deploy` for the out-of-place move.
-  Split into a generic phase (reusable for any 19c lab) and the quarterly CPU
-  phase, with a tag per step so the flow can be driven one step at a time.
-  The legacy `oradba_init` scripts are deliberately not invoked; `oradba` is
-  installed as the runtime/environment layer only.
-- **playbook/lab-cpu-patch.yml**: entry point for the lab, targets the
-  `cpu_patch_hosts` group from the generated inventory.
-- **ansible/requirements.yml**: collection requirements (`ansible.posix` for
-  `selinux` and `firewalld`, `ansible.windows` for the AD lab).
-- **ansible/.ansible-lint**: skips `var-naming[no-role-prefix]` with the
-  reasoning documented in the file - a deliberate subset of role variables
-  (`oracle_sid`, `db_base_ru`, `db_target_ru`, `oracle_home_base`,
-  `oracle_home_target`) is the Terraform-to-Ansible contract and must not carry
-  a role-name prefix.
-- **.markdownlint.json**: OraDBA markdown standard (line length 120, MD033 off,
-  MD024 siblings only).
-- **docs/runbook-cpu-patch-lab.md**: runbook for a full CPU quarter cycle -
-  architecture, prerequisites, the six steps, variable and secret reference, and
-  a troubleshooting section.
+- **role/db19_engineering**: verification rewritten into four levels, because a
+  patch can fail at four places - binary (`opatch lsinventory` against the
+  resolved patch set), SQL (`dba_registry_sqlpatch`, `datapatch -prereq`),
+  container (`cdb_registry_sqlpatch`, every PDB at the root's patch level) and
+  runtime (instance, listener services). Version, all-rows-SUCCESS,
+  nothing-pending and container sync are hard gates; the rest is collected and
+  reported even after a hard failure, so a red run still leaves a complete
+  report. The gate is the last task and the artifacts are written and fetched
+  before it.
+- **role/db19_engineering**: `tasks/db_snapshot.yml` - one comparable state
+  snapshot, taken twice per test (baseline from the source home at the start of
+  the patch phase, post from the target home during verification). Invalid
+  objects are judged as a delta against the baseline, never as an absolute:
+  an object that was already invalid is not a patch defect, and zero invalid
+  objects is not a realistic criterion.
+- **role/db19_engineering**: `tasks/smoke.yml` - one functional canary per
+  patched component in a throwaway schema inside the PDB: a PL/SQL package for
+  the Release Update, a Java stored procedure for OJVM, and an export/drop/import
+  round trip for the Data Pump bundle patch. Registered patches say nothing about
+  whether the patched code runs. The Data Pump credential goes through a `0600`
+  parfile, never argv. Disable with `db19_run_smoke=false`.
+- **role/db19_engineering**: `tasks/fetch_reports.yml` - pulls the result report,
+  both snapshots and the patch-set manifests to `ansible/reports/<host>/`. The
+  lab is destroyed after a test, so evidence that stays on the host is lost.
+  The directory is git-ignored; a run is output, not source.
+- **role/db19_engineering**: `tasks/rollback.yml` plus `make cpu-lab-rollback` -
+  flashes the database back to the pre-patch restore point and restarts it from
+  the base home, asserting that it reports the base Release Update again.
+  Deliberately opt-in and outside the standard run: it adds about half an hour
+  and makes the cycle more fragile, but "can we get back?" is the question
+  customers actually ask.
+- **role/db19_engineering**: `tasks/push_gold_image.yml` plus
+  `make cpu-lab-goldimage-push` / `cpu-lab-goldimage-list`. Uploads the artifact
+  and a manifest from the lab host, which sits in the same region as the bucket,
+  using a write pre-authenticated request that the target mints and revokes
+  around the upload. The manifest carries the resolved patch set, the artifact
+  checksum, the AutoUpgrade build and the requested patch list - without it a
+  gold image is an opaque zip whose content nobody can state a quarter later.
+- **docs/runbook**: sections on what the verification checks and produces, and on
+  building, naming and publishing gold images, including the quarterly loop -
+  the gold image is built from the *validated target* home after a green test and
+  becomes the next quarter's base.
+- **role/db19_engineering**: self-made gold images. `db19_gold_image_create`
+  adds `create_gold_image` to a `create_home` job, and `db19_gold_image_file`
+  plus `db19_gold_image_url` build a home from `patch=GOLDIMAGE:<file>` staged
+  from a bucket. This is the only gold-image route that works for 19c today - it
+  does not touch the broken Oracle Update Advisor. A create_home run applies
+  every patch and took 13 minutes on 8 OCPU; an install from a gold image takes
+  about two minutes and needs no MOS access, which is what makes
+  `lab_count > 1` practical. The produced artifact is reported by name, size and
+  SHA-256 rather than left to be found in the stage directory. The
+  pre-authenticated request is still needed: the first gold image has to be
+  created from the 19.3.0.0 base image, after which the bucket serves the gold
+  image instead.
+- **role/db19_engineering**: `tasks/report_patchset.yml` - records which patches
+  AutoUpgrade actually resolved per Release Update. Writes
+  `patchset-<RU>.json` (verbatim manifest incl. SHA-1/SHA-256) and
+  `patchset-<RU>.txt` (one line per patch, plus an explicit MRP yes/no) into the
+  stage directory and prints the summary. Required because the target home is
+  requested via `RECOMMENDED`, so whether the quarter carries a Monitored
+  Recommended Patch is a test result rather than an input. The report is scoped
+  to the RU of its own download job: AutoUpgrade accumulates
+  `patches_info.json` when several jobs share a folder, so the manifest is
+  filtered by the files the job itself fetched.
+- **env/cpu-patch-test**: `enable_bastion = true`. The OCI Bastion reaches the
+  host through the OCI control plane and is independent of inbound connectivity
+  to the public IP - which is what made the 2026-08-21 rebuild possible at all
+  (see Fixed).
 
 ### Changed
 
+- **role/db19_engineering**: OJVM added to `db19_patch_list_base`
+  (`RU:<base>,JDK,OPATCH,OJVM,DPBP`). A production 19.31 home carries OJVM
+  19.31; without it the base home keeps the OJVM that shipped inside the
+  19.3.0.0 base image from 2019, and the CPU test measures a six-year OJVM jump
+  on top of the quarterly delta instead of a clean 19.31 -> 19.32 across every
+  component. Verified 2026-08-21: the list resolves to RU 39034528, JDK BP
+  39791916, OPatch 6880880, OJVM 19.31, DPBP 39196236.
 - **role/db19_engineering (measured behaviour)**: the role was built and then
   verified end-to-end against a live Oracle Linux 8.10 host with AutoUpgrade
   26.5. Findings encoded as defaults and comments so they are not rediscovered:
@@ -185,8 +218,110 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (run via Ansible or RDP after AD is up). This prevents phase-2 from aborting when
   the CMU script fails due to missing prerequisites.
 
+- **role/db19_engineering**: split the single patch list into two strategies.
+  `db19_patch_list_base` is explicit (`RU:<base>,JDK,OPATCH,DPBP`) so the base
+  home stays a reproducible control group; `db19_patch_list_target` is
+  `RECOMMENDED:<target>,JDK` so the test sees what Oracle recommends for the
+  quarter - the RU set alone in a plain quarter, RU plus MRP when there is one.
+  `db19_patch_list` resolves per invocation. Verified 2026-08-21 with full
+  downloads: the base pulled RU 39034528, JDK BP 39791916, OPatch 6880880, DPBP
+  39196236; `RECOMMENDED:19.32,JDK` pulled RU 39472050, OJVM 39222882, MRP
+  39834034, DPBP 39657094, OPatch 6880880, JDK BP 39791916. `RECOMMENDED` does
+  not include the JDK bundle patch, hence the explicit `,JDK`; the version is
+  mandatory, because a bare `RECOMMENDED` silently resolves to the latest RU and
+  `RU:19.32,RECOMMENDED` is rejected outright.
+- **role/db19_engineering**: `db19_try_gold_image` now defaults to `false`. For
+  19c the gold-image download cannot succeed (see Fixed), so the attempt only
+  cost a failed run and filled the log with a misleading configuration error.
+- **env/cpu-patch-test**: `db_host_ocpus` 2 -> 8 and `db_host_memory_gbs`
+  16 -> 32 in `terraform.tfvars`, which previously overrode the raised defaults.
+
 ### Fixed
 
+- **playbook/lab-cpu-patch**: added `UserKnownHostsFile=/dev/null` to the SSH
+  arguments. With a Bastion port-forwarding tunnel every lab host answers on the
+  same `127.0.0.1:2222`, so a recorded host key belongs to whichever instance
+  came first and every replacement then failed with "REMOTE HOST IDENTIFICATION
+  HAS CHANGED". `StrictHostKeyChecking=no` alone does not help, because a
+  conflicting entry is refused regardless. Pinning a host key to a reused local
+  port carries no security value - the identity that matters is enforced by the
+  Bastion session and the lab keypair.
+- **role/db19_engineering**: the gold-image file name is dot-free. AutoUpgrade
+  26.5.260807 rejects the parameter with "The CREATE_GOLD_IMAGE parameter must
+  resolve to a file name containing only letters, numbers, underscores, hyphens,
+  and the .zip suffix", so the version is written with underscores
+  (`19_31_0_0_0`). Measured 2026-08-21 - the failure aborts `create_home` after
+  four seconds, at config-parse time.
+- **Makefile**: Ansible secrets no longer travel on the command line. The MOS
+  credentials, the database SYS password and the AutoUpgrade keystore password
+  went to `ansible-playbook` as `-e key=value`, which puts them in an argv that
+  any local user can read with `ps` - for the full hour an AutoUpgrade run lasts.
+  `cpu-lab-install`, `cpu-lab-patch` and `cpu-lab-step` now build a `0600` JSON
+  file via `mktemp` and pass `-e @<file>`, with a `trap` that removes it on
+  success, error and interrupt alike. The values reach `python3` through the
+  environment rather than argv for the same reason: `/proc/<pid>/environ` and
+  `ps -E` are owner-restricted, argv is not.
+- **playbook/lab-cpu-patch**: added a `raw`-based SSH wait as the first task. A
+  freshly applied instance is `RUNNING` before sshd accepts logins, so
+  `make cpu-lab-cycle` died on "Connection refused" straight after
+  `terraform apply`. Deliberately not `wait_for_connection`: that runs the ping
+  module, which needs the Python interpreter the *next* task installs, so on a
+  fresh host it can never succeed. `raw` also rides out the window in which sshd
+  answers but `pam_nologin` still rejects the login.
+- **docs/runbook**: corrected the 19c gold-image diagnosis. It is not that
+  "gold_image is rejected on download jobs" - `target_version=19` is the only
+  release whose gold-image resolution goes through the Oracle Update Advisor
+  (`ValidateGoldImage.isGoldImageServiceTargetRelease`), and
+  `POST transport.oracle.com/v2/patchplanner/requests` answers HTTP 500.
+  AutoUpgrade cannot parse the plain-text body as JSON ("Unexpected char 73")
+  and surfaces the outage as `Failed to process the gold_image parameter`.
+  `gold_image=YES` takes the same path; `target_version=19.32` is rejected as
+  not being a single version. 21 and 23 log "The Oracle Update Advisor service
+  is not used for target release 23" and work. Reproduced on the lab host and on
+  macOS with AutoUpgrade 26.5.260807 and the same keystore.
+
+- **Makefile**: new at the repository root. Lint targets (`lint-terraform`,
+  `lint-ansible`, `lint-yaml`, `lint-markdown`, `lint-shell`, `check-version`),
+  the cpu-patch-test lab lifecycle (`cpu-lab-init/plan/apply/install/patch/
+  verify/destroy/cycle`), plus `cpu-lab-step TAG=<tag>` for single-step runs on a
+  test VM. Version and release targets follow the OraDBA standard. Each lab
+  target auto-sources `terraform/envs/cpu-patch-test/.env`; `op read` is called
+  inside recipe bodies only, never at parse time.
+- **env/cpu-patch-test**: new Terraform stack for quarterly Oracle CPU patch
+  testing. Oracle Linux 8 hosts, `lab_count`-parametrised, deploys into an
+  existing base compartment (resolvable by OCID or by name plus `tenancy_ocid`).
+  Generates the Ansible inventory into `ansible/inventories/generated/` so host
+  IPs stay out of git, generates the database SYS password (`random_password`)
+  and a dedicated lab SSH keypair (`tls_private_key`), and authorises the
+  operator's own key from `~/.ssh/id_ed25519.pub` alongside it.
+- **module/oracle_db_host**: new module for N identical Oracle Linux 8 database
+  hosts. Enforces the Accenture standards unconditionally
+  (`is_pv_encryption_in_transit_enabled`, `are_legacy_imds_endpoints_disabled`)
+  on instances and volume attachments. Instance NSG allows SSH from the VCN CIDR
+  plus opt-in external CIDRs, and the Oracle Net listener intra-VCN only.
+  Optional data volume per host. Minimal cloud-init - Ansible does the rest.
+- **role/db19_engineering**: implemented (was an empty stub). Native Ansible OS
+  prerequisites built on `oracle-database-preinstall-19c`, then AutoUpgrade for
+  every software operation: `-mode download`, `-mode create_home` for both the
+  base and target ORACLE_HOME, and `-mode deploy` for the out-of-place move.
+  Split into a generic phase (reusable for any 19c lab) and the quarterly CPU
+  phase, with a tag per step so the flow can be driven one step at a time.
+  The legacy `oradba_init` scripts are deliberately not invoked; `oradba` is
+  installed as the runtime/environment layer only.
+- **playbook/lab-cpu-patch.yml**: entry point for the lab, targets the
+  `cpu_patch_hosts` group from the generated inventory.
+- **ansible/requirements.yml**: collection requirements (`ansible.posix` for
+  `selinux` and `firewalld`, `ansible.windows` for the AD lab).
+- **ansible/.ansible-lint**: skips `var-naming[no-role-prefix]` with the
+  reasoning documented in the file - a deliberate subset of role variables
+  (`oracle_sid`, `db_base_ru`, `db_target_ru`, `oracle_home_base`,
+  `oracle_home_target`) is the Terraform-to-Ansible contract and must not carry
+  a role-name prefix.
+- **.markdownlint.json**: OraDBA markdown standard (line length 120, MD033 off,
+  MD024 siblings only).
+- **docs/runbook-cpu-patch-lab.md**: runbook for a full CPU quarter cycle -
+  architecture, prerequisites, the six steps, variable and secret reference, and
+  a troubleshooting section.
 - **env/ad-cmu-test**: Ansible inventory (`hosts.yml`) is now written immediately at
   the start of `null_resource.wait_for_winrm` provisioner, before the WinRM polling
   loop. Previously the IP was only written after WinRM became reachable, leaving the
