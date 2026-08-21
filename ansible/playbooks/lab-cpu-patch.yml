@@ -53,11 +53,39 @@
   # Long-running AutoUpgrade jobs: keep the connection alive and do not let a
   # single slow task look like a hung host.
   vars:
+    # UserKnownHostsFile=/dev/null on top of StrictHostKeyChecking=no: with a
+    # Bastion port-forwarding tunnel every lab host answers on the same
+    # 127.0.0.1:2222, so a recorded host key belongs to whichever instance came
+    # first and every replacement then trips "REMOTE HOST IDENTIFICATION HAS
+    # CHANGED". Pinning a host key to a reused local port carries no security
+    # value - the identity that matters is enforced by the Bastion session and
+    # the lab keypair. StrictHostKeyChecking=no alone does not help here,
+    # because a *conflicting* entry is refused regardless.
     ansible_ssh_common_args: >-
       -o ServerAliveInterval=60 -o ServerAliveCountMax=30
-      -o StrictHostKeyChecking=no
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+      -o LogLevel=ERROR
 
   pre_tasks:
+    # A freshly applied instance is RUNNING before sshd accepts connections, so
+    # "make cpu-lab-cycle" used to die on "Connection refused" right after
+    # terraform apply. Wait instead of failing - this is the very first task, so
+    # it also covers the reboot in a resize.
+    # ansible.builtin.raw, NOT wait_for_connection: the latter runs the ping
+    # module, which needs a Python interpreter that the next task is only about
+    # to install - on a fresh host it can never succeed. raw needs nothing but
+    # sshd, and unlike a bare port check it also rides out the boot window in
+    # which sshd answers but pam_nologin still rejects the login.
+    - name: Wait for SSH on the lab host
+      ansible.builtin.raw: echo ready
+      register: db19_ssh_ready
+      retries: 60
+      delay: 10
+      until: db19_ssh_ready is succeeded
+      changed_when: false
+      tags:
+        - always
+
     # ansible.builtin.raw runs over plain SSH and needs no Python on the target,
     # so it can bootstrap the interpreter that every later module depends on.
     - name: Bootstrap a supported Python interpreter
