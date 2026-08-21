@@ -191,14 +191,17 @@
       dumpfile=smoke.dmp
       tables={{ db19_smoke_schema }}.smoke_tab
       PAR
-      {{ oracle_home_target }}/bin/expdp parfile=smoke.par logfile=smoke_exp.log > /dev/null
+      {{ oracle_home_target }}/bin/expdp parfile=smoke.par logfile=smoke_exp.log 2>&1 | tail -5
       {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
       whenever sqlerror exit failure
       alter session set container = {{ db19_smoke_pdb }};
       drop table {{ db19_smoke_schema }}.smoke_tab purge;
       exit
       SQL
-      {{ oracle_home_target }}/bin/impdp parfile=smoke.par logfile=smoke_imp.log > /dev/null
+      {{ oracle_home_target }}/bin/impdp parfile=smoke.par logfile=smoke_imp.log 2>&1 | tail -5
+      # The parfile carries the credential and goes away immediately; the
+      # Data Pump logs stay, because a failed round trip is undiagnosable
+      # without them.
       rm -f smoke.par
       {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
       set echo off feedback off pagesize 0
@@ -211,7 +214,6 @@
   register: db19_smoke_datapump
   changed_when: false
   failed_when: false
-  no_log: true
 
 # ---------------------------------------------------------------------------
 # Evaluation and cleanup
@@ -254,8 +256,38 @@
     label: "{{ item.name }}"
   when: not (item.ok | bool)
 
-# Cleanup is unconditional: a throwaway schema left behind would show up as
-# "new invalid objects" or stray segments in the next run's baseline.
+# Diagnosis before cleanup. Without this a failed round trip left nothing but
+# "ORA-00942: table or view does not exist" and no way to tell why - measured
+# 2026-08-21, when the export and import output went to /dev/null and the logs
+# were deleted a moment later.
+- name: Collect the Data Pump logs when the round trip failed
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ db19_smoke_dir }}/{{ item }}"
+  register: db19_smoke_dp_logs
+  loop:
+    - smoke_exp.log
+    - smoke_imp.log
+  loop_control:
+    label: "{{ item }}"
+  failed_when: false
+  when: not (db19_smoke_check_datapump | bool)
+
+- name: Report the Data Pump logs
+  ansible.builtin.debug:
+    msg: >-
+      {{ (item.content | default('') | b64decode).split('\n')[-25:] }}
+  loop: "{{ db19_smoke_dp_logs.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('?') }}"
+  when:
+    - not (db19_smoke_check_datapump | bool)
+    - item.content is defined
+
+# Cleanup drops the throwaway schema unconditionally - left behind it would show
+# up as new invalid objects or stray segments in the next run's baseline. The
+# directory on disk is only removed when everything passed, so a failure keeps
+# its dump file and logs for a look by hand.
 - name: Drop the smoke-test objects
   become: true
   become_user: "{{ oracle_os_user }}"
@@ -270,9 +302,24 @@
       drop directory smoke_dir;
       exit
       SQL
-      rm -rf {{ db19_smoke_dir }}
     executable: /bin/bash
   environment: *smoke_env
   register: db19_smoke_cleanup
   changed_when: db19_smoke_cleanup.rc == 0
   failed_when: false
+
+- name: Remove the smoke-test directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_smoke_dir }}"
+    state: absent
+  when: db19_smoke_check_plsql | bool and db19_smoke_check_ojvm | bool
+        and db19_smoke_check_datapump | bool
+
+- name: Report that the smoke-test directory was kept for diagnosis
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_smoke_dir }} kept on the host - it holds the dump file and the
+      Data Pump logs of the failed round trip.
+  when: not (db19_smoke_check_plsql | bool and db19_smoke_check_ojvm | bool
+             and db19_smoke_check_datapump | bool)

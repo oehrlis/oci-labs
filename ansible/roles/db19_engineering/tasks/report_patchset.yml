@@ -87,15 +87,26 @@
          | map('join', ' -> ') | list }}
   when: db19_patches_info_stat.stat.exists
 
+# The REDUCED set, not a verbatim copy of patches_info.json. A file named
+# patchset-<RU>.json has to contain that RU's patches and nothing else -
+# AutoUpgrade accumulates patches_info.json across jobs sharing a folder, and a
+# verbatim copy made the target manifest carry the base RU's patches too. That
+# in turn made the verification report base patches as missing from the target
+# home (measured 2026-08-21). The accumulated original stays on the host as
+# patches_info.json for anyone who wants it.
 - name: Keep the manifest for RU {{ db19_home_ru }}
   become: true
   ansible.builtin.copy:
-    src: "{{ db19_stage_dir }}/patches_info.json"
     dest: "{{ db19_stage_dir }}/patchset-{{ db19_home_ru }}.json"
-    remote_src: true
     owner: "{{ oracle_os_user }}"
     group: "{{ oracle_os_group_install }}"
     mode: "0644"
+    content: |
+      {{ {'release_update': db19_home_ru,
+          'requested': db19_patch_list | trim,
+          'mrp_included': (db19_patchset_mrp | length > 0),
+          'collected': ansible_date_time.iso8601 | default('unknown'),
+          'patches': db19_patchset} | to_nice_json }}
   when: db19_patches_info_stat.stat.exists
 
 - name: Write the flat patch-set summary for RU {{ db19_home_ru }}

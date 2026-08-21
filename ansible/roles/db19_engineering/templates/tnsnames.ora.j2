@@ -3,11 +3,32 @@
 #-------------------------------------------------------------------------------
 # Managed by Ansible role db19_engineering - do not edit by hand.
 # Purpose: Oracle Net service names for the lab database {{ oracle_sid }}.
+# Notes..: LISTENER_{{ oracle_sid }} is not optional. dbca sets the instance
+#          parameter local_listener to that alias, so the alias has to exist in
+#          the TNS_ADMIN of whichever home the instance runs from. This file is
+#          rendered into BOTH homes - the base home during create_db and the
+#          target home during the out-of-place move - and until 2026-08-21 it
+#          omitted the alias. The result after a move was silent: the database
+#          came up, could not resolve its own local_listener, never registered,
+#          and "lsnrctl status" reported "The listener supports no services".
+#          A CPU test that leaves the database unreachable over TNS is not a
+#          passed test, which is why the verification checks the listener too.
 #-------------------------------------------------------------------------------
+
+# Alias for local_listener - an ADDRESS only, no CONNECT_DATA, matching what
+# dbca generates. The host is the FQDN, not the short name: on this image
+# "getent hosts oradb01" answers with the IPv6 link-local address first, and the
+# instance then rejects the whole parameter -
+#   ORA-00141: all addresses specified for parameter LOCAL_LISTENER are invalid
+#   ORA-00132: syntax error or unresolved network name 'LISTENER_CPUDB'
+# The FQDN maps to the IPv4 address only and is exactly what the listener binds
+# to, so both sides agree. Measured 2026-08-21.
+LISTENER_{{ oracle_sid }} =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = {{ db19_net_host }})(PORT = {{ db19_listener_port }}))
 
 {{ oracle_sid }} =
   (DESCRIPTION =
-    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ ansible_facts['hostname'] }})(PORT = {{ db19_listener_port }}))
+    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ db19_net_host }})(PORT = {{ db19_listener_port }}))
     (CONNECT_DATA =
       (SERVER = DEDICATED)
       (SERVICE_NAME = {{ oracle_sid }})
@@ -17,7 +38,7 @@
 
 {{ db19_pdb_name }} =
   (DESCRIPTION =
-    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ ansible_facts['hostname'] }})(PORT = {{ db19_listener_port }}))
+    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ db19_net_host }})(PORT = {{ db19_listener_port }}))
     (CONNECT_DATA =
       (SERVER = DEDICATED)
       (SERVICE_NAME = {{ db19_pdb_name | lower }})

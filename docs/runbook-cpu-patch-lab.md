@@ -261,6 +261,82 @@ It shuts the database down from the target home, points `oratab` back at the
 base home before anything can start again, flashes back, opens resetlogs, opens
 the PDBs, and asserts that the database reports the base Release Update.
 
+## Prerequisites the patch itself depends on
+
+Four things that are not obvious and each of which stopped a run dead on
+2026-08-21.
+
+### ARCHIVELOG is mandatory
+
+AutoUpgrade takes a guaranteed restore point before an out-of-place move and
+refuses to start without one:
+
+```text
+GRP106: AutoUpgrade Patching is unable to proceed because database is not in
+ARCHIVE LOG mode and guarantee restore point cannot be taken (default behavior).
+```
+
+The deploy dies after 22 seconds in stage GRP. `db19_enable_archivelog` is
+therefore `true`, dbca creates the database that way, and `archivelog.yml` is
+the idempotent safety net for a database that already exists
+(`make cpu-lab-step TAG=archivelog`). The alternative, `restoration=no` in the
+deploy config, buys the patch run at the price of the rollback.
+
+### A pending deploy job blocks every later AutoUpgrade job
+
+A deploy that keeps its restore point - which is the default here - leaves its
+job open, and *any* AutoUpgrade invocation sharing `global_log_dir` then aborts:
+
+```text
+There is an unfinished execution of a deploy mode. Run the AutoUpgrade Patching
+in deploy mode to resume from failure point
+```
+
+This is not limited to the next deploy. A plain download job hits it too. Two
+consequences, both encoded in the role:
+
+- `analyze` tolerates this one message and lets `deploy` resume from the failure
+  point. `-clear_recovery_data` does **not** lift the block for analyze - it
+  reports "the modified jobs will start from scratch" and analyze still refuses,
+  for one job and for all of them. Only deploy can resume.
+- any other job after a deploy needs its own log directory, e.g.
+  `-e db19_autoupgrade_log_dir=<other path>`. That is what
+  `db19_gold_image_log_dir` exists for.
+
+### local_listener has to resolve in the target home
+
+After the move the database runs from the new home and resolves
+`local_listener` through that home's `TNS_ADMIN`. Two things went wrong there:
+
+```text
+ORA-00141: all addresses specified for parameter LOCAL_LISTENER are invalid
+ORA-00132: syntax error or unresolved network name 'LISTENER_CPUDB'
+```
+
+- `tnsnames.ora.j2` did not define `LISTENER_<SID>` at all, while dbca had put it
+  into the base home. The generated file overwrote the target home's copy
+  without it.
+- the alias must not use the short host name. On this image
+  `getent hosts oradb01` answers with the IPv6 link-local address first, and the
+  instance rejects the whole parameter. `db19_net_host` is the FQDN, which maps
+  to the IPv4 address and is what the listener binds to.
+
+The symptom is silent: the database is open and healthy, `lsnrctl status` says
+"The listener supports no services", and nothing can connect over TNS. It also
+takes the Data Pump smoke test down with it, because that connects through the
+PDB service. Re-apply the network configuration on its own with
+`make cpu-lab-step TAG=netconfig`; the step also re-sets `local_listener` in
+memory, because `alter system register` alone reuses the address the instance
+resolved at startup.
+
+### An MRP is a bundle, not a patch number
+
+`opatch lsinventory` never shows the MRP number. It registers the bundle's
+members: MRP 39834034 appeared in the home as 39661089, 39750798 and 39779336.
+The binary comparison therefore excludes MRP entries from the expected list and
+reports them by name instead, next to OPatch, which is a tool rather than an
+applied patch.
+
 ## Gold images - build, name, publish
 
 For 19c a **self-made** gold image is the only gold-image route that works, and

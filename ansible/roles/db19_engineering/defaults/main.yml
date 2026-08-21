@@ -263,6 +263,23 @@ db19_patch_list_target: "RECOMMENDED:{{ db_target_ru }},JDK"
 # verify.yml does not depend on it.
 db19_run_smoke: true
 
+# Patch numbers that are tools rather than applied patches. p6880880 is the
+# OPatch utility itself: it replaces $ORACLE_HOME/OPatch and never shows up in
+# lsinventory, so comparing it against the inventory reports it as permanently
+# missing (measured 2026-08-21).
+db19_opatch_tool_ids:
+  - "6880880"
+
+# Host name used in the generated Oracle Net files. The FQDN on purpose: the
+# short name resolves to the IPv6 link-local address first on this image, which
+# makes the instance reject LOCAL_LISTENER entirely (ORA-00141 / ORA-00132).
+# The FQDN maps to the IPv4 address and is what the listener binds to.
+db19_net_host: "{{ ansible_facts['fqdn'] | default(ansible_facts['hostname']) }}"
+
+# The alias dbca puts into the instance parameter local_listener, and which
+# tnsnames.ora therefore has to define in every home the instance may run from.
+db19_local_listener_alias: "LISTENER_{{ oracle_sid }}"
+
 # ------------------------------------------------------------------------------
 # Reporting
 # ------------------------------------------------------------------------------

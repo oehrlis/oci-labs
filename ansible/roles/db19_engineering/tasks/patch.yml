@@ -200,6 +200,10 @@
     owner: "{{ oracle_os_user }}"
     group: "{{ oracle_os_group_install }}"
     mode: "0644"
+  # Own tag: when the network configuration of the target home turns out to be
+  # wrong after a move, it has to be fixable without repeating the patch.
+  tags:
+    - netconfig
 
 - name: Start the listener from the target home
   become: true
@@ -212,6 +216,41 @@
     TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
   register: db19_listener_start_target
   changed_when: db19_listener_start_target.rc == 0
+
+# PMON registers on its own, but only every 60 seconds and only if it can
+# resolve local_listener. Forcing it here turns a silent registration failure
+# into an immediate one, which the verification then reports as
+# "listener serves database: FAIL" instead of leaving a database that is up but
+# unreachable over TNS. Measured 2026-08-21: after the move the listener stood
+# there with "The listener supports no services" because the target home's
+# tnsnames.ora was missing the LISTENER_<SID> alias.
+- name: Register the instance with the listener
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      -- Re-setting the parameter first is not redundant: "alter system
+      -- register" reuses the address the instance resolved at startup, so after
+      -- a corrected tnsnames.ora it would keep registering against the old,
+      -- failed resolution. Setting local_listener in memory forces a fresh
+      -- resolution. Measured 2026-08-21.
+      alter system set local_listener = '{{ db19_local_listener_alias }}' scope = memory;
+      alter system register;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+    TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
+  register: db19_register_listener
+  changed_when: db19_register_listener.rc == 0
+  tags:
+    - netconfig
 
 - name: Point oratab at the target home
   become: true

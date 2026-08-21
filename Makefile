@@ -310,6 +310,45 @@ cpu-lab-ssh: guard-terraform ## Print the SSH command(s) for the lab host(s)
 	$(Q)cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -json ssh_commands | \
 	  python3 -c 'import json,sys; [print(f"{k}: {v}") for k,v in json.load(sys.stdin).items()]'
 
+# ------------------------------------------------------------------------------
+# Stopping is not destroying. A stopped instance keeps its boot volume, its
+# ORACLE_HOMEs, the database and the guaranteed restore point, and costs only
+# block storage instead of 8 OCPUs. Use it to park a lab overnight; use
+# cpu-lab-destroy when the work is finished and the evidence has been fetched.
+# Public IP and private IP survive a stop, but a Bastion session does not.
+.PHONY: cpu-lab-stop
+cpu-lab-stop: guard-oci guard-terraform ## Stop the lab instance(s) without deleting anything
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  profile="$${profile:-TRIVADIS}"; \
+	  ids="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -json db_instance_ids 2>/dev/null \
+	    | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).values()))' 2>/dev/null || true)"; \
+	  if [[ -z "$$ids" ]]; then \
+	    ids="$$(python3 -c "import json; d=json.load(open('$(CPU_ENV_DIR)/terraform.tfstate')); print(' '.join(i['attributes']['id'] for r in d['resources'] if r['type']=='oci_core_instance' for i in r['instances']))")"; \
+	  fi; \
+	  [[ -n "$$ids" ]] || { echo "❌ No instance found in the state"; exit 1; }; \
+	  for id in $$ids; do \
+	    echo "Stopping $$id"; \
+	    "$(OCI)" --profile "$$profile" compute instance action --action SOFTSTOP \
+	      --instance-id "$$id" --wait-for-state STOPPED \
+	      --query 'data."lifecycle-state"' --raw-output; \
+	  done
+	@echo "✅ Lab stopped - nothing deleted. Start again with: make cpu-lab-start"
+
+.PHONY: cpu-lab-start
+cpu-lab-start: guard-oci guard-terraform ## Start the stopped lab instance(s)
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  profile="$${profile:-TRIVADIS}"; \
+	  ids="$$(python3 -c "import json; d=json.load(open('$(CPU_ENV_DIR)/terraform.tfstate')); print(' '.join(i['attributes']['id'] for r in d['resources'] if r['type']=='oci_core_instance' for i in r['instances']))")"; \
+	  [[ -n "$$ids" ]] || { echo "❌ No instance found in the state"; exit 1; }; \
+	  for id in $$ids; do \
+	    echo "Starting $$id"; \
+	    "$(OCI)" --profile "$$profile" compute instance action --action START \
+	      --instance-id "$$id" --wait-for-state RUNNING \
+	      --query 'data."lifecycle-state"' --raw-output; \
+	  done
+	@echo "✅ Lab started - a Bastion session does not survive a stop:"
+	@echo "   make cpu-lab-bastion-session && make cpu-lab-bastion-tunnel"
+
 .PHONY: cpu-lab-destroy
 cpu-lab-destroy: guard-terraform ## Tear down the lab (asks for confirmation, YES=1 to skip)
 	@if [[ "$(YES)" != "1" ]]; then \

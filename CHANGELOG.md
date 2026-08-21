@@ -238,6 +238,43 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **role/db19_engineering**: the database registers with the listener again
+  after an out-of-place move. Two defects, both silent - the database was open
+  and healthy while `lsnrctl status` reported "The listener supports no
+  services" and nothing could connect over TNS. First, `tnsnames.ora.j2` never
+  defined `LISTENER_<SID>`, the alias dbca puts into `local_listener`, so
+  rendering the template into the target home removed it. Second, the alias must
+  not use the short host name: `getent hosts oradb01` answers with the IPv6
+  link-local address first and the instance then rejects the parameter with
+  ORA-00141 / ORA-00132, so `db19_net_host` is the FQDN the listener itself binds
+  to. The registration task also re-sets `local_listener` in memory, because
+  `alter system register` reuses the address resolved at startup. Both files now
+  carry the `netconfig` tag so the network configuration can be repaired without
+  repeating the patch. This also took the Data Pump smoke test down with it,
+  which connects through the PDB service - that now passes too.
+- **role/db19_engineering**: `datapatch -prereq` is classified by what it
+  actually prints. The check looked for "nothing to apply" and failed a clean
+  run whose output read "No interim patches need to be applied". It now collects
+  every "need to be" line and drops the ones starting with "No".
+- **role/db19_engineering**: the sqlpatch gate is scoped to the patches of the
+  test. A `WITH ERRORS (PREV PATCH)` row left in the registry by the base
+  installation turned an otherwise clean 19.32 run red. Historical failures are
+  still reported, as `sqlpatch_historical_errors`, but they are no longer a
+  statement about the patch under test.
+- **role/db19_engineering**: the binary comparison ignores entries that cannot
+  appear in `opatch lsinventory`. OPatch (p6880880) is the tool itself, and an
+  MRP is a bundle whose members are registered individually - MRP 39834034
+  showed up as 39661089, 39750798 and 39779336. Both were reported as
+  permanently missing. Bundles are now listed by name instead.
+- **role/db19_engineering**: `patchset-<RU>.json` holds that RU's patches only.
+  It used to be a verbatim copy of `patches_info.json`, which AutoUpgrade
+  accumulates across jobs sharing a folder, so the target manifest carried the
+  base RU's patches and the verification reported them as missing from the
+  target home.
+- **role/db19_engineering**: the Data Pump smoke test is diagnosable. Export and
+  import output went to `/dev/null` and the logs were deleted moments later, so
+  a failed round trip left nothing but `ORA-00942`. The output is kept, the logs
+  are printed on failure, and the working directory survives when a check fails.
 - **playbook/lab-cpu-patch**: added `UserKnownHostsFile=/dev/null` to the SSH
   arguments. With a Bastion port-forwarding tunnel every lab host answers on the
   same `127.0.0.1:2222`, so a recorded host key belongs to whichever instance

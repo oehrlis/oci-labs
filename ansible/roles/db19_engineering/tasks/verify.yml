@@ -125,13 +125,32 @@
       {{ db19_expected_ids }}
     db19_missing_patches: >-
       {{ db19_expected_ids | difference(db19_home_patches) }}
+    db19_bundled_patches: >-
+      {{ db19_manifest_patches
+         | selectattr('description', 'search', '(?i)\bMRP\b')
+         | map(attribute='description') | list }}
   vars:
-    db19_expected_ids: >-
-      {{ ((db19_target_patchset_raw.content | b64decode | from_json).patches
-          | default([]) | map(attribute='files') | flatten
-          | map(attribute='name') | join(' ')
-          | regex_findall('p([0-9]+)_')) | unique | list
+    # Two kinds of entry can never be found in lsinventory and are filtered out
+    # before the comparison. Both measured 2026-08-21, both reported as
+    # permanently missing until they were excluded:
+    #
+    #   OPatch (p6880880) is the OPatch tool itself. It replaces
+    #   $ORACLE_HOME/OPatch and is not an applied patch.
+    #
+    #   An MRP is a bundle. opatch registers its MEMBERS individually, not the
+    #   bundle number - MRP 39834034 showed up in the home as 39661089, 39750798
+    #   and 39779336. Since the manifest does not list the members, the bundle
+    #   number is excluded here and the MRP is reported by name instead.
+    db19_manifest_patches: >-
+      {{ (db19_target_patchset_raw.content | b64decode | from_json).patches
+         | default([])
          if (db19_target_patchset_raw.content is defined) else [] }}
+    db19_expected_ids: >-
+      {{ (db19_manifest_patches
+          | rejectattr('description', 'search', '(?i)\bMRP\b')
+          | map(attribute='files') | flatten | map(attribute='name')
+          | join(' ') | regex_findall('p([0-9]+)_') | unique | list
+          | difference(db19_opatch_tool_ids)) }}
 
 # ---------------------------------------------------------------------------
 # SQL level - did datapatch finish, and is anything pending?
@@ -150,11 +169,22 @@
   changed_when: false
   failed_when: false
 
+# datapatch does not say "nothing to do". It prints an installation queue in
+# which each line is either "No <kind> patches need to be <verb>" or a concrete
+# list of patches. So: collect every "need to be" line and drop the ones that
+# start with "No" - whatever is left is real work. Matching a fixed phrase like
+# "nothing to apply" produced a false FAIL on 2026-08-21 against output that
+# read "No interim patches need to be applied".
 - name: Classify the datapatch prereq output
   ansible.builtin.set_fact:
-    db19_datapatch_pending: >-
-      {{ db19_datapatch_prereq.stdout | default('')
-         is search('(?i)nothing to (apply|roll back)') | ternary(false, true) }}
+    db19_datapatch_outstanding: >-
+      {{ db19_datapatch_prereq.stdout_lines | default([]) | map('trim')
+         | select('search', 'need to be')
+         | reject('match', '(?i)^No ') | list }}
+
+- name: Derive whether datapatch has work left
+  ansible.builtin.set_fact:
+    db19_datapatch_pending: "{{ (db19_datapatch_outstanding | length) > 0 }}"
 
 # ---------------------------------------------------------------------------
 # Runtime level - listener and services
@@ -188,10 +218,22 @@
     db19_check_version: >-
       {{ (db19_post.db.version_full | default('unknown'))
          is match('^' ~ (db_target_ru | regex_escape) ~ '(\.|$)') }}
+    # Scoped to the patches of THIS test, not to the whole history. A row from
+    # the base installation that failed months ago is a finding, but it is not
+    # a statement about the patch under test - it is reported separately as
+    # db19_sqlpatch_historical_errors. Measured 2026-08-21: DPBP 19.31 sat in
+    # the registry as "WITH ERRORS (PREV PATCH)" from create_db and turned an
+    # otherwise clean 19.32 run red.
     db19_check_sqlpatch: >-
-      {{ (db19_post.sqlpatch | default([]) | length > 0)
-         and (db19_post.sqlpatch | rejectattr(2, 'equalto', 'SUCCESS')
+      {{ (db19_sqlpatch_target | length > 0)
+         and (db19_sqlpatch_target | rejectattr(2, 'equalto', 'SUCCESS')
               | list | length == 0) }}
+    db19_sqlpatch_target: "{{ db19_sqlpatch_target }}"
+    db19_sqlpatch_historical_errors: >-
+      {{ db19_post.sqlpatch | default([])
+         | rejectattr(2, 'equalto', 'SUCCESS')
+         | rejectattr(1, 'in', db19_sqlpatch_target | map(attribute=1) | list)
+         | list }}
     db19_check_datapatch: "{{ not db19_datapatch_pending }}"
     db19_pdb_gap: >-
       {{ db19_post.container_patch_sets | default([])
@@ -199,6 +241,17 @@
          | rejectattr(1, 'equalto', db19_root_patch_set)
          | map(attribute=0) | list }}
   vars:
+    # Rows that belong to the target Release Update: either the RU version shows
+    # up in the description, or the patch id is one of the resolved target
+    # patches. Both, because Oracle's wording differs per patch type.
+    db19_sqlpatch_target: >-
+      {{ db19_post.sqlpatch | default([])
+         | selectattr(3, 'search', db_target_ru | regex_escape)
+         | list
+         + (db19_post.sqlpatch | default([])
+            | selectattr(0, 'in', db19_expected_patches | default([]))
+            | rejectattr(3, 'search', db_target_ru | regex_escape)
+            | list) }}
     db19_root_patch_set: >-
       {{ (db19_post.container_patch_sets | default([])
           | selectattr(0, 'equalto', '1') | map(attribute=1) | first)
@@ -272,6 +325,7 @@
              'home_patches': db19_home_patches,
              'expected_patches': db19_expected_patches,
              'missing_patches': db19_missing_patches,
+             'bundled_patches': db19_bundled_patches,
              'containers_out_of_sync': db19_pdb_gap,
              'listener_services': db19_listener_services,
              'restore_points': db19_post.restore_points | default([]),
@@ -290,6 +344,9 @@
       - "HARD every sqlpatch row SUCCESS .: {{ db19_check_sqlpatch | ternary('PASS', 'FAIL') }}"
       - "HARD datapatch nothing pending ..: {{ db19_check_datapatch | ternary('PASS', 'FAIL') }}"
       - "HARD containers in sync .........: {{ db19_check_containers | ternary('PASS', 'FAIL') }}"
+      - >-
+        bundled, members counted individually:
+        {{ db19_bundled_patches | join('; ') | default('none', true) }}
       - >-
         soft binary patch set complete ..:
         {{ db19_check_binary | ternary('PASS', 'FAIL') }}
