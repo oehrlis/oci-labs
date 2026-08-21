@@ -1,0 +1,154 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/rollback.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Roll the lab database back to its pre-patch state.
+# Notes......: Deliberately NOT part of the standard quarterly run (decided
+#              2026-08-21) - it adds roughly half an hour and makes the cycle
+#              more fragile. It exists because "can we get back?" is the question
+#              customers actually ask, and answering it with a measured run beats
+#              answering it with a diagram.
+#
+#              Sequence, and why in this order:
+#                1. shut down from the TARGET home - that is where the instance
+#                   is running right now
+#                2. point oratab back at the base home before anything starts
+#                   again, so a stray dbstart cannot come up patched
+#                3. mount from the BASE home and flash back - the dictionary
+#                   returns to its pre-patch content, which only matches
+#                   pre-patch binaries
+#                4. open resetlogs, then open the PDBs, which stay closed after
+#                   a resetlogs open
+#
+#              Requires db19_drop_grp_after_patching=false (the default), which
+#              is what keeps the restore point around after the deploy.
+#
+#              Opt-in only: tagged "never" plus "rollback".
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Find the guaranteed restore point
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0
+      select name from v$restore_point
+       where guarantee_flashback_database = 'YES'
+       order by scn fetch first 1 rows only;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_rollback_grp
+  changed_when: false
+
+- name: Require a restore point to roll back to
+  ansible.builtin.assert:
+    that:
+      - db19_rollback_grp.stdout | trim | length > 0
+    fail_msg: >-
+      No guaranteed restore point found for {{ oracle_sid }}. A rollback needs
+      the restore point that the deploy created - it only survives when
+      db19_drop_grp_after_patching is false.
+    success_msg: "Rolling back to {{ db19_rollback_grp.stdout | trim }}."
+
+- name: Shut the database down from the target home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      shutdown immediate
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_rollback_shutdown
+  changed_when: db19_rollback_shutdown.rc == 0
+
+# Before anything can start again - a dbstart or the systemd unit firing between
+# these two steps must not bring the database up on patched binaries.
+- name: Point oratab back at the base home
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_sid }}:"
+    line: "{{ oracle_sid }}:{{ oracle_home_base }}:N"
+    backup: true
+
+- name: Flash the database back and open it from the base home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_base }}/bin/sqlplus -s / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      startup mount
+      flashback database to restore point {{ db19_rollback_grp.stdout | trim }};
+      alter database open resetlogs;
+      -- PDBs stay closed after an open resetlogs.
+      alter pluggable database all open;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_rollback_flashback
+  changed_when: db19_rollback_flashback.rc == 0
+
+- name: Restart the listener from the base home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_base }}/bin/lsnrctl stop  || true
+      {{ oracle_home_base }}/bin/lsnrctl start
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_base }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oracle_home_base }}/network/admin"
+  register: db19_rollback_listener
+  changed_when: db19_rollback_listener.rc == 0
+
+# The same snapshot the baseline used, so the rolled-back state can be diffed
+# against what the database looked like before the patch.
+- name: Capture the rolled-back state
+  ansible.builtin.include_tasks: db_snapshot.yml
+  vars:
+    db19_snapshot_label: rolledback
+    db19_snapshot_home: "{{ oracle_home_base }}"
+
+- name: Assert the database is back at the base Release Update
+  ansible.builtin.assert:
+    that:
+      - (db19_snapshot.db.version_full | default('unknown'))
+        is match('^' ~ (db_base_ru | regex_escape) ~ '(\.|$)')
+    fail_msg: >-
+      After the rollback the database reports
+      "{{ db19_snapshot.db.version_full | default('?') }}" instead of the base
+      Release Update {{ db_base_ru }}.
+    success_msg: >-
+      Rollback complete - {{ oracle_sid }} runs
+      {{ db19_snapshot.db.version_full | default('?') }} from
+      {{ oracle_home_base }}.
