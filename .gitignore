@@ -26,3 +26,6 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+# CPU test evidence fetched from the lab hosts - output, not source.
+# Commit a run deliberately when it is worth keeping as a reference.
+ansible/reports/

@@ -1,0 +1,161 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/db_snapshot.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Capture one comparable state snapshot of the lab database.
+# Notes......: Called twice per CPU test - once before the patch (label
+#              "baseline", from the source home) and once after (label "post",
+#              from the target home). verify.yml compares the two, because the
+#              numbers that matter are deltas: an invalid object that was already
+#              invalid before the patch is not a patch defect, an absolute count
+#              of zero is not a realistic pass criterion.
+#
+#              Callers set:
+#                db19_snapshot_label  baseline | post
+#                db19_snapshot_home   ORACLE_HOME to query from
+#
+#              Output shape - pipe-delimited lines, one section per prefix,
+#              deliberately not SQL/JSON generation. JSON_OBJECT in sqlplus needs
+#              exact LONG/LINESIZE handling and silently truncates; a flat line
+#              format survives every sqlplus setting and is trivial to diff.
+#                DB|<key>|<value>
+#                COMP|<comp_id>|<version>|<status>
+#                INVALID|<owner>|<count>
+#                PDB|<name>|<open_mode>|<restricted>
+#                SQLPATCH|<patch_id>|<action>|<status>|<description>
+#                RU|<ru_version>|<patch_id>
+#                RP|<name>|<guarantee>
+#                CDBSET|<con_id>|<comma separated applied patch ids>
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Set the snapshot parameters
+  ansible.builtin.set_fact:
+    db19_snapshot_label: "{{ db19_snapshot_label | default('baseline') }}"
+    db19_snapshot_home: "{{ db19_snapshot_home | default(oracle_home_base) }}"
+
+# failed_when: false on purpose - a snapshot is evidence collection, not a gate.
+# The gates live in verify.yml and act on what was collected.
+- name: Collect the database snapshot - {{ db19_snapshot_label }}
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ db19_snapshot_home }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set heading off feedback off pagesize 0 lines 400 trimspool on
+      set echo off verify off termout on
+      whenever sqlerror continue
+      select 'DB|version_full|' || version_full from v$instance;
+      select 'DB|status|' || status from v$instance;
+      select 'DB|instance_name|' || instance_name from v$instance;
+      select 'DB|cdb|' || cdb from v$database;
+      select 'DB|open_mode|' || open_mode from v$database;
+      select 'DB|oracle_home|' || sys_context('userenv', 'oracle_home') from dual;
+      select 'COMP|' || comp_id || '|' || version || '|' || status
+        from dba_registry order by comp_id;
+      select 'INVALID|' || owner || '|' || count(*)
+        from dba_objects where status = 'INVALID'
+       group by owner order by owner;
+      select 'PDB|' || name || '|' || open_mode || '|' || restricted
+        from v$pdbs order by name;
+      select 'SQLPATCH|' || patch_id || '|' || action || '|' || status || '|'
+             || replace(substr(description, 1, 80), '|', ' ')
+        from dba_registry_sqlpatch order by action_time;
+      select 'RU|' || ru_version || '|' || patch_id
+        from dba_registry_sqlpatch_ru_info order by ru_build_timestamp;
+      -- Per-container patch state. datapatch runs per PDB, so a PDB can lag
+      -- behind the root without anything in the root registry showing it.
+      -- LISTAGG turns each container's successfully applied set into one
+      -- comparable string, which makes the sync check a string comparison
+      -- instead of a set operation in Jinja.
+      select 'CDBSET|' || con_id || '|'
+             || listagg(patch_id, ',') within group (order by patch_id)
+        from cdb_registry_sqlpatch where status = 'SUCCESS'
+       group by con_id order by con_id;
+      select 'RP|' || name || '|' || guarantee_flashback_database
+        from v$restore_point order by name;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ db19_snapshot_home }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+    TNS_ADMIN: "{{ db19_snapshot_home }}/network/admin"
+  register: db19_snapshot_raw
+  changed_when: false
+  failed_when: false
+
+# Split the flat output into sections. Any line without a known prefix is
+# sqlplus noise (blank lines, ORA- messages) and is kept separately rather than
+# dropped, so a failed query is visible in the artifact instead of looking like
+# an empty result.
+- name: Structure the snapshot - {{ db19_snapshot_label }}
+  ansible.builtin.set_fact:
+    db19_snapshot: >-
+      {{ {
+           'label': db19_snapshot_label,
+           'home': db19_snapshot_home,
+           'collected': ansible_date_time.iso8601 | default('unknown'),
+           'db': dict(db19_snapshot_lines | select('match', '^DB\|')
+                      | map('regex_replace', '^DB\|', '')
+                      | map('split', '|') | list),
+           'components': db19_snapshot_lines | select('match', '^COMP\|')
+                         | map('regex_replace', '^COMP\|', '')
+                         | map('split', '|') | list,
+           'invalid_objects': dict(db19_snapshot_lines | select('match', '^INVALID\|')
+                              | map('regex_replace', '^INVALID\|', '')
+                              | map('split', '|') | list),
+           'pdbs': db19_snapshot_lines | select('match', '^PDB\|')
+                   | map('regex_replace', '^PDB\|', '')
+                   | map('split', '|') | list,
+           'sqlpatch': db19_snapshot_lines | select('match', '^SQLPATCH\|')
+                       | map('regex_replace', '^SQLPATCH\|', '')
+                       | map('split', '|') | list,
+           'ru_history': db19_snapshot_lines | select('match', '^RU\|')
+                         | map('regex_replace', '^RU\|', '')
+                         | map('split', '|') | list,
+           'restore_points': db19_snapshot_lines | select('match', '^RP\|')
+                             | map('regex_replace', '^RP\|', '')
+                             | map('split', '|') | list,
+           'container_patch_sets': db19_snapshot_lines | select('match', '^CDBSET\|')
+                                   | map('regex_replace', '^CDBSET\|', '')
+                                   | map('split', '|') | list,
+           'unparsed': db19_snapshot_lines
+                       | reject('match', '^(DB|COMP|INVALID|PDB|SQLPATCH|RU|RP|CDBSET)\|')
+                       | reject('match', '^\s*$') | list,
+         } }}
+  vars:
+    db19_snapshot_lines: >-
+      {{ db19_snapshot_raw.stdout_lines | default([]) | map('trim') | list }}
+
+- name: Persist the snapshot on the host - {{ db19_snapshot_label }}
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ db19_stage_dir }}/snapshot-{{ db19_snapshot_label }}-{{ oracle_sid }}.json"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    content: "{{ db19_snapshot | to_nice_json }}\n"
+
+- name: Report the snapshot - {{ db19_snapshot_label }}
+  ansible.builtin.debug:
+    msg:
+      - >-
+        {{ db19_snapshot_label }}: {{ db19_snapshot.db.version_full | default('?') }},
+        {{ db19_snapshot.db.status | default('?') }},
+        {{ db19_snapshot.pdbs | length }} PDB(s),
+        {{ db19_snapshot.invalid_objects.values() | map('int') | sum }} invalid object(s),
+        {{ db19_snapshot.components | length }} component(s)
+      - >-
+        restore points: {{ db19_snapshot.restore_points | map(attribute=0) | join(', ')
+                           | default('none', true) }}
+      - >-
+        {{ 'sqlplus noise: ' ~ (db19_snapshot.unparsed | join(' / '))
+           if db19_snapshot.unparsed | length > 0 else 'no sqlplus errors' }}

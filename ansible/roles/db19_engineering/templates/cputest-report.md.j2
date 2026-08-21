@@ -1,0 +1,100 @@
+{# ---------------------------------------------------------------------------
+   OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+   ---------------------------------------------------------------------------
+   Name...: cputest-report.md.j2
+   Purpose: Human-readable result of one quarterly CPU patch test.
+   Notes..: Rendered by verify.yml next to the JSON. This is the artifact that
+            outlives the lab, so it repeats the context (patch lists, versions,
+            AutoUpgrade build) instead of assuming anyone still has the run log.
+   --------------------------------------------------------------------------- #}
+# CPU Patch Test {{ oracle_sid }} - {{ db_base_ru }} to {{ db_target_ru }}
+
+- Date: {{ ansible_date_time.iso8601 | default('unknown') }}
+- Host: {{ inventory_hostname }} ({{ ansible_distribution | default('?') }} {{ ansible_distribution_version | default('') }})
+- AutoUpgrade: {{ db19_autoupgrade_version | default('unknown') }}
+- Base home: `{{ oracle_home_base }}`
+- Target home: `{{ oracle_home_target }}`
+
+## Verdict
+
+{% set hard = [db19_check_version, db19_check_sqlpatch, db19_check_datapatch, db19_check_containers] %}
+{% if hard | select('equalto', false) | list | length == 0 %}
+**PASSED** - {{ oracle_sid }} runs {{ db19_post.db.version_full | default('?') }} from the target home.
+{% else %}
+**FAILED** - {{ hard | select('equalto', false) | list | length }} of {{ hard | length }} hard criteria did not pass. See the table below.
+{% endif %}
+
+## Checks
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Level | Check | Result | Detail |
+| --- | --- | --- | --- |
+| hard | version_full matches target | {{ db19_check_version | ternary('PASS', 'FAIL') }} | {{ db19_post.db.version_full | default('?') }} |
+| hard | every sqlpatch row SUCCESS | {{ db19_check_sqlpatch | ternary('PASS', 'FAIL') }} | {{ db19_post.sqlpatch | default([]) | length }} row(s) |
+| hard | datapatch nothing pending | {{ db19_check_datapatch | ternary('PASS', 'FAIL') }} | {{ db19_datapatch_pending | ternary('work pending', 'clean') }} |
+| hard | containers in sync | {{ db19_check_containers | ternary('PASS', 'FAIL') }} | {{ db19_pdb_gap | length | ternary('CON_ID ' ~ (db19_pdb_gap | join(',')) ~ ' behind root', 'all containers at root level') }} |
+| soft | binary patch set complete | {{ db19_check_binary | ternary('PASS', 'FAIL') }} | {{ db19_missing_patches | length | ternary('missing ' ~ (db19_missing_patches | join(',')), 'all expected patches in the home') }} |
+| soft | components valid | {{ db19_check_components | ternary('PASS', 'FAIL') }} | {{ db19_post.components | default([]) | length }} component(s) |
+| soft | no new invalid objects | {{ db19_check_invalid | ternary('PASS', 'FAIL') }} | {{ db19_invalid_before }} before, {{ db19_invalid_after }} after, delta {{ db19_invalid_delta }} |
+| soft | listener serves database | {{ db19_check_listener | ternary('PASS', 'FAIL') }} | {{ db19_listener_services | join(', ') | default('none', true) }} |
+| smoke | PL/SQL package compile and call | {{ 'PASS' if (db19_smoke_check_plsql | default(false) | bool) else ('SKIPPED' if db19_smoke_check_plsql is not defined else 'FAIL') }} | throwaway package in {{ db19_smoke_pdb | default('?') }} |
+| smoke | OJVM Java stored procedure | {{ 'PASS' if (db19_smoke_check_ojvm | default(false) | bool) else ('SKIPPED' if db19_smoke_check_ojvm is not defined else 'FAIL') }} | JDK {{ db19_smoke_jdk | default('n/a') }} |
+| smoke | Data Pump export and import | {{ 'PASS' if (db19_smoke_check_datapump | default(false) | bool) else ('SKIPPED' if db19_smoke_check_datapump is not defined else 'FAIL') }} | 100 rows round trip |
+
+<!-- markdownlint-restore -->
+
+## Requested patch sets
+
+```text
+base   {{ db19_patch_list_base | trim }}
+target {{ db19_patch_list_target | trim }}
+```
+
+Resolved patch numbers found in the target home:
+
+```text
+{{ db19_home_patches | join(', ') | default('none', true) }}
+```
+
+## Release Update history
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Release Update | Patch |
+| --- | --- |
+{% for row in db19_post.ru_history | default([]) %}
+| {{ row[0] }} | {{ row[1] }} |
+{% endfor %}
+
+<!-- markdownlint-restore -->
+
+## Containers
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| PDB | Open mode | Restricted |
+| --- | --- | --- |
+{% for row in db19_post.pdbs | default([]) %}
+| {{ row[0] }} | {{ row[1] }} | {{ row[2] | default('?') }} |
+{% endfor %}
+
+<!-- markdownlint-restore -->
+
+## Rollback
+
+- Old home retained: `{{ oracle_home_base }}`
+- Restore point(s): {{ (db19_post.restore_points | default([]) | map(attribute=0) | join(', ')) | default('none', true) }}
+{% if (db19_post.restore_points | default([])) | length > 0 %}
+- Exercise the rollback with `make cpu-lab-rollback` - it is deliberately not part of the standard run.
+{% else %}
+- No restore point present, so a flashback rollback is not available for this run.
+{% endif %}
+
+{% if (db19_post.unparsed | default([])) | length > 0 %}
+## sqlplus messages
+
+```text
+{{ db19_post.unparsed | join('\n') }}
+```
+{% endif %}

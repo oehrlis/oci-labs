@@ -4,20 +4,47 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/verify.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
-# Purpose....: Post-patch verification for the CPU test.
-# Notes......: Confirms the database runs from the target ORACLE_HOME at the
-#              expected Release Update, that datapatch left no pending actions,
-#              and that the registry has no errors. Read-only - safe to re-run.
+# Date.......: 2026.08.21
+# Version....: v0.2.0
+# Purpose....: Verify and report the outcome of a quarterly CPU patch test.
+# Notes......: Four levels, because a patch can fail at four different places:
+#                binary     the patch is in the ORACLE_HOME (opatch)
+#                sql        datapatch applied it to the data dictionary
+#                container  every PDB got it, not just the root
+#                runtime    the database and listener still work
+#
+#              Gate policy (decided 2026-08-21): the hard criteria fail the play,
+#              everything else is collected and reported even after a hard
+#              failure. That keeps the exit code meaningful without truncating
+#              the evidence - a red run must still produce a full report.
+#
+#              Hard : version_full, every sqlpatch row SUCCESS, datapatch has
+#                     nothing pending, every PDB at the root's patch level
+#              Soft : invalid-object delta, component validity, listener
+#                     services, binary-vs-resolved-patch-set comparison
+#
+#              Everything lands in an artifact set, because the lab is destroyed
+#              after the test and an Ansible stdout is not a result:
+#                <stage>/cputest-<SID>-<base>-to-<target>-<date>.json
+#                <stage>/cputest-<SID>-<base>-to-<target>-<date>.md
+#              fetch_reports.yml pulls both to the control node.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 
+- name: Derive the report file stem
+  ansible.builtin.set_fact:
+    db19_report_stem: >-
+      {{ 'cputest-' ~ oracle_sid ~ '-' ~ (db_base_ru | replace('.', '_'))
+         ~ '-to-' ~ (db_target_ru | replace('.', '_')) ~ '-'
+         ~ (ansible_date_time.date | replace('-', '')) }}
+
 - name: Resolve the ORACLE_HOME registered in oratab
   become: true
   ansible.builtin.shell:
-    cmd: "set -o pipefail; awk -F: '/^{{ oracle_sid }}:/ {print $2}' /etc/oratab"
+    cmd: |
+      set -o pipefail
+      awk -F: -v sid="{{ oracle_sid }}" '$1 == sid { print $2 }' /etc/oratab | tail -1
     executable: /bin/bash
   register: db19_oratab_home
   changed_when: false
@@ -27,81 +54,88 @@
     that:
       - db19_oratab_home.stdout | trim == oracle_home_target
     fail_msg: >-
-      oratab still points at "{{ db19_oratab_home.stdout | trim }}", expected
-      {{ oracle_home_target }}. The out-of-place move did not complete.
-    success_msg: "oratab points at the target home {{ oracle_home_target }}."
+      /etc/oratab points {{ oracle_sid }} at "{{ db19_oratab_home.stdout | trim }}"
+      instead of {{ oracle_home_target }}.
+    success_msg: "oratab points {{ oracle_sid }} at {{ oracle_home_target }}."
 
-- name: Query the database version and patch level
-  become: true
-  become_user: "{{ oracle_os_user }}"
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
-      set heading off feedback off pagesize 0 lines 200 trimspool on
-      select 'VERSION_FULL=' || version_full from v$instance;
-      select 'INSTANCE_STATUS=' || status from v$instance;
-      select 'ORACLE_HOME=' || sys_context('userenv', 'oracle_home') from dual;
-      select 'CDB=' || cdb from v$database;
-      exit
-      SQL
-    executable: /bin/bash
-  environment:
-    ORACLE_HOME: "{{ oracle_home_target }}"
-    ORACLE_BASE: "{{ oracle_base }}"
-    ORACLE_SID: "{{ oracle_sid }}"
-    TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
-  register: db19_verify_version
-  changed_when: false
+# ---------------------------------------------------------------------------
+# Post-patch snapshot - same query set as the baseline, from the target home
+# ---------------------------------------------------------------------------
 
-- name: Report the database version and patch level
-  ansible.builtin.debug:
-    msg: "{{ db19_verify_version.stdout_lines | select('search', '=') | list }}"
+- name: Capture the post-patch state
+  ansible.builtin.include_tasks: db_snapshot.yml
+  vars:
+    db19_snapshot_label: post
+    db19_snapshot_home: "{{ oracle_home_target }}"
 
-- name: Extract the reported version_full
+- name: Keep the post-patch snapshot under its own name
   ansible.builtin.set_fact:
-    db19_version_full: >-
-      {{ db19_verify_version.stdout | regex_search('VERSION_FULL=([0-9.]+)', '\1')
-         | default(['unknown'], true) | first }}
+    db19_post: "{{ db19_snapshot }}"
 
-- name: Assert the database reports the target Release Update
-  ansible.builtin.assert:
-    that:
-      - db19_version_full is match('^' ~ (db_target_ru | regex_escape) ~ '(\.|$)')
-    fail_msg: >-
-      Database reports version_full "{{ db19_version_full }}" but the target
-      Release Update is {{ db_target_ru }}. The patch did not take effect.
-    success_msg: "Database runs at {{ db19_version_full }} (target {{ db_target_ru }})."
+- name: Load the baseline snapshot for comparison
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ db19_stage_dir }}/snapshot-baseline-{{ oracle_sid }}.json"
+  register: db19_baseline_raw
+  failed_when: false
 
-- name: Check the DBA registry for errors
+# A missing baseline is not fatal - verify can be run standalone against an
+# already patched lab. The report then says so instead of inventing a delta.
+- name: Structure the baseline for comparison
+  ansible.builtin.set_fact:
+    db19_baseline: >-
+      {{ (db19_baseline_raw.content | b64decode | from_json)
+         if (db19_baseline_raw.content is defined) else {} }}
+
+# ---------------------------------------------------------------------------
+# Binary level - is the resolved patch set actually in the ORACLE_HOME?
+# ---------------------------------------------------------------------------
+
+- name: Read the patch inventory of the target home
   become: true
   become_user: "{{ oracle_os_user }}"
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
-      set heading off feedback off pagesize 0 lines 200 trimspool on
-      -- Column names verified against 19.31: PATCH_ID, PATCH_UID,
-      -- PATCH_DESCRIPTOR, RU_VERSION, RU_BUILD_DESCRIPTION, RU_BUILD_TIMESTAMP,
-      -- PATCH_DIRECTORY. There is no VERSION_FULL or COMP_ID here.
-      select 'RU_APPLIED=' || ru_version || ' (' || patch_id || ')'
-        from dba_registry_sqlpatch_ru_info
-       order by ru_build_timestamp;
-      select 'INVALID_OBJECTS=' || count(*) from dba_objects where status = 'INVALID';
-      exit
-      SQL
-    executable: /bin/bash
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_target }}/OPatch/opatch lsinventory -oh {{ oracle_home_target }}"
   environment:
     ORACLE_HOME: "{{ oracle_home_target }}"
     ORACLE_BASE: "{{ oracle_base }}"
-    ORACLE_SID: "{{ oracle_sid }}"
-  register: db19_verify_registry
+  register: db19_lsinventory
   changed_when: false
   failed_when: false
 
-- name: Report the registry state
-  ansible.builtin.debug:
-    msg: "{{ db19_verify_registry.stdout_lines | default([]) }}"
+- name: Extract the applied patch IDs from the inventory
+  ansible.builtin.set_fact:
+    db19_home_patches: >-
+      {{ db19_lsinventory.stdout | default('')
+         | regex_findall('^Patch +([0-9]+)', multiline=True) | unique | list }}
+
+- name: Load the resolved patch set of the target Release Update
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ db19_stage_dir }}/patchset-{{ db_target_ru }}.json"
+  register: db19_target_patchset_raw
+  failed_when: false
+
+# The file names in the manifest carry the patch number as p<id>_..., which is
+# what opatch reports. Comparing numbers rather than descriptions keeps this
+# independent of Oracle's wording.
+- name: Determine which resolved patches are missing from the home
+  ansible.builtin.set_fact:
+    db19_expected_patches: >-
+      {{ db19_expected_ids }}
+    db19_missing_patches: >-
+      {{ db19_expected_ids | difference(db19_home_patches) }}
+  vars:
+    db19_expected_ids: >-
+      {{ ((db19_target_patchset_raw.content | b64decode | from_json).patches
+          | default([]) | map(attribute='files') | flatten
+          | map(attribute='name') | join(' ')
+          | regex_findall('p([0-9]+)_')) | unique | list
+         if (db19_target_patchset_raw.content is defined) else [] }}
+
+# ---------------------------------------------------------------------------
+# SQL level - did datapatch finish, and is anything pending?
+# ---------------------------------------------------------------------------
 
 - name: Confirm datapatch has nothing pending
   become: true
@@ -116,15 +150,209 @@
   changed_when: false
   failed_when: false
 
-- name: Report the datapatch prereq outcome
-  ansible.builtin.debug:
-    msg: "{{ (db19_datapatch_prereq.stdout_lines | default([]))[-15:] }}"
+- name: Classify the datapatch prereq output
+  ansible.builtin.set_fact:
+    db19_datapatch_pending: >-
+      {{ db19_datapatch_prereq.stdout | default('')
+         is search('(?i)nothing to (apply|roll back)') | ternary(false, true) }}
 
-- name: Summarise the CPU test result
+# ---------------------------------------------------------------------------
+# Runtime level - listener and services
+# ---------------------------------------------------------------------------
+
+- name: Check the listener and its services
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_target }}/bin/lsnrctl status"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
+  register: db19_lsnrctl
+  changed_when: false
+  failed_when: false
+
+- name: Determine which database services the listener knows
+  ansible.builtin.set_fact:
+    db19_listener_services: >-
+      {{ db19_lsnrctl.stdout | default('')
+         | regex_findall('Service "([^"]+)" has') | unique | list }}
+
+# ---------------------------------------------------------------------------
+# Evaluation - hard criteria first, then the soft ones
+# ---------------------------------------------------------------------------
+
+- name: Evaluate the hard criteria
+  ansible.builtin.set_fact:
+    db19_check_version: >-
+      {{ (db19_post.db.version_full | default('unknown'))
+         is match('^' ~ (db_target_ru | regex_escape) ~ '(\.|$)') }}
+    db19_check_sqlpatch: >-
+      {{ (db19_post.sqlpatch | default([]) | length > 0)
+         and (db19_post.sqlpatch | rejectattr(2, 'equalto', 'SUCCESS')
+              | list | length == 0) }}
+    db19_check_datapatch: "{{ not db19_datapatch_pending }}"
+    db19_pdb_gap: >-
+      {{ db19_post.container_patch_sets | default([])
+         | rejectattr(0, 'equalto', '1')
+         | rejectattr(1, 'equalto', db19_root_patch_set)
+         | map(attribute=0) | list }}
+  vars:
+    db19_root_patch_set: >-
+      {{ (db19_post.container_patch_sets | default([])
+          | selectattr(0, 'equalto', '1') | map(attribute=1) | first)
+         | default('', true) }}
+
+- name: Derive the container sync verdict
+  ansible.builtin.set_fact:
+    db19_check_containers: "{{ (db19_pdb_gap | length) == 0 }}"
+
+- name: Evaluate the soft criteria
+  ansible.builtin.set_fact:
+    db19_invalid_before: >-
+      {{ (db19_baseline.invalid_objects | default({})).values() | map('int') | sum }}
+    db19_invalid_after: >-
+      {{ (db19_post.invalid_objects | default({})).values() | map('int') | sum }}
+    db19_check_components: >-
+      {{ db19_post.components | default([])
+         | rejectattr(2, 'in', ['VALID', 'OPTION OFF']) | list | length == 0 }}
+    db19_check_binary: "{{ (db19_missing_patches | length) == 0 }}"
+    db19_check_listener: >-
+      {{ db19_listener_services | select('search', oracle_sid | lower) | list | length > 0
+         or db19_listener_services | select('search', oracle_sid) | list | length > 0 }}
+
+- name: Compute the invalid-object delta
+  ansible.builtin.set_fact:
+    db19_invalid_delta: "{{ (db19_invalid_after | int) - (db19_invalid_before | int) }}"
+    db19_check_invalid: >-
+      {{ ((db19_invalid_after | int) - (db19_invalid_before | int)) <= 0 }}
+
+# ---------------------------------------------------------------------------
+# Report - console, then the artifacts
+# ---------------------------------------------------------------------------
+
+- name: Build the result record
+  ansible.builtin.set_fact:
+    db19_result: >-
+      {{ {
+           'database': oracle_sid,
+           'host': inventory_hostname,
+           'date': ansible_date_time.iso8601 | default('unknown'),
+           'base_ru': db_base_ru,
+           'target_ru': db_target_ru,
+           'base_home': oracle_home_base,
+           'target_home': oracle_home_target,
+           'autoupgrade': db19_autoupgrade_version | default('unknown'),
+           'report_stem': db19_report_stem,
+           'patch_list_base': db19_patch_list_base,
+           'patch_list_target': db19_patch_list_target,
+           'checks': {
+             'hard': {
+               'version_full': db19_check_version,
+               'sqlpatch_all_success': db19_check_sqlpatch,
+               'datapatch_nothing_pending': db19_check_datapatch,
+               'containers_in_sync': db19_check_containers,
+             },
+             'soft': {
+               'binary_patchset_complete': db19_check_binary,
+               'components_valid': db19_check_components,
+               'no_new_invalid_objects': db19_check_invalid,
+               'listener_serves_database': db19_check_listener,
+               'smoke_plsql': db19_smoke_check_plsql | default('skipped'),
+               'smoke_ojvm': db19_smoke_check_ojvm | default('skipped'),
+               'smoke_datapump': db19_smoke_check_datapump | default('skipped'),
+             },
+           },
+           'measured': {
+             'version_full': db19_post.db.version_full | default('unknown'),
+             'invalid_objects_before': db19_invalid_before | int,
+             'invalid_objects_after': db19_invalid_after | int,
+             'invalid_objects_delta': db19_invalid_delta | int,
+             'home_patches': db19_home_patches,
+             'expected_patches': db19_expected_patches,
+             'missing_patches': db19_missing_patches,
+             'containers_out_of_sync': db19_pdb_gap,
+             'listener_services': db19_listener_services,
+             'restore_points': db19_post.restore_points | default([]),
+             'ojvm_jdk': db19_smoke_jdk | default('n/a'),
+           },
+           'baseline': db19_baseline,
+           'post': db19_post,
+         } }}
+
+- name: Report the CPU test result
   ansible.builtin.debug:
     msg:
-      - "Database.........: {{ oracle_sid }}"
-      - "Base RU..........: {{ db_base_ru }} ({{ oracle_home_base }})"
-      - "Target RU........: {{ db_target_ru }} ({{ oracle_home_target }})"
-      - "Reported version.: {{ db19_version_full }}"
-      - "Old home retained for rollback testing."
+      - "CPU patch test {{ oracle_sid }}: {{ db_base_ru }} -> {{ db_target_ru }}"
+      - "version_full ....................: {{ db19_post.db.version_full | default('?') }}"
+      - "HARD version matches target .....: {{ db19_check_version | ternary('PASS', 'FAIL') }}"
+      - "HARD every sqlpatch row SUCCESS .: {{ db19_check_sqlpatch | ternary('PASS', 'FAIL') }}"
+      - "HARD datapatch nothing pending ..: {{ db19_check_datapatch | ternary('PASS', 'FAIL') }}"
+      - "HARD containers in sync .........: {{ db19_check_containers | ternary('PASS', 'FAIL') }}"
+      - >-
+        soft binary patch set complete ..:
+        {{ db19_check_binary | ternary('PASS', 'FAIL') }}
+        {{ db19_missing_patches | length
+           | ternary('missing ' ~ (db19_missing_patches | join(',')), '') }}
+      - "soft components valid ...........: {{ db19_check_components | ternary('PASS', 'FAIL') }}"
+      - >-
+        soft no new invalid objects .....:
+        {{ db19_check_invalid | ternary('PASS', 'FAIL') }}
+        ({{ db19_invalid_before }} -> {{ db19_invalid_after }},
+        delta {{ db19_invalid_delta }})
+      - "soft listener serves database ...: {{ db19_check_listener | ternary('PASS', 'FAIL') }}"
+      - >-
+        smoke PL/SQL, OJVM, Data Pump ...:
+        {{ db19_smoke_check_plsql | default('skipped') }},
+        {{ db19_smoke_check_ojvm | default('skipped') }},
+        {{ db19_smoke_check_datapump | default('skipped') }}
+      - "restore point ...................: {{ (db19_post.restore_points | default([]) | map(attribute=0) | join(', ')) | default('none', true) }}"
+      - "old home retained for rollback ..: {{ oracle_home_base }}"
+
+- name: Write the result artifacts on the host
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ db19_stage_dir }}/{{ db19_report_stem }}.{{ item.ext }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    content: "{{ item.body }}"
+  loop:
+    - ext: json
+      body: "{{ db19_result | to_nice_json }}\n"
+    - ext: md
+      body: "{{ lookup('template', 'cputest-report.md.j2') }}"
+  loop_control:
+    label: "{{ db19_report_stem }}.{{ item.ext }}"
+
+- name: Report where the artifacts are
+  ansible.builtin.debug:
+    msg: >-
+      Artifacts: {{ db19_stage_dir }}/{{ db19_report_stem }}.json and .md -
+      fetched to the control node by the fetch_reports tasks.
+
+# Fetching happens BEFORE the gate, not after: an assert that fails ends the
+# play, and evidence that never left the host is lost when the lab is destroyed.
+- name: Fetch the evidence to the control node
+  ansible.builtin.include_tasks: fetch_reports.yml
+
+# The gate comes last on purpose: everything above has already been collected
+# and written, so a failing run still leaves a complete report behind.
+- name: Assert the hard criteria
+  ansible.builtin.assert:
+    that:
+      - db19_check_version | bool
+      - db19_check_sqlpatch | bool
+      - db19_check_datapatch | bool
+      - db19_check_containers | bool
+    fail_msg: >-
+      CPU patch test FAILED.
+      version={{ db19_check_version | ternary('ok', 'wrong: ' ~ (db19_post.db.version_full | default('?'))) }},
+      sqlpatch={{ db19_check_sqlpatch | ternary('ok', 'rows not SUCCESS') }},
+      datapatch={{ db19_check_datapatch | ternary('ok', 'work still pending') }},
+      containers={{ db19_check_containers | ternary('ok', 'out of sync: ' ~ (db19_pdb_gap | join(','))) }}.
+      Full evidence: {{ db19_stage_dir }}/{{ db19_report_stem }}.md
+    success_msg: >-
+      CPU patch test PASSED - {{ oracle_sid }} runs
+      {{ db19_post.db.version_full | default('?') }} from {{ oracle_home_target }}.

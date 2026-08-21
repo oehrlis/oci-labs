@@ -1,0 +1,278 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/smoke.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Functional smoke test of the components a quarterly patch touches.
+# Notes......: Verifying that patches are registered says nothing about whether
+#              the patched code still works. One canary per patched component,
+#              deliberately small:
+#
+#                PL/SQL     compile and execute a package        (RU)
+#                OJVM       compile and call a Java stored proc  (OJVM RU)
+#                Data Pump  export a table, drop it, import it   (DPBP)
+#
+#              Everything runs in its own throwaway schema and is dropped again,
+#              so the test leaves the database as it found it. Results are
+#              reported as soft checks: a failure here is a real finding, but it
+#              is not the same statement as "the patch did not apply", which is
+#              what the hard gate in verify.yml asserts.
+#
+#              All three tasks carry failed_when: false and are evaluated
+#              afterwards, so one broken canary does not hide the other two.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Set the smoke-test parameters
+  ansible.builtin.set_fact:
+    db19_smoke_schema: "{{ db19_smoke_schema | default('CPUSMOKE') }}"
+    db19_smoke_dir: "{{ db19_smoke_dir | default('/tmp/cpusmoke') }}"
+    db19_smoke_pdb: "{{ db19_smoke_pdb | default(db19_pdb_name) }}"
+    # Throwaway credential for a throwaway schema that is dropped at the end of
+    # this file. Letters and digits only, so it needs no shell or SQL quoting -
+    # the point here is that it is not a fixed string in the repository.
+    db19_smoke_password: >-
+      {{ lookup('ansible.builtin.password', '/dev/null', length=24,
+                chars=['ascii_letters', 'digits']) }}
+  no_log: true
+
+- name: Create the smoke-test directory on the host
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_smoke_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0750"
+
+- name: Create the throwaway smoke-test schema
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback on pagesize 0
+      whenever sqlerror exit failure
+      -- PDB1 is where a realistic application would live; the root is not the
+      -- place to create application objects, not even throwaway ones.
+      alter session set container = {{ db19_smoke_pdb }};
+      declare
+        v_count number;
+      begin
+        select count(*) into v_count from dba_users where username = '{{ db19_smoke_schema }}';
+        if v_count > 0 then
+          execute immediate 'drop user {{ db19_smoke_schema }} cascade';
+        end if;
+      end;
+      /
+      create user {{ db19_smoke_schema }} identified by "{{ db19_smoke_password }}"
+        default tablespace users quota unlimited on users;
+      grant create session, create table, create procedure, create sequence,
+            create type, create view to {{ db19_smoke_schema }};
+      grant create any directory, datapump_exp_full_database,
+            datapump_imp_full_database to {{ db19_smoke_schema }};
+      exit
+      SQL
+    executable: /bin/bash
+  environment: &smoke_env
+    ORACLE_HOME: "{{ oracle_home_target }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+    TNS_ADMIN: "{{ oracle_home_target }}/network/admin"
+  register: db19_smoke_setup
+  changed_when: db19_smoke_setup.rc == 0
+  failed_when: false
+  no_log: true
+
+# ---------------------------------------------------------------------------
+# 1. PL/SQL - the Release Update touches the PL/SQL compiler and the dictionary
+# ---------------------------------------------------------------------------
+
+- name: Smoke test PL/SQL
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback off pagesize 0 lines 200
+      whenever sqlerror exit failure
+      alter session set container = {{ db19_smoke_pdb }};
+      create or replace package {{ db19_smoke_schema }}.smoke_pkg as
+        function ping return varchar2;
+      end smoke_pkg;
+      /
+      create or replace package body {{ db19_smoke_schema }}.smoke_pkg as
+        function ping return varchar2 is
+        begin
+          return 'plsql-ok';
+        end ping;
+      end smoke_pkg;
+      /
+      select 'PLSQL_RESULT=' || {{ db19_smoke_schema }}.smoke_pkg.ping from dual;
+      select 'PLSQL_INVALID=' || count(*) from dba_objects
+       where owner = '{{ db19_smoke_schema }}' and status = 'INVALID';
+      exit
+      SQL
+    executable: /bin/bash
+  environment: *smoke_env
+  register: db19_smoke_plsql
+  changed_when: false
+  failed_when: false
+
+# ---------------------------------------------------------------------------
+# 2. OJVM - only meaningful now that OJVM is part of both patch lists
+# ---------------------------------------------------------------------------
+
+- name: Smoke test OJVM
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback off pagesize 0 lines 200
+      whenever sqlerror exit failure
+      alter session set container = {{ db19_smoke_pdb }};
+      select 'OJVM_JDK=' || dbms_java.get_jdk_version from dual;
+      create or replace java source named "{{ db19_smoke_schema }}"."Smoke" as
+        public class Smoke {
+          public static String ping() { return "ojvm-ok"; }
+        }
+      /
+      alter java source "{{ db19_smoke_schema }}"."Smoke" compile;
+      create or replace function {{ db19_smoke_schema }}.smoke_java
+        return varchar2
+        as language java
+        name 'Smoke.ping() return java.lang.String';
+      /
+      select 'OJVM_RESULT=' || {{ db19_smoke_schema }}.smoke_java from dual;
+      exit
+      SQL
+    executable: /bin/bash
+  environment: *smoke_env
+  register: db19_smoke_ojvm
+  changed_when: false
+  failed_when: false
+
+# ---------------------------------------------------------------------------
+# 3. Data Pump - the Data Pump bundle patch is in every quarterly set
+# ---------------------------------------------------------------------------
+
+- name: Smoke test Data Pump
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      umask 077
+      cd {{ db19_smoke_dir }}
+      rm -f smoke.dmp smoke_exp.log smoke_imp.log smoke.par
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback off pagesize 0
+      whenever sqlerror exit failure
+      alter session set container = {{ db19_smoke_pdb }};
+      create or replace directory smoke_dir as '{{ db19_smoke_dir }}';
+      grant read, write on directory smoke_dir to {{ db19_smoke_schema }};
+      create table {{ db19_smoke_schema }}.smoke_tab as
+        select level as id, 'row ' || level as txt from dual connect by level <= 100;
+      exit
+      SQL
+      # The credential lives in a 0600 parfile, never in argv - a Data Pump
+      # command line is visible in ps to every user on the host.
+      cat > smoke.par <<PAR
+      userid={{ db19_smoke_schema }}/{{ db19_smoke_password }}@{{ db19_smoke_pdb }}
+      directory=smoke_dir
+      dumpfile=smoke.dmp
+      tables={{ db19_smoke_schema }}.smoke_tab
+      PAR
+      {{ oracle_home_target }}/bin/expdp parfile=smoke.par logfile=smoke_exp.log > /dev/null
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      alter session set container = {{ db19_smoke_pdb }};
+      drop table {{ db19_smoke_schema }}.smoke_tab purge;
+      exit
+      SQL
+      {{ oracle_home_target }}/bin/impdp parfile=smoke.par logfile=smoke_imp.log > /dev/null
+      rm -f smoke.par
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback off pagesize 0
+      alter session set container = {{ db19_smoke_pdb }};
+      select 'DATAPUMP_ROWS=' || count(*) from {{ db19_smoke_schema }}.smoke_tab;
+      exit
+      SQL
+    executable: /bin/bash
+  environment: *smoke_env
+  register: db19_smoke_datapump
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+# ---------------------------------------------------------------------------
+# Evaluation and cleanup
+# ---------------------------------------------------------------------------
+
+- name: Evaluate the smoke tests
+  ansible.builtin.set_fact:
+    db19_smoke_check_plsql: >-
+      {{ (db19_smoke_plsql.stdout | default('')) is search('PLSQL_RESULT=plsql-ok')
+         and (db19_smoke_plsql.stdout | default('')) is search('PLSQL_INVALID=0') }}
+    db19_smoke_check_ojvm: >-
+      {{ (db19_smoke_ojvm.stdout | default('')) is search('OJVM_RESULT=ojvm-ok') }}
+    db19_smoke_check_datapump: >-
+      {{ (db19_smoke_datapump.stdout | default('')) is search('DATAPUMP_ROWS=100') }}
+    db19_smoke_jdk: >-
+      {{ (db19_smoke_ojvm.stdout | default('')
+          | regex_search('OJVM_JDK=(\S+)', '\1') | default(['unknown'], true) | first) }}
+
+- name: Report the smoke-test results
+  ansible.builtin.debug:
+    msg:
+      - "smoke PL/SQL package compile + call : {{ db19_smoke_check_plsql | ternary('PASS', 'FAIL') }}"
+      - "smoke OJVM Java stored procedure ...: {{ db19_smoke_check_ojvm | ternary('PASS', 'FAIL') }} (JDK {{ db19_smoke_jdk }})"
+      - "smoke Data Pump export/import round : {{ db19_smoke_check_datapump | ternary('PASS', 'FAIL') }}"
+
+- name: Show the output of any failed smoke test
+  ansible.builtin.debug:
+    msg: "{{ item.name }}: {{ (item.res.stdout_lines | default([]))[-12:] }}"
+  loop:
+    - name: plsql
+      res: "{{ db19_smoke_plsql }}"
+      ok: "{{ db19_smoke_check_plsql }}"
+    - name: ojvm
+      res: "{{ db19_smoke_ojvm }}"
+      ok: "{{ db19_smoke_check_ojvm }}"
+    - name: datapump
+      res: "{{ db19_smoke_datapump }}"
+      ok: "{{ db19_smoke_check_datapump }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (item.ok | bool)
+
+# Cleanup is unconditional: a throwaway schema left behind would show up as
+# "new invalid objects" or stray segments in the next run's baseline.
+- name: Drop the smoke-test objects
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback off pagesize 0
+      whenever sqlerror continue
+      alter session set container = {{ db19_smoke_pdb }};
+      drop user {{ db19_smoke_schema }} cascade;
+      drop directory smoke_dir;
+      exit
+      SQL
+      rm -rf {{ db19_smoke_dir }}
+    executable: /bin/bash
+  environment: *smoke_env
+  register: db19_smoke_cleanup
+  changed_when: db19_smoke_cleanup.rc == 0
+  failed_when: false

@@ -99,7 +99,28 @@
   tags:
     - patch
 
-- name: Verify the patch level
+- name: Roll back to the pre-patch state
+  ansible.builtin.import_tasks: rollback.yml
+  tags:
+    - never
+    - rollback
+
+- name: Push a self-made gold image to Object Storage
+  ansible.builtin.import_tasks: push_gold_image.yml
+  when: db19_gold_image_par | default('') | length > 0
+  tags:
+    - never
+    - goldimage_push
+
+- name: Smoke test the patched components
+  ansible.builtin.import_tasks: smoke.yml
+  when: db19_run_smoke | bool
+  tags:
+    - patch
+    - verify
+    - smoke
+
+- name: Verify the patched database
   ansible.builtin.import_tasks: verify.yml
   tags:
     - patch

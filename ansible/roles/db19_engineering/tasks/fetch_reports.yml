@@ -1,0 +1,59 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/fetch_reports.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Pull the CPU test evidence to the control node.
+# Notes......: The lab is destroyed after a test, so anything left on the host is
+#              lost. This runs at the end of the verify phase and collects the
+#              result report, both database snapshots and the resolved patch-set
+#              manifests into reports/<host>/ in the repository.
+#
+#              The reports directory is git-ignored by default: a snapshot holds
+#              object counts and patch levels of a lab database, which is not
+#              sensitive, but it is also not source. Commit a run deliberately
+#              when it is worth keeping as a reference.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Find the evidence files on the host
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns:
+      - "cputest-*.json"
+      - "cputest-*.md"
+      - "snapshot-*.json"
+      - "patchset-*.json"
+      - "patchset-*.txt"
+  register: db19_evidence
+
+- name: Ensure the local report directory exists
+  ansible.builtin.file:
+    path: "{{ db19_report_dir }}/{{ inventory_hostname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+# flat: true keeps the remote directory structure out of the local path - the
+# host name in the destination is enough to tell two labs apart.
+- name: Fetch the evidence to the control node
+  become: true
+  ansible.builtin.fetch:
+    src: "{{ item.path }}"
+    dest: "{{ db19_report_dir }}/{{ inventory_hostname }}/"
+    flat: true
+  loop: "{{ db19_evidence.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Report where the evidence landed
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_evidence.files | length }} file(s) fetched to
+      {{ db19_report_dir }}/{{ inventory_hostname }}/ - safe to destroy the lab.

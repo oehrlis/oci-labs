@@ -36,6 +36,20 @@
     success_msg: "Base home {{ oracle_home_base }} present, patching to {{ db_target_ru }}."
 
 # ---------------------------------------------------------------------------
+# 0. Baseline - the state to compare the patched database against
+# ---------------------------------------------------------------------------
+# Taken before anything is touched. Invalid objects, component versions and
+# patch history are only meaningful as a delta: an object that was already
+# invalid is not a patch defect, and "zero invalid objects" is not a realistic
+# pass criterion on a real database.
+
+- name: Capture the pre-patch baseline
+  ansible.builtin.include_tasks: db_snapshot.yml
+  vars:
+    db19_snapshot_label: baseline
+    db19_snapshot_home: "{{ oracle_home_base }}"
+
+# ---------------------------------------------------------------------------
 # 1. Download the target RU media
 # ---------------------------------------------------------------------------
 
