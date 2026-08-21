@@ -1,0 +1,146 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/push_gold_image.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Upload a self-made gold image plus its manifest to Object Storage.
+# Notes......: Uploads from the LAB HOST, not from the control node: the artifact
+#              is several GB and the host sits in the same region as the bucket,
+#              so a round trip over the operator's uplink would be the slowest
+#              possible path. The host has curl but no OCI CLI, hence a
+#              pre-authenticated request with write access rather than an API
+#              call - the Makefile target mints it, passes it in, and revokes it
+#              afterwards.
+#
+#              Two objects are written per gold image:
+#                <name>.zip               the artifact
+#                <name>.patchset.json     the manifest - resolved patch set of
+#                                         the RU it was built from, the artifact
+#                                         checksum, and how it was produced
+#
+#              The manifest is what makes the artifact self-describing. Without
+#              it a gold image is an opaque zip whose patch content nobody can
+#              state a quarter later.
+#
+#              Required:
+#                db19_gold_image_par   bucket PAR with write access, ends in /o/
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Require a write-enabled pre-authenticated request
+  ansible.builtin.assert:
+    that:
+      - db19_gold_image_par | default('') | length > 0
+      - db19_gold_image_par.endswith('/o/')
+    fail_msg: >-
+      db19_gold_image_par must be a bucket pre-authenticated request with write
+      access, ending in "/o/". Mint it with "make cpu-lab-goldimage-push", which
+      also revokes it when the upload is done.
+
+- name: Find the gold image on the host
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns: "goldimage-db-*.zip"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: db19_gold_image_files
+
+- name: Fail when there is no gold image to push
+  ansible.builtin.assert:
+    that:
+      - db19_gold_image_files.files | length > 0
+    fail_msg: >-
+      No goldimage-db-*.zip in {{ db19_stage_dir }}. Build one first by running
+      the install phase with db19_gold_image_create=true.
+
+- name: Select the newest gold image
+  ansible.builtin.set_fact:
+    db19_gold_artifact: >-
+      {{ db19_gold_image_files.files | sort(attribute='mtime') | last }}
+
+- name: Load the resolved patch set of the Release Update it was built from
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ db19_stage_dir }}/patchset-{{ db19_gold_image_ru | default(db_base_ru) }}.json"
+  register: db19_gold_patchset_raw
+  failed_when: false
+
+- name: Build the gold image manifest
+  ansible.builtin.set_fact:
+    db19_gold_manifest: >-
+      {{ {
+           'artifact': db19_gold_artifact.path | basename,
+           'sha256': db19_gold_artifact.checksum,
+           'size_bytes': db19_gold_artifact.size,
+           'release_update': db19_gold_image_ru | default(db_base_ru),
+           'edition': db19_edition,
+           'platform': db19_autoupgrade_platform,
+           'oracle_base': oracle_base,
+           'built_on': inventory_hostname,
+           'built_at': ansible_date_time.iso8601 | default('unknown'),
+           'autoupgrade': db19_autoupgrade_version | default('unknown'),
+           'requested_patch_list': db19_patch_list_base | trim,
+           'resolved_patches': (db19_gold_patchset_raw.content | b64decode
+                                | from_json).patches | default([])
+                               if (db19_gold_patchset_raw.content is defined)
+                               else [],
+         } }}
+
+- name: Write the manifest next to the artifact
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ db19_stage_dir }}/{{ db19_gold_manifest_name }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    content: "{{ db19_gold_manifest | to_nice_json }}\n"
+  vars:
+    db19_gold_manifest_name: >-
+      {{ (db19_gold_artifact.path | basename | regex_replace('\.zip$', ''))
+         ~ '.patchset.json' }}
+
+# curl instead of uri/get_url on purpose: the artifact is several GB and curl
+# streams it, while the uri module builds the request body in memory on a lab
+# host that is busy patching an Oracle home. curl also gives retry handling for
+# a large PUT for free.
+# no_log: the PAR URL is a bearer credential - anyone who reads it can write to
+# the bucket until it is revoked.
+- name: Upload the gold image and its manifest # noqa: command-instead-of-module
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      curl --fail --silent --show-error --retry 3 --retry-delay 5
+      -X PUT -T {{ db19_stage_dir }}/{{ item }}
+      {{ db19_gold_image_par }}{{ item }}
+  loop:
+    - "{{ db19_gold_artifact.path | basename }}"
+    - >-
+      {{ (db19_gold_artifact.path | basename | regex_replace('\.zip$', ''))
+         ~ '.patchset.json' }}
+  loop_control:
+    label: "{{ item }}"
+  register: db19_gold_upload
+  changed_when: db19_gold_upload.rc == 0
+  no_log: true
+
+- name: Report what was pushed
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Pushed {{ db19_gold_artifact.path | basename }}
+        ({{ (db19_gold_artifact.size / 1024 / 1024 / 1024) | round(2) }} GiB,
+        sha256 {{ db19_gold_artifact.checksum }})
+      - >-
+        Pushed
+        {{ (db19_gold_artifact.path | basename | regex_replace('\.zip$', ''))
+           ~ '.patchset.json' }}
+        - {{ db19_gold_manifest.resolved_patches | length }} resolved patch(es)
+      - >-
+        Build a home from it with
+        db19_gold_image_file={{ db19_gold_artifact.path | basename }}
+        and db19_gold_image_url pointing at a read PAR for that object.

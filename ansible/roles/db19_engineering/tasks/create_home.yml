@@ -45,6 +45,53 @@
       clean rebuild.
   when: db19_home_stat.stat.exists
 
+# ---------------------------------------------------------------------------
+# Installing FROM a gold image - stage the artifact the same way as the base
+# image. Same reasoning as db19_base_image_url: a PAR is a bearer credential,
+# so no_log and a short-lived URL.
+# ---------------------------------------------------------------------------
+
+- name: Stage the gold image from db19_gold_image_url
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.get_url:
+    url: "{{ db19_gold_image_url }}"
+    dest: "{{ db19_stage_dir }}/{{ db19_gold_image_file }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    timeout: 120
+  no_log: true
+  register: db19_gold_image_stage
+  retries: 3
+  delay: 10
+  until: db19_gold_image_stage is succeeded
+  when:
+    - not db19_home_stat.stat.exists
+    - db19_gold_image_file | length > 0
+    - db19_gold_image_url | length > 0
+
+- name: Assert the gold image is present before building from it
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_stage_dir }}/{{ db19_gold_image_file }}"
+  register: db19_gold_image_local
+  when:
+    - not db19_home_stat.stat.exists
+    - db19_gold_image_file | length > 0
+
+- name: Fail early when the gold image is missing
+  ansible.builtin.assert:
+    that:
+      - db19_gold_image_local.stat.exists
+    fail_msg: >-
+      db19_gold_image_file is set to {{ db19_gold_image_file }} but the file is
+      not in {{ db19_stage_dir }}. Set db19_gold_image_url to a
+      pre-authenticated request that serves it, or copy it in by hand.
+  when:
+    - not db19_home_stat.stat.exists
+    - db19_gold_image_file | length > 0
+
 - name: Create the ORACLE_HOME with AutoUpgrade
   when: not db19_home_stat.stat.exists
   block:
@@ -89,6 +136,40 @@
     - name: Report the create_home outcome
       ansible.builtin.debug:
         msg: "{{ (db19_create_home.stdout_lines | default([]))[-30:] }}"
+
+    # The artifact is the whole point of a create_gold_image run, so it gets the
+    # same treatment as a resolved patch set: named, sized and checksummed rather
+    # than left for someone to find in the stage directory.
+    - name: Locate the gold image that was just created
+      become: true
+      ansible.builtin.find:
+        paths: "{{ db19_stage_dir }}"
+        # Matches db19_gold_image_name, not AutoUpgrade's own
+        # db_home_%RELEASE%_%UPDATE%_%TIMESTAMP% template - the naming scheme is
+        # ours. Keep this in step with the default when the scheme changes.
+        patterns: "goldimage-db-*.zip"
+        age: -1h
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: db19_gold_image_built
+      when: db19_gold_image_create | bool
+
+    - name: Report the gold image that was created
+      ansible.builtin.debug:
+        msg:
+          - >-
+            Gold image for RU {{ db19_home_ru }}:
+            {{ (db19_gold_image_built.files | sort(attribute='mtime') | last).path | basename }}
+          - >-
+            {{ ((db19_gold_image_built.files | sort(attribute='mtime') | last).size
+                / 1024 / 1024 / 1024) | round(2) }} GiB,
+            sha256 {{ (db19_gold_image_built.files | sort(attribute='mtime') | last).checksum }}
+          - >-
+            Install a later home from it with
+            db19_gold_image_file={{ (db19_gold_image_built.files | sort(attribute='mtime') | last).path | basename }}
+      when:
+        - db19_gold_image_create | bool
+        - (db19_gold_image_built.files | default([])) | length > 0
 
 # ---------------------------------------------------------------------------
 # Root scripts - the oracle user has no passwordless sudo on this host
