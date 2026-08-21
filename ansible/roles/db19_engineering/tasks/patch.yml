@@ -118,10 +118,25 @@
     ORACLE_BASE: "{{ oracle_base }}"
   register: db19_deploy_analyze
   changed_when: false
+  # A deploy that died leaves its job in the recovery store, and analyze then
+  # refuses to run at all: "There is an unfinished execution of a deploy mode.
+  # Run the AutoUpgrade Patching in deploy mode to resume from failure point".
+  # That is not an error to stop on - it is AutoUpgrade telling us to skip
+  # straight to deploy, which resumes from the failure point. Measured
+  # 2026-08-21, and note that -clear_recovery_data does NOT lift the block for
+  # analyze, only deploy can.
+  failed_when:
+    - db19_deploy_analyze.rc != 0
+    - not (db19_deploy_analyze.stderr | default('')
+           is search('unfinished execution of a deploy mode'))
 
 - name: Report the deploy analyze outcome
   ansible.builtin.debug:
-    msg: "{{ (db19_deploy_analyze.stdout_lines | default([]))[-20:] }}"
+    msg: >-
+      {{ (db19_deploy_analyze.stdout_lines | default([]))[-20:]
+         if db19_deploy_analyze.rc == 0
+         else ['analyze skipped - a previous deploy job is pending, deploy will '
+               ~ 'resume it from the failure point'] }}
 
 - name: Stop the listener in the base home
   become: true
