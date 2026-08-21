@@ -159,6 +159,12 @@
     msg: >-
       {{ db19_staged_media.files | map(attribute='path') | map('basename') | list }}
 
+# Capture what AutoUpgrade resolved BEFORE the next RU overwrites
+# patches_info.json. For the target RU the request is RECOMMENDED, so the
+# resolved set - MRP present or not - is a test result, not a given.
+- name: Record the resolved patch set for RU {{ db19_home_ru }}
+  ansible.builtin.include_tasks: report_patchset.yml
+
 # ---------------------------------------------------------------------------
 # Base image - the one thing AutoUpgrade cannot fetch for 19c
 # ---------------------------------------------------------------------------

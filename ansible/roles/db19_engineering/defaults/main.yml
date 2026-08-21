@@ -161,33 +161,48 @@ db19_autoupgrade_platform: "LINUX.X64"
 #   patch1.download={'changed': False, 'msg': 'HTTP Error 304: Not Modified', ...}
 db19_autoupgrade_download: "yes"
 
-# gold_image=AUTO uses a gold image from the Oracle Updater service when one is
-# available (LINUX.X64 only) - that is the only way a 19c home can be built
-# without a manually staged base image. Oracle is explicit that for 19c and 21c
-# "AutoUpgrade Patching cannot automatically download this base image", so with
-# gold_image=NO the file db19_base_image_zip must be present in db19_stage_dir.
-# create_home only. A download job rejects this parameter entirely - AutoUpgrade
-# 26.5 fails with "Failed to process the gold_image parameter for prefix dl1"
-# even for the default AUTO, so the download template pins gold_image=NO.
+# gold_image=AUTO would use a gold image from the Oracle Updater service when
+# one is available - the only way a 19c home could be built without a manually
+# staged base image. Oracle is explicit that for 19c and 21c "AutoUpgrade
+# Patching cannot automatically download this base image", so with gold_image=NO
+# the file db19_base_image_zip must be present in db19_stage_dir.
 #
-# Measured on 2026-08-19, AutoUpgrade 26.5, MOS credentials verified working:
-#   YES / ALL -> "Unable to find any Gold Image containing the requested patches"
-#   AUTO      -> "A usable base image file is not found in <stage>"
-# The real cause is server side, visible only in
-# <log_dir>/cfgtoollogs/patch/auto/aru/ous.log:
-#   /v2/patchplanner/registration  16 calls  OK
-#   /v2/patchplanner/requests       6 calls  ALL HTTP 500
-#   -> UpdaterInfoPerPrefix{latestVersion='N/A', versionToUse='N/A'}
-# AutoUpgrade cannot parse the plain-text 500 body as JSON
-# ("Unexpected char 73") and then reports the empty result as "no gold image".
-# Until that service works, the base image must be staged via
-# db19_base_image_url. AUTO is the right default: it uses a gold image when one
-# is genuinely available and otherwise validates the staged base image.
+# Root cause of the 19c gold-image failure, measured 2026-08-21 with AutoUpgrade
+# 26.5.260807 on the lab host AND on macOS, same keystore, same minute:
+#
+#   target_version=19 -> ValidateGoldImage.isGoldImageServiceTargetRelease [19]
+#                        -> authenticateWithUpdater -> findLatestVersion
+#                        -> POST transport.oracle.com/v2/patchplanner/requests
+#                           (requestType SoftwareGetStatus, version "19")
+#                        -> HTTP 500 Internal Server Error
+#                        -> JsonParsingException "Unexpected char 73" (the "I"
+#                           of "Internal ...", the body is not JSON)
+#                        -> ConfigurationError "Failed to process the gold_image
+#                           parameter for prefix <p>"
+#   target_version=21/23 -> "The Oracle Update Advisor service is not used for
+#                           target release 23. The YES setting is used."
+#                        -> gold image straight from ARU, works
+#
+# So 19 is the ONLY release that routes gold-image resolution through the Update
+# Advisor, and that endpoint is broken server side. /v2/patchplanner/registration
+# answers fine, only /requests returns 500. Neither AUTO nor YES avoids it
+# (YES takes the same path via ValidateGoldImage.allOrYes), and
+# target_version=19.32 is rejected outright ("needs to be a single version").
+# There is currently no way to obtain a 19c gold image. Stefan is clarifying the
+# 19c gold-image situation with the Oracle PM.
+#
+# create_home keeps AUTO because that path is proven: the Updater returns
+# UpdaterInfoPerPrefix{latestVersion='N/A'}, AutoUpgrade shrugs and validates the
+# staged base image instead - that is how the 19.31 home was built on 2026-08-19.
+# A download job in contrast treats the same 500 as fatal, so the download
+# templates pin gold_image=NO.
 db19_autoupgrade_gold_image: "AUTO"
 
-# Try the gold-image path before falling back to individual patches plus a
-# staged base image. Set to false to skip the attempt entirely.
-db19_try_gold_image: true
+# Attempt a separate gold-image download before falling back to individual
+# patches plus a staged base image. Off: for 19c this is a guaranteed failed run
+# (see above) that only fills the log with a misleading config error. Flip to
+# true once Oracle fixes /v2/patchplanner/requests - no other change needed.
+db19_try_gold_image: false
 
 # gold_image for the deploy (out-of-place move) job. NO on purpose - the target
 # home already exists and all media are staged, so there is nothing to fetch.
@@ -207,9 +222,120 @@ db19_base_image_zip: "LINUX.X64_193000_db_home.zip"
 # Empty = the file must already be present in db19_stage_dir.
 db19_base_image_url: ""
 
-# Patch list for create_home. RU is pinned per home; the rest are the standard
-# companions Stefan already downloads in cpu-patch-tests.
-db19_autoupgrade_patch_list: "OPATCH,OJVM,DPBP"
+# Patch lists. Two deliberately different strategies, because the two homes
+# answer two different questions.
+#
+# BASE - explicit and reproducible. The base home is the control group of a CPU
+# test, so every component is named: RU, JDK bundle patch, OPatch, OJVM, Data
+# Pump bundle patch. Nothing is resolved by Oracle at run time.
+# OJVM belongs here even though it is not strictly needed to boot a database: a
+# production 19.31 home carries OJVM 19.31, and without it the base home keeps
+# the OJVM that shipped inside the 19.3.0.0 base image (from 2019). The test
+# would then measure a six-year OJVM jump on top of the quarterly delta instead
+# of a clean 19.31 -> 19.32 across every component. Verified 2026-08-21:
+# "RU:19.31,JDK,OPATCH,OJVM,DPBP" resolves to RU 39034528, JDK BP 39791916,
+# OPatch 6880880, OJVM 19.31, DPBP 39196236.
+# Caveat worth knowing: the JDK keyword resolves to the CURRENT JDK bundle
+# patch, not to one pinned to the base RU - on 2026-08-21 a 19.31 base pulled
+# JDK BP 19.0.0.0.260818 (p39791916). The patch LABELS are fixed, one patch
+# NUMBER is not, which is exactly why report.yml writes the resolved set out.
+db19_patch_list_base: "RU:{{ db_base_ru }},JDK,OPATCH,OJVM,DPBP"
+
+# TARGET - RECOMMENDED, so the test sees what Oracle actually recommends for the
+# quarter. In a plain RU quarter that is the RU set; in a quarter with a
+# Monitored Recommended Patch it implicitly includes the MRP. Verified for
+# 19.32 on 2026-08-21: RU 39472050, OJVM 39222882, MRP 39834034, DPBP 39657094,
+# OPatch 6880880. RECOMMENDED does NOT include the JDK bundle patch, hence the
+# explicit ",JDK" - without it the target home would regress against a base
+# built with JDK.
+# Syntax note: RECOMMENDED must carry the version. "RU:19.32,RECOMMENDED" is
+# rejected ("when the PATCH parameter specifies a version for RECOMMENDED, the
+# same version must be specified for RU"); bare "RECOMMENDED" silently resolves
+# to the latest RU, which would make the target non-deterministic.
+db19_patch_list_target: "RECOMMENDED:{{ db_target_ru }},JDK"
+
+# ------------------------------------------------------------------------------
+# Functional smoke test
+# ------------------------------------------------------------------------------
+# Runs after the patch, before the verify report, so its results land in the
+# artifact. One canary per patched component (PL/SQL, OJVM, Data Pump) in a
+# throwaway schema inside the PDB. Set to false to skip - the hard gate in
+# verify.yml does not depend on it.
+db19_run_smoke: true
+
+# ------------------------------------------------------------------------------
+# Reporting
+# ------------------------------------------------------------------------------
+# Where fetch_reports.yml puts the evidence on the CONTROL node. Relative paths
+# resolve against the playbook directory, so the default lands in
+# ansible/reports/<host>/ - outside the role, because it is output, not content.
+db19_report_dir: "{{ playbook_dir }}/../reports"
+
+# ------------------------------------------------------------------------------
+# Self-made gold images
+# ------------------------------------------------------------------------------
+# Unrelated to the broken Oracle Update Advisor: AutoUpgrade can produce a gold
+# image from a home it has just built (create_gold_image on a create_home job),
+# and install a later home from that artifact (patch=GOLDIMAGE:<file>). That is
+# the only gold-image route that works for 19c today.
+#
+# Why it matters here: a create_home run applies every patch and takes ~13 min on
+# 8 OCPU, an install from a gold image takes ~2 min and needs no MOS access at
+# all. For lab_count > 1 that is the difference between a workshop that builds in
+# minutes and one that builds in hours - and the base home becomes a
+# byte-identical artifact instead of "labels fixed, JDK patch number drifting".
+#
+# It does NOT remove the need for the pre-authenticated request: the first gold
+# image still has to be created from the 19.3.0.0 base image. Afterwards the
+# bucket serves the gold image instead of the base image.
+db19_gold_image_create: false
+
+# Naming scheme for the artifact, decided 2026-08-21:
+#   goldimage-db-<version>-<platform>-<edition>-<date>.zip
+#   e.g. goldimage-db-19_31_0_0_0-linux-x64-ee-20260821.zip
+# Everything that distinguishes one artifact from another is in the name,
+# lowercase, hyphens only, and the version sorts before the build date. A
+# matching <stem>.patchset.json carries the resolved patch set and the artifact
+# checksum, so the image describes itself. Deliberately no "latest" alias -
+# a gold image is always referenced explicitly.
+# AutoUpgrade would accept its own %RELEASE%/%UPDATE%/%TIMESTAMP% placeholders
+# here, but those carry neither platform nor edition and let the timestamp
+# dominate the sort order.
+# The version carries underscores, not dots: AutoUpgrade rejects the parameter
+# outright with "The CREATE_GOLD_IMAGE parameter must resolve to a file name
+# containing only letters, numbers, underscores, hyphens, and the .zip suffix"
+# (measured 2026-08-21, 26.5.260807). Underscores inside the version and hyphens
+# between the scheme fields also make the field boundaries unambiguous.
+# Composed inside one Jinja expression on purpose: a folded scalar would turn
+# the line breaks into spaces and corrupt the file name.
+db19_gold_image_name: >-
+  {{ 'goldimage-db-' ~ (db19_home_ru ~ '.0.0.0') | replace('.', '_') ~ '-'
+     ~ (db19_autoupgrade_platform | lower | replace('.', '-')) ~ '-'
+     ~ (db19_edition | lower) ~ '-'
+     ~ (ansible_date_time.date | replace('-', '')) ~ '.zip' }}
+
+# Job state for a gold-image run that happens AFTER a deploy. The deploy keeps
+# its Guaranteed Restore Point (db19_drop_grp_after_patching=false), so its job
+# stays open and any further AutoUpgrade invocation sharing global_log_dir aborts
+# with "There is an unfinished execution of a deploy mode". Giving the gold-image
+# job its own log directory isolates it and leaves the restore point intact.
+# Only needed for the quarterly flow (gold image built from the validated target
+# home); a gold image folded into the initial base build shares no state with
+# anything.
+db19_gold_image_log_dir: "{{ db19_autoupgrade_log_dir }}-goldimage"
+
+# Install this home FROM a gold image instead of base image plus patches. The
+# file must be present in db19_stage_dir - stage it from a bucket the same way
+# as the base image, via db19_gold_image_url.
+# Empty = build from the base image and the patch list.
+db19_gold_image_file: ""
+db19_gold_image_url: ""
+
+# Resolved per invocation - callers set db19_home_ru to the base or target RU.
+db19_patch_list: >-
+  {{ db19_patch_list_target
+     if (db19_home_ru | default(db_base_ru)) == db_target_ru
+     else db19_patch_list_base }}
 
 # Minimum AutoUpgrade version for this flow. create_home arrived in 24.7, but
 # home_settings.inventory_location / inventory_group - mandatory on a server

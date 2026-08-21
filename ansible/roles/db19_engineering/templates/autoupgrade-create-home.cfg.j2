@@ -15,13 +15,25 @@
 global.global_log_dir={{ db19_autoupgrade_log_dir }}
 global.keystore={{ db19_autoupgrade_keystore_dir }}
 
-install1.patch=RU:{{ db19_home_ru }},{{ db19_autoupgrade_patch_list }}
+{% if db19_gold_image_file | length > 0 %}
+{# Installing FROM a gold image: the artifact replaces base image plus patches,
+   so no patch list and no gold_image parameter - GOLDIMAGE is the patch list. #}
+install1.patch=GOLDIMAGE:{{ db19_gold_image_file }}
+{% else %}
+install1.patch={{ db19_patch_list }}
+{% endif %}
+{% if db19_gold_image_create | bool %}
+{# Produces the gold image in install1.folder after the home is built. #}
+install1.create_gold_image={{ db19_gold_image_name }}
+{% endif %}
 install1.folder={{ db19_stage_dir }}
 install1.target_home={{ db19_home_path }}
 install1.target_version={{ db19_major_release }}
 install1.platform={{ db19_autoupgrade_platform }}
 install1.download={{ db19_autoupgrade_download }}
+{% if db19_gold_image_file | length == 0 %}
 install1.gold_image={{ db19_autoupgrade_gold_image }}
+{% endif %}
 install1.patch_node=localhost
 
 install1.home_settings.oracle_base={{ oracle_base }}

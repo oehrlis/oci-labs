@@ -1,0 +1,144 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/report_patchset.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.21
+# Version....: v0.1.0
+# Purpose....: Record which patches AutoUpgrade actually resolved for one RU.
+# Notes......: A CPU test is only worth its report. The base home is defined by
+#              an explicit patch list, the target home by RECOMMENDED - so for
+#              the target nobody knows up front whether an MRP is part of the
+#              quarter, and even the base does not pin the JDK bundle patch to a
+#              patch number. This file turns the resolved set into evidence.
+#
+#              AutoUpgrade writes patches_info.json into the download folder and
+#              OVERWRITES it on the next download, so it has to be captured per
+#              RU immediately after the download - hence the call at the end of
+#              download.yml rather than a single pass at the end of the run.
+#
+#              Produces, per RU, in db19_stage_dir:
+#                patchset-<RU>.json  verbatim copy incl. SHA-1/SHA-256
+#                patchset-<RU>.txt   flat one-line-per-patch summary
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Look for the AutoUpgrade patch manifest
+  become: true
+  ansible.builtin.stat:
+    path: "{{ db19_stage_dir }}/patches_info.json"
+  register: db19_patches_info_stat
+
+- name: Read the AutoUpgrade patch manifest
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ db19_stage_dir }}/patches_info.json"
+  register: db19_patches_info_raw
+  when: db19_patches_info_stat.stat.exists
+
+- name: Parse the resolved patch set for RU {{ db19_home_ru }}
+  ansible.builtin.set_fact:
+    db19_patchset: >-
+      {{ (db19_patches_info_raw.content | b64decode | from_json).patches
+         | default([]) }}
+  when: db19_patches_info_stat.stat.exists
+
+# A Monitored Recommended Patch only exists in some quarters. Whether one was
+# part of the set is the single most interesting fact about a RECOMMENDED run,
+# so it gets its own flag rather than being buried in the list.
+# AutoUpgrade ACCUMULATES patches_info.json when several download jobs share one
+# folder - after the target RU the manifest also lists the base RU's patches. The
+# job's own stdout is the authoritative per-RU set: every patch it resolved is
+# printed as a description line followed by "    File: <name> ... VALIDATED".
+- name: Determine which files this download job resolved
+  ansible.builtin.set_fact:
+    db19_patchset_job_files: >-
+      {{ db19_download.stdout_lines | default([])
+         | map('regex_search', '^\s+File:\s+(\S+)', '\1')
+         | select('truthy') | flatten | list }}
+
+# Keyed by the first file name of each manifest entry, then filtered to the
+# job's files - that keeps the descriptions and checksums from the manifest
+# while scoping the set to this RU.
+- name: Reduce the manifest to this job's patch set
+  ansible.builtin.set_fact:
+    db19_patchset: >-
+      {{ dict(db19_patchset | map(attribute='files') | map('first')
+              | map(attribute='name') | zip(db19_patchset))
+         | dict2items
+         | selectattr('key', 'in', db19_patchset_job_files)
+         | map(attribute='value') | list }}
+  when:
+    - db19_patches_info_stat.stat.exists
+    - db19_patchset_job_files | length > 0
+
+- name: Classify the resolved patch set
+  ansible.builtin.set_fact:
+    db19_patchset_mrp: >-
+      {{ db19_patchset | selectattr('description', 'search', '(?i)\bMRP\b')
+         | list }}
+    db19_patchset_lines: >-
+      {{ db19_patchset
+         | map(attribute='description')
+         | zip(db19_patchset | map(attribute='files') | map('first')
+               | map(attribute='name'))
+         | map('join', ' -> ') | list }}
+  when: db19_patches_info_stat.stat.exists
+
+- name: Keep the manifest for RU {{ db19_home_ru }}
+  become: true
+  ansible.builtin.copy:
+    src: "{{ db19_stage_dir }}/patches_info.json"
+    dest: "{{ db19_stage_dir }}/patchset-{{ db19_home_ru }}.json"
+    remote_src: true
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+  when: db19_patches_info_stat.stat.exists
+
+- name: Write the flat patch-set summary for RU {{ db19_home_ru }}
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ db19_stage_dir }}/patchset-{{ db19_home_ru }}.txt"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    content: |
+      # Resolved AutoUpgrade patch set - RU {{ db19_home_ru }}
+      # Host....: {{ inventory_hostname }}
+      # Date....: {{ ansible_date_time.iso8601 | default('unknown') }}
+      # Role....: {{ (db19_home_ru == db_target_ru) | ternary('target (CPU test)', 'base (control)') }}
+      # Request.: {{ db19_patch_list | trim }}
+      # Platform: {{ db19_autoupgrade_platform }}
+      # MRP.....: {{ (db19_patchset_mrp | length > 0) | ternary('yes', 'no') }}
+      {% for p in db19_patchset %}
+      {{ p.description }} | {{ p.files | map(attribute='name') | join(',') }} | {{ (p.files | first)['checksum-256'] | default('-', true) }}
+      {% endfor %}
+  when: db19_patches_info_stat.stat.exists
+
+- name: Report the resolved patch set for RU {{ db19_home_ru }}
+  ansible.builtin.debug:
+    msg:
+      - >-
+        RU {{ db19_home_ru }}
+        ({{ (db19_home_ru == db_target_ru) | ternary('target - CPU test', 'base - control') }}),
+        requested "{{ db19_patch_list | trim }}"
+      - >-
+        MRP included: {{ (db19_patchset_mrp | length > 0) | ternary('yes -
+        ' ~ (db19_patchset_mrp | map(attribute='description') | join(', ')), 'no') }}
+      - "{{ db19_patchset_lines | default([]) }}"
+      - "Manifest: {{ db19_stage_dir }}/patchset-{{ db19_home_ru }}.txt"
+  when: db19_patches_info_stat.stat.exists
+
+# Not fatal - a re-run with the download stamp already in place skips the
+# download and therefore writes no fresh manifest. The one from the first run
+# is still on disk.
+- name: Note that no fresh manifest exists for RU {{ db19_home_ru }}
+  ansible.builtin.debug:
+    msg: >-
+      No patches_info.json in {{ db19_stage_dir }} - the download for RU
+      {{ db19_home_ru }} was skipped. Any earlier
+      patchset-{{ db19_home_ru }}.txt still applies.
+  when: not db19_patches_info_stat.stat.exists

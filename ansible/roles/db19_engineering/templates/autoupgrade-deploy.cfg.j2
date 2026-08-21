@@ -19,7 +19,7 @@ patch1.sid={{ oracle_sid }}
 patch1.source_home={{ oracle_home_base }}
 patch1.target_home={{ oracle_home_target }}
 patch1.folder={{ db19_stage_dir }}
-patch1.patch=RU:{{ db_target_ru }},{{ db19_autoupgrade_patch_list }}
+patch1.patch={{ db19_patch_list_target }}
 patch1.download={{ db19_autoupgrade_download }}
 # Pinned explicitly: with no gold_image value AutoUpgrade resolves it internally
 # and fails on the broken 19c path with

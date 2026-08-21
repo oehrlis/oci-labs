@@ -10,9 +10,12 @@
 #          provides both FOLDER and DOWNLOAD_FOLDER:
 #            "Configuration parameter FOLDER is deprecated and must not be
 #             provided together with DOWNLOAD_FOLDER."
-#          gold_image is NOT accepted on a download job - AutoUpgrade 26.5 fails
-#          with "Failed to process the gold_image parameter for prefix dl1". It
-#          belongs on the create_home job only.
+#          gold_image must be NO on a download job for target_version=19:
+#          AUTO and YES both route through the Oracle Update Advisor, which
+#          currently answers HTTP 500, and AutoUpgrade reports that as
+#          "Failed to process the gold_image parameter for prefix dl1".
+#          The patch list comes from db19_patch_list - explicit for the base RU,
+#          RECOMMENDED plus JDK for the target RU. See defaults/main.yml.
 #-------------------------------------------------------------------------------
 
 global.global_log_dir={{ db19_autoupgrade_log_dir }}
@@ -21,7 +24,7 @@ global.download_folder={{ db19_stage_dir }}
 
 dl1.platform={{ db19_autoupgrade_platform }}
 dl1.target_version={{ db19_major_release }}
-dl1.patch=RU:{{ db19_home_ru }},{{ db19_autoupgrade_patch_list }}
+dl1.patch={{ db19_patch_list }}
 # Mandatory for a download job: with the default AUTO, AutoUpgrade 26.5 aborts
 # with "Failed to process the gold_image parameter for prefix dl1".
 dl1.gold_image=NO
