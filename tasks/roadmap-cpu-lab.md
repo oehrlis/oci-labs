@@ -14,10 +14,12 @@ nacheinander, ohne Rueckfrage. Gold Image vertagt.
 | Sache | Stand |
 | --- | --- |
 | Schritt 2 Rollback-Test | **gruen** - CPUDB 19.31.0.0.0 aus dem Base-Home, 0 invalid Objects, 15 Komponenten |
-| Schritt 3 Reboot-Test | **in Arbeit** - Durchlauf 3 laeuft, Durchlaeufe 1 und 2 waren rot und produktiv |
+| Schritt 3 Reboot-Test | **gruen** im dritten Anlauf - 17 s bis die DB offen ist, unbeaufsichtigt |
 | oradba | v1.0.1 bis v1.0.4 released, sechs Defekte behoben |
+| M0 Doku/Lint/Tag | **abgeschlossen**, `v0.3.0` getaggt und gepusht |
+| M1 Report-Konverter | **fertig**, in `cpu-patch-tests` committet (lokal, nicht gepusht) |
+| Befunde B1 bis B6 | **alle behoben**, B2 geschrieben aber noch nicht ausgefuehrt |
 | Gold-Image-Test | vertagt, wie entschieden |
-| M0 Doku/Lint/Tag | offen |
 
 `rollback.yml` ist damit nicht mehr ungetestet. Der Flashback auf den
 Guaranteed Restore Point, der Home-Wechsel zurueck und die Selbst-Assertion
@@ -44,20 +46,11 @@ verifiziere ich Tag-Inhalte statt Patch-Ausgaben.
 
 ## 2. Entscheidungen, die ich von dir brauche
 
-### E1 - Wie weit soll M0 gehen, bevor wir taggen?
+### E1 - erledigt, keine Entscheidung mehr noetig
 
-Der Reboot-Test hat mehr aufgedeckt als geplant. Damit stellt sich die Frage,
-ob v0.3.0 den heutigen Stand einfriert oder erst die Folgebefunde aufraeumt.
-
-| Option | Vorteil | Nachteil |
-| --- | --- | --- |
-| **A: Jetzt taggen** mit Doku, Lint und den bereits gefixten Punkten | Definierter Stand ist da, M1 und M2 koennen starten | Vier bekannte oci-labs-Befunde bleiben offen im Tag |
-| **B: Befunde zuerst** (siehe Abschnitt 4), dann taggen | Der Tag ist wirklich sauber | Verzoegert alles Weitere um schaetzungsweise einen halben Tag |
-| **C: Jetzt taggen, Befunde als v0.3.1** | Schnell und ehrlich, Befunde sind dokumentiert statt versteckt | Zwei Tags in kurzer Folge |
-
-Meine Empfehlung: **C**. Die vier Befunde sind klein und unabhaengig
-voneinander, und ein Tag, der den verifizierten Zustand festhaelt, ist mehr
-wert als einer, der auf Aufraeumarbeiten wartet.
+Ich hatte drei Varianten vorgelegt und C empfohlen: jetzt taggen, Befunde als
+Folgeversion. Es kam anders und besser - die Befunde waren klein genug, um sie
+noch vor dem Tag zu erledigen. `v0.3.0` enthaelt sie.
 
 ### E2 - Wo leben die geteilten Assets (M3)?
 
@@ -122,8 +115,8 @@ Meine Empfehlung weiterhin **A**.
 
 | M | Inhalt | Aufwand | Status |
 | --- | --- | --- | --- |
-| M0 | v0.3.0 einfrieren: Rollback, Reboot, Doku, Lint, Tag | M | Rollback gruen, Reboot laeuft, Rest offen |
-| M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | bereit, CSV als Vertrag entschieden |
+| M0 | v0.3.0 einfrieren: Rollback, Reboot, Doku, Lint, Tag | M | **fertig**, getaggt und gepusht |
+| M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | **fertig**, committet, nicht gepusht |
 | M2 | Core als Modul, implizites Bauen mit Besitzregel, tenant-faehig | M | entschieden, nicht begonnen |
 | M3 | Geteilte Assets herausloesen | M | **wartet auf E2** |
 | M4 | 26ai (P1) | M | wartet auf M3 |
@@ -134,65 +127,112 @@ Zu M2 und M6 ist in der Nacht ein Argument dazugekommen, siehe Befund B4:
 die Bastion ist als Transportweg fuer unbeaufsichtigte Laeufe derzeit
 untauglich. Das trifft M6 direkt.
 
-## 4. Befunde fuer oci-labs aus der Nacht
+## 4. Befunde aus der Nacht - Stand
 
-Alle vier wurden erst durch den Reboot-Test sichtbar. Keiner ist gefixt ausser
-B3.
+Alle sechs wurden erst durch den Reboot-Test sichtbar. Alle sind behoben.
 
-### B1 - oradba wird nie ins Profil des oracle-Users eingebunden
+| # | Befund | Stand |
+| --- | --- | --- |
+| B1 | oradba nie im Profil des oracle-Users | **behoben und bewiesen** |
+| B2 | `rollback.yml` laesst `oratab` auf `:N` | behoben, **noch nicht ausgefuehrt** |
+| B3 | Tunnel ohne `IdentitiesOnly` | behoben |
+| B4 | Bastion-Sessions instabil, `UNREACHABLE` mitten im Lauf | **behoben und bewiesen** |
+| B5 | Rollout kann nicht aktualisieren | dokumentiert |
+| B6 | `/var/log/oracle` fehlt | behoben und bewiesen |
 
-`/home/oracle/.bash_profile` auf `oradb01` ist die unveraenderte
-Oracle-Linux-Vorlage. `su - oracle -c 'echo $ORACLE_HOME $ORACLE_SID
-$TNS_ADMIN $ORADBA_BASE'` liefert vier leere Werte.
+### B1 - jetzt erfuellt
 
-Ursache: die Rolle ruft den Installer mit `become: true` auf, also als root.
-`oradba_install.sh` schreibt seine Profilzeile nach `${HOME}` - und das ist
-`/root`. Dein Requirement "muss by default installiert sein, damit man es
-interaktiv nutzen kann" ist damit auf dem Lab nicht erfuellt.
+Der Installer verdrahtet ein Profil, schreibt aber nach `${HOME}`, und die Rolle
+ruft ihn als root auf. Die Zeile landete in `/root/.bash_profile`, waehrend
+`/home/oracle/.bash_profile` die unveraenderte Oracle-Linux-Vorlage blieb. Auf
+`oradb01` gemessen, vorher vier leere Werte, jetzt:
 
-Zu klaeren: Installer-Flag, dokumentierter Nachschritt, oder Aufgabe der Rolle.
-Steht auch im oradba-Briefing als M1.
+```text
+ORADBA_BASE=[/u00/app/oracle/local/oradba]
+ORACLE_SID=[CPUDB]
+ORACLE_HOME=[/u00/app/oracle/product/19.31/dbhome_1]
+```
 
-### B2 - `rollback.yml` laesst das Lab ohne Autostart zurueck
+Damit ist dein Requirement 2 - oradba muss auf Lab-Systemen interaktiv nutzbar
+sein - erfuellt. **Offene Frage fuer die oradba-Session:** wessen Aufgabe ist
+das eigentlich? Die Rolle macht es jetzt explizit, aber ein Installer-Flag
+(`--profile-user oracle`) waere der sauberere Ort. Steht im Briefing als M1.
 
-Es setzt `oratab` auf `:N`, damit waehrend des Flashbacks nichts auf gepatchten
-Binaries hochkommt - richtig gedacht - stellt aber nie auf `:Y` zurueck. Nach
-einem erfolgreichen Rollback startet die Datenbank bei einem Reboot nicht mehr.
+### B2 - behoben, aber unbewiesen
 
-Haette ich das vor dem Reboot nicht bemerkt, waere der Test gruen gewesen, ohne
-irgendetwas zu beweisen. Ein falsches Gruen ist schlimmer als ein Rot.
+`rollback.yml` stellt `oratab` am Ende wieder auf `:Y`. Ausfuehren konnte ich es
+nicht: dafuer braucht es einen Guaranteed Restore Point, und den gibt es erst
+nach einem erneuten Patch-Lauf. Der wiederum braucht MOS-Zugangsdaten aus
+1Password, und `op` ist in einer nicht-interaktiven Sitzung nicht angemeldet.
 
-### B3 - Makefile: Tunnel ohne `IdentitiesOnly` (gefixt)
+Damit steht B2 genau dort, wo `rollback.yml` vor dem Wochenende stand:
+sorgfaeltig geschrieben, nie ausgefuehrt. Das ist bewusst so benannt.
 
-Eine Bastion-Session akzeptiert genau den Schluessel, mit dem sie erzeugt
-wurde, und schliesst die Verbindung nach dem ersten falschen. Ohne
-`IdentitiesOnly=yes` bietet ssh zuerst jede Identitaet aus dem Agent an. Bei
-dir ging es bisher nur, weil dein Agent den Lab-Key an zweiter Stelle anbot.
-Das war Glueck, kein Verhalten.
+### B4 - der eigentliche Blocker fuer M6
 
-### B4 - Bastion-Sessions sind wackliger als das Makefile annimmt
+Ein lauschender lokaler Port ist kein Beweis fuer einen nutzbaren Tunnel. Die
+Bastion verwirft Sessions ohne Vorwarnung - eine war drei Minuten nach dem
+Start im Zustand `DELETED`, bei drei Stunden TTL - und ssh haelt den lokalen
+Listener, waehrend die Gegenseite weg ist. `nc` meldet Erfolg, der naechste
+Ansible-Lauf stirbt an `UNREACHABLE`. Das ist mir an einem Abend dreimal
+passiert.
 
-Zwei Beobachtungen aus einem Abend: eine frisch erstellte Session akzeptiert
-SSH erst nach einigen Sekunden, und eine Session war nach drei Minuten im
-Zustand `DELETED`, obwohl die TTL auf drei Stunden stand. Mehrere
-Ansible-Laeufe brachen mitten in der Arbeit mit `UNREACHABLE` ab.
+Jede Pruefung fuehrt jetzt ein echtes Kommando auf dem Host aus, der Tunnel
+wiederholt und legt bei Bedarf eine neue Session an, und ssh-Keepalives sind
+aktiv. Dazu `BASTION=1`, das Host und Port setzt und den Tunnel zur
+Vorbedingung macht:
 
-Die Targets behandeln Session und Tunnel als Einmalvorgang ohne Wiederholung.
-**Fuer M6 ist das ein Blocker**: ein naechtlicher, unbeaufsichtigter Lauf ueber
-die Bastion wuerde reproduzierbar scheitern, und zwar nicht am Test, sondern am
-Transportweg.
+```bash
+make cpu-lab-step TAG=oradba BASTION=1
+```
 
-### B5 - Der oradba-Rollout kann nicht aktualisieren
+Ohne diesen Fix waere jeder naechtliche Lauf aus M6 reproduzierbar
+gescheitert - nicht am Test, sondern am Transportweg.
 
-Die Rolle prueft nur, ob das Verzeichnis existiert, und ueberspringt dann die
-Installation. Ein Upgrade braucht `db19_oradba_force_install=true`, was
-nirgends dokumentiert ist. Fuer frische Hosts unkritisch, aber sobald oradba
-selbst Teil des Testgegenstands ist - wie in dieser Nacht - ist es eine Falle.
+## 4b. Neue Befunde aus M1
 
-### B6 - `/var/log/oracle` wird beim Rollout nicht angelegt
+Zwei Dinge, die erst der Konverter sichtbar gemacht hat. Beide betreffen
+`cpu-patch-tests`, nicht dieses Repo.
 
-Weder angelegt noch an `oracle:oinstall` uebergeben. Seit oradba 1.0.1 ist das
-nicht mehr fatal, aber die Service-Logs bleiben leer.
+### Die Ergebnismatrix wurde nie automatisch gefuellt
+
+`import_test_results.py` bildet das Produkt `db` auf den Familientoken
+`oracle database` ab. Jede Periode seit 2025-04 beschriftet ihre Matrix-Zeilen
+aber mit `RDBMS 19.0.0.0`. Es hat also nie gepasst. Der Importer sagte das bei
+jedem Lauf - `no oracle database matrix row for version ... - left as is` - und
+niemand hat es gelesen, weil die Matrix von Hand gepflegt wurde.
+
+Behoben und durch Vergleich belegt: mit Fix
+`matrix 'RDBMS 19.0.0.0'.lnx: empty -> ok`, ohne Fix die alte Meldung.
+
+### Lab und Periodendaten testen nicht dasselbe
+
+Der Konverter gleicht jetzt beide Richtungen ab und meldet sie:
+
+```text
+period data lists 39329591 (Oracle JDK) - not in the lab home
+lab home carries 39791916 - no row in the period data
+lab home carries 39657094 - no row in the period data
+```
+
+Combo-Patches, GI RU und Windows Bundle fehlen zu Recht - das Lab ist eine
+Single-Instance auf Linux. Aber der JDK-Patch weicht ab, und den DPBP `39657094`
+testet das Lab, ohne dass der Report ihn fuehrt. **Zu klaeren:** ist die
+Periodendatei veraltet, oder testet das Lab die falsche Patch-Liste?
+
+## 4c. Was ich am Montag zuerst von dir brauche
+
+In dieser Reihenfolge, weil das eine das andere blockiert.
+
+1. **`eval $(op signin)`** - danach kann ich den Patch-Lauf fahren, der den
+   B2-Fix beweist und das Lab wieder in den getesteten Zielzustand bringt.
+2. **E2 entscheiden** - wo die geteilten Assets leben. Blockiert M3 und damit
+   M4 (26ai).
+3. **Den JDK-Unterschied klaeren** - Periodendaten sagen 39329591, das Lab
+   installiert 39791916. Eines von beiden ist falsch.
+4. **`cpu-patch-tests` pushen oder nicht** - dort liegt mein M1-Commit lokal,
+   neben deinen unfertigen Aenderungen an `VERSION` und `data/2026-07.yaml`,
+   die ich nicht angefasst habe.
 
 ## 5. Offene Punkte aus dem alten Stand
 
