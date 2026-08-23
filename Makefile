@@ -60,6 +60,17 @@ OP_MOS_PASS := op://secrets/Oracle-MOS/password
 TERRAFORM    := $(shell PATH="$(PATH)" command -v terraform 2>/dev/null)
 ANSIBLE      := $(shell PATH="$(PATH)" command -v ansible-playbook 2>/dev/null)
 ANSIBLE_EXTRA ?=
+
+# BASTION=1 routes every Ansible target through the Bastion tunnel and ensures
+# it is up first. Without it the host/port override had to be repeated on every
+# single call, and a tunnel that died mid-session produced UNREACHABLE rather
+# than a retry. See the Bastion section for why a listening port is not proof.
+ifeq ($(BASTION),1)
+ANSIBLE_EXTRA += -e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)
+BASTION_DEP := cpu-lab-bastion-tunnel
+else
+BASTION_DEP :=
+endif
 ANSIBLE_LINT := $(shell PATH="$(PATH)" command -v ansible-lint 2>/dev/null)
 YAMLLINT     := $(shell PATH="$(PATH)" command -v yamllint 2>/dev/null)
 MARKDOWNLINT := $(shell PATH="$(PATH)" command -v markdownlint 2>/dev/null || \
@@ -279,23 +290,23 @@ MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_
 endef
 
 .PHONY: cpu-lab-install
-cpu-lab-install: guard-ansible guard-op guard-cpu-env ## Install OS prereqs + Oracle 19c at the base RU
+cpu-lab-install: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Install OS prereqs + Oracle 19c at the base RU
 	$(Q)$(cpu_lab_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
 	    --tags install -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-patch
-cpu-lab-patch: guard-ansible guard-op guard-cpu-env ## Run the AutoUpgrade out-of-place patch to the target RU
+cpu-lab-patch: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Run the AutoUpgrade out-of-place patch to the target RU
 	$(Q)$(cpu_lab_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
 	    --tags patch -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-verify
-cpu-lab-verify: guard-ansible guard-cpu-env ## Verify the post-patch state (read-only)
+cpu-lab-verify: $(BASTION_DEP) guard-ansible guard-cpu-env ## Verify the post-patch state (read-only)
 	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" --tags verify $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-step
-cpu-lab-step: guard-ansible guard-op guard-cpu-env ## Run a single tag: make cpu-lab-step TAG=create_home
+cpu-lab-step: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Run a single tag: make cpu-lab-step TAG=create_home
 	@[[ -n "$(TAG)" ]] || { echo "❌ TAG is required, e.g. make cpu-lab-step TAG=prereq"; exit 1; }
 	$(Q)$(cpu_lab_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
@@ -495,7 +506,7 @@ cpu-lab-goldimage-list: guard-oci ## List the gold images in the orarepo bucket
 	    --query 'data[].{name:name,size:size,modified:"time-modified"}' --output table
 
 .PHONY: cpu-lab-rollback
-cpu-lab-rollback: guard-ansible guard-cpu-env ## Roll the database back to the pre-patch restore point and the old home
+cpu-lab-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Roll the database back to the pre-patch restore point and the old home
 	@echo "⚠️  Rollback flashes the database back to the Guaranteed Restore Point"
 	@echo "    taken before the patch and restarts it from the base home."
 	@if [[ "$(YES)" != "1" ]]; then \
@@ -557,20 +568,42 @@ cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forw
 	  echo ""; \
 	  echo "Then: make cpu-lab-bastion-tunnel   (opens it in the background)"
 
-.PHONY: cpu-lab-bastion-tunnel
-cpu-lab-bastion-tunnel: ## Open the last created Bastion tunnel in the background
+# A listening local port is not proof of a usable tunnel. The Bastion drops a
+# session without warning - one was DELETED three minutes into a three hour TTL
+# on 2026-08-22 - and ssh keeps the local listener while the far end is gone, so
+# nc succeeds and the next Ansible run dies with UNREACHABLE. Every check here
+# therefore runs a real command on the host.
+BASTION_SSH_OPTS := -o StrictHostKeyChecking=no -o IdentitiesOnly=yes \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
+
+.PHONY: cpu-lab-tunnel-check
+cpu-lab-tunnel-check: ## Probe the tunnel with a real command on the host (exit 1 if unusable)
 	$(Q)cd "$(CPU_ENV_DIR)" && \
-	  [[ -f .bastion-tunnel.cmd ]] || { echo "❌ No session yet - run: make cpu-lab-bastion-session"; exit 1; }; \
-	  if nc -z 127.0.0.1 $(BASTION_LOCAL_PORT) 2>/dev/null; then \
-	    echo "Tunnel already listening on 127.0.0.1:$(BASTION_LOCAL_PORT)"; \
-	  else \
-	    nohup bash -c "$$(cat .bastion-tunnel.cmd) -o StrictHostKeyChecking=no -o IdentitiesOnly=yes" \
+	  key="$$("$(TERRAFORM)" output -raw lab_private_key_path 2>/dev/null)"; \
+	  ssh -i "$$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 \
+	      -o StrictHostKeyChecking=no -p $(BASTION_LOCAL_PORT) opc@127.0.0.1 true 2>/dev/null
+
+.PHONY: cpu-lab-bastion-tunnel
+cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the session as needed
+	$(Q)cd "$(CPU_ENV_DIR)" && \
+	  key="$$("$(TERRAFORM)" output -raw lab_private_key_path 2>/dev/null)"; \
+	  probe() { ssh -i "$$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 \
+	            -o StrictHostKeyChecking=no -p $(BASTION_LOCAL_PORT) opc@127.0.0.1 true 2>/dev/null; }; \
+	  if probe; then echo "✅ Tunnel already usable on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
+	  pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
+	  for attempt in 1 2 3; do \
+	    if [[ ! -f .bastion-tunnel.cmd ]] || [[ $$attempt -gt 1 ]]; then \
+	      echo "Creating a Bastion session (attempt $$attempt)..."; \
+	      $(MAKE) --no-print-directory -C "$(CURDIR)" cpu-lab-bastion-session >/dev/null 2>&1 || true; \
+	    fi; \
+	    nohup bash -c "$$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS)" \
 	      >.bastion-tunnel.log 2>&1 & \
-	    for i in $$(seq 1 20); do nc -z 127.0.0.1 $(BASTION_LOCAL_PORT) 2>/dev/null && break; sleep 1; done; \
-	  fi; \
-	  nc -z 127.0.0.1 $(BASTION_LOCAL_PORT) 2>/dev/null \
-	    && echo "✅ Tunnel up on 127.0.0.1:$(BASTION_LOCAL_PORT)" \
-	    || { echo "❌ Tunnel did not come up - see $(CPU_ENV_DIR)/.bastion-tunnel.log"; exit 1; }
+	    for i in $$(seq 1 15); do probe && break; sleep 4; done; \
+	    if probe; then echo "✅ Tunnel up on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
+	    echo "   attempt $$attempt failed: $$(tail -1 .bastion-tunnel.log 2>/dev/null)"; \
+	    pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
+	  done; \
+	  echo "❌ Tunnel did not come up - see $(CPU_ENV_DIR)/.bastion-tunnel.log"; exit 1
 	@echo ""
 	@echo "Use it with Ansible:"
 	@echo "  make cpu-lab-install ANSIBLE_EXTRA=\"-e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)\""
@@ -621,7 +654,7 @@ cpu-lab-allow-ip: guard-terraform ## Re-point the SSH allow-list at your current
 # When the host is reached through a Bastion tunnel instead of its public IP,
 # pass the override through, e.g.
 #   make cpu-lab-progress ANSIBLE_EXTRA="-e ansible_host=127.0.0.1 -e ansible_port=2222"
-cpu-lab-progress: guard-ansible guard-cpu-env ## Snapshot of the running step on the lab host
+cpu-lab-progress: $(BASTION_DEP) guard-ansible guard-cpu-env ## Snapshot of the running step on the lab host
 	$(Q)cd "$(ANSIBLE_DIR)" && ANSIBLE_HOST_KEY_CHECKING=False ansible \
 	  -i "$(CPU_INVENTORY)" cpu_patch_hosts \
 	  -m script -a "../$(PROGRESS_SCRIPT)" --become $(ANSIBLE_EXTRA) 2>&1 \

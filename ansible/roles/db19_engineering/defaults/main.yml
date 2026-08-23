@@ -468,7 +468,15 @@ db19_oradba_dir: "{{ oracle_base }}/local/oradba"
 db19_oradba_run_check: true
 
 # Re-run the oradba installer even when it is already present.
+# Set true to reinstall over an existing oradba tree. The role is otherwise
+# idempotent by directory existence alone, so a version upgrade needs this
+# flag - without it a host keeps whatever oradba it was first built with.
 db19_oradba_force_install: false
+
+# Where the oradba service scripts write. Must exist and be writable by the
+# Oracle user before oradba_services_root.sh runs under systemd; the role
+# creates it. Matches ${ORADBA_LOG} in oradba_core.conf.
+db19_oradba_log_dir: /var/log/oracle
 
 # systemd unit that starts listeners and databases on boot via oradba's own
 # wrapper. Without it the database stays down after a reboot even though oratab

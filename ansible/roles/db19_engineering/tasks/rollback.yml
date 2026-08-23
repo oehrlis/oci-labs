@@ -84,7 +84,12 @@
 
 # Before anything can start again - a dbstart or the systemd unit firing between
 # these two steps must not bring the database up on patched binaries.
-- name: Point oratab back at the base home
+# The :N is deliberate and temporary. It runs before anything can start again,
+# so a stray dbstart or the systemd unit firing mid-rollback cannot bring the
+# database up on patched binaries. It is restored to :Y at the end of the file -
+# leaving it at :N would silently disable autostart, and the next reboot test
+# would pass by doing nothing at all.
+- name: Point oratab back at the base home, autostart off for the duration
   become: true
   ansible.builtin.lineinfile:
     path: /etc/oratab
@@ -152,3 +157,16 @@
       Rollback complete - {{ oracle_sid }} runs
       {{ db19_snapshot.db.version_full | default('?') }} from
       {{ oracle_home_base }}.
+
+- name: Re-enable autostart in oratab now that the base home is active
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_sid }}:"
+    line: "{{ oracle_sid }}:{{ oracle_home_base }}:Y"
+
+- name: Confirm oratab autostart is back on
+  become: true
+  ansible.builtin.command: "grep -E '^{{ oracle_sid }}:.*:Y$' /etc/oratab"
+  register: db19_rollback_oratab
+  changed_when: false

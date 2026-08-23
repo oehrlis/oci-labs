@@ -143,6 +143,63 @@
     success_msg: "oradba installed at {{ db19_oradba_dir }}."
 
 # ---------------------------------------------------------------------------
+# Interactive environment and logging
+# ---------------------------------------------------------------------------
+# oradba is the interactive toolbox for this host, so the oracle user has to
+# get it on login. The installer does wire a profile, but it writes to ${HOME}
+# and the role runs it as root - the line landed in /root/.bash_profile and
+# /home/oracle/.bash_profile stayed the untouched Oracle Linux stock file.
+# Found on 2026-08-23: "su - oracle -c 'echo $ORACLE_HOME $ORADBA_BASE'"
+# returned nothing at all on a fully installed lab host.
+
+- name: Wire oradba into the oracle user profile
+  become: true
+  ansible.builtin.blockinfile:
+    path: "~{{ oracle_os_user }}/.bash_profile"
+    create: true
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - oradba"
+    block: |
+      # -- OraDBA environment (sources oradba_customer.conf + extensions)
+      if [[ -f "{{ db19_oradba_dir }}/bin/oraenv.sh" ]]; then
+          source "{{ db19_oradba_dir }}/bin/oraenv.sh" --silent
+      fi
+      alias oraenv='source "{{ db19_oradba_dir }}/bin/oraenv.sh" --silent'
+
+- name: Confirm the oracle user gets an Oracle environment on login
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      su - {{ oracle_os_user }} -c 'echo "${ORADBA_BASE:-unset}"'
+    executable: /bin/bash
+  register: db19_oradba_profile_check
+  changed_when: false
+  failed_when: false
+
+- name: Report the interactive environment
+  ansible.builtin.debug:
+    msg: >-
+      {{ ((db19_oradba_profile_check.stdout | trim) in ['unset', ''])
+         | ternary('oradba is installed but the oracle profile does not load it.',
+                   'oracle logs in with ORADBA_BASE='
+                   ~ (db19_oradba_profile_check.stdout | trim) ~ '.') }}
+
+# The service scripts write to ${ORADBA_LOG}, /var/log/oracle by default. Since
+# oradba 1.0.1 a missing directory is no longer fatal, but the logs are simply
+# dropped - and if root creates it first, the oracle user cannot write to it.
+- name: Create the oradba log directory for the oracle user
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_oradba_log_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+
+# ---------------------------------------------------------------------------
 # Autostart on boot
 # ---------------------------------------------------------------------------
 # oratab :Y alone starts nothing - something has to call dbstart. oradba ships
