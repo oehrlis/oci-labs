@@ -516,6 +516,12 @@ cpu-lab-rollback: guard-ansible guard-cpu-env ## Roll the database back to the p
 #   make cpu-lab-bastion-tunnel
 #   make cpu-lab-install ANSIBLE_EXTRA="-e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)"
 
+# IdentitiesOnly=yes is not optional. A Bastion session accepts exactly the key
+# it was created with, and closes the connection after the first key that does
+# not match. Without it ssh offers every identity in the agent first, the
+# Bastion drops the connection, and the tunnel fails with "Permission denied
+# (publickey)" even though -i names the correct key.
+
 BASTION_LOCAL_PORT ?= 2222
 BASTION_SESSION_TTL ?= 10800
 
@@ -558,7 +564,7 @@ cpu-lab-bastion-tunnel: ## Open the last created Bastion tunnel in the backgroun
 	  if nc -z 127.0.0.1 $(BASTION_LOCAL_PORT) 2>/dev/null; then \
 	    echo "Tunnel already listening on 127.0.0.1:$(BASTION_LOCAL_PORT)"; \
 	  else \
-	    nohup bash -c "$$(cat .bastion-tunnel.cmd) -o StrictHostKeyChecking=no" \
+	    nohup bash -c "$$(cat .bastion-tunnel.cmd) -o StrictHostKeyChecking=no -o IdentitiesOnly=yes" \
 	      >.bastion-tunnel.log 2>&1 & \
 	    for i in $$(seq 1 20); do nc -z 127.0.0.1 $(BASTION_LOCAL_PORT) 2>/dev/null && break; sleep 1; done; \
 	  fi; \
