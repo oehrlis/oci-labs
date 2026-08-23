@@ -51,7 +51,7 @@
 
 ## Kontext / Schluesseldaten
 
-```
+```text
 OCI Profil:     ACE
 Compartment:    cmp-oradba-labs (ocid1.compartment.oc1..aaaaaaaaxq7bir...)
 Region:         eu-zurich-1 (region_key: chzh)

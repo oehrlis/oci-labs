@@ -103,14 +103,14 @@ oci-labs/
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Module | Path | Purpose | Generic? |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **naming** | `modules/naming` | Derives `lab_name_core` and `base_freeform_tags` from region/env/stack/instance | yes |
 | **network** | `modules/network` | VCN, subnets, gateways, route tables, security lists, flow logs, optional DRG attachment | yes |
 | **windows_ad** | `modules/windows_ad` | Windows Server 2022 AD DC (NSG, cloud-init WinRM); domain name set by caller | yes |
 | **jumphost_gateway** | `modules/jumphost_gateway` | Oracle Linux jumphost with cloud-init Ansible bootstrap and WireGuard support | yes |
 | **db19_engineering** | `modules/db19_engineering` | Oracle DB 19c engineering instance | yes |
 | **iam_mfa_oma** | `modules/iam_mfa_oma` | OCI IAM resources for Oracle DB Native MFA with OMA Push | yes |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ### What belongs in modules
 
@@ -134,12 +134,12 @@ oci-labs/
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Stack | Path | Stack-code | Runbook |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **ad-cmu-test** | `envs/ad-cmu-test` | `windc` | [runbook-ad-cmu-lab.md](runbook-ad-cmu-lab.md) |
 | **odb19eng-single** | `envs/odb19eng-single` | `odb19eng` | [lab-odb19eng-single.md](lab-odb19eng-single.md) |
 | **odb19sec-dg** | `envs/odb19sec-dg` | `odb19sec` | [lab-odb19sec-dg.md](lab-odb19sec-dg.md) |
 | **mfa_oma_setup** | `envs/mfa_oma_setup` | `mfaoma` | [runbook-mfa-oma.md](runbook-mfa-oma.md) |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ---
 

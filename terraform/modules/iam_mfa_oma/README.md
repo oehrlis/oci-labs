@@ -6,7 +6,7 @@ with OMA Push (Oracle Mobile Authenticator).
 ## What this module creates
 
 | Resource | Description |
-|---|---|
+| --- | --- |
 | `oci_identity_domains_app` | OAuth 2.0 Confidential Application in Identity Domain |
 | `oci_identity_user` | Dedicated SMTP IAM user (tenancy root) |
 | `oci_identity_group` | IAM group for the SMTP user (required for group-based policy) |
@@ -199,7 +199,7 @@ mkstore -wrl "$WALLET" -listCredential
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Name | Description | Type | Default | Required |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `tenancy_ocid` | Tenancy OCID | `string` | - | yes |
 | `compartment_ocid` | Compartment OCID for Email Delivery resources | `string` | - | yes |
 | `identity_domain_ocid` | OCID of the OCI Identity Domain | `string` | - | yes |
@@ -215,13 +215,13 @@ mkstore -wrl "$WALLET" -listCredential
 | `smtp_sender_name` | Display name in From header | `string` | `Oracle DB MFA` | no |
 | `create_dkim` | Create DKIM record | `bool` | `false` | no |
 | `email_domain_ocid` | OCID of Email Delivery domain (required when `create_dkim = true`) | `string` | `null` | no |
-<!-- markdownlint-enable -->
+<!-- markdownlint-restore -->
 
 ## Outputs
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Name | Description | Sensitive |
-|---|---|---|
+| --- | --- | --- |
 | `iam_domain_url` | Identity Domain URL | no |
 | `oauth_client_id` | OAuth App client ID | no |
 | `oauth_client_secret` | OAuth App client secret | yes |
@@ -234,7 +234,7 @@ mkstore -wrl "$WALLET" -listCredential
 | `smtp_group_ocid` | OCID of IAM group for SMTP user | no |
 | `approved_sender_ocid` | OCID of Approved Sender | no |
 | `db_mfa_config_commands` | ALTER SYSTEM commands for DB-side setup | yes |
-<!-- markdownlint-enable -->
+<!-- markdownlint-restore -->
 
 ## References
 

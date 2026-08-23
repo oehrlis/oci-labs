@@ -1,8 +1,10 @@
 # Network module
 
-Provision an Oracle Cloud VCN with public/private/DB/App subnets, security lists, gateways, and flow logs. Resource names use `lab_name_core` from the naming module so stacks stay consistent.
+Provision an Oracle Cloud VCN with public/private/DB/App subnets, security lists, gateways, and flow
+logs. Resource names use `lab_name_core` from the naming module so stacks stay consistent.
 
 ## Inputs
+
 - `compartment_ocid` (string): Compartment OCID for all network resources.
 - `lab_name_core` (string): Core name segment (from naming module), e.g. `chzh-l-odb19eng-01`.
 - `freeform_tags` (map(string)): Base freeform tags applied to all network resources. Default: `{}`.
@@ -33,6 +35,7 @@ enabled also imposes their default CIDRs (`10.19.40.0/24`, `10.19.50.0/24`),
 which fails in a VCN with a different CIDR range.
 
 ## Outputs
+
 - `vcn_id`: OCID of the created VCN.
 - `public_subnet_id`: OCID of the public subnet.
 - `private_subnet_id`: OCID of the private subnet.
@@ -41,6 +44,7 @@ which fails in a VCN with a different CIDR range.
 - `log_group_id`: OCID of the network log group.
 
 ## Usage
+
 ```hcl
 module "naming" {
   source           = "../naming"
@@ -73,6 +77,8 @@ resource "oci_core_instance" "jumphost" {
 ```
 
 ## Notes
+
 - DNS labels are derived from `lab_name_core` and trimmed to 15 characters.
 - Flow logs are optional; toggle via `enable_flow_logs` and adjust retention with `flow_log_retention_duration`.
-- Security lists allow SSH/WireGuard (and optional HTTP/HTTPS) on the public subnet; private/DB/App subnets trust traffic inside the VCN and egress to the Internet via NAT when enabled.
+- Security lists allow SSH/WireGuard (and optional HTTP/HTTPS) on the public subnet; private/DB/App
+  subnets trust traffic inside the VCN and egress to the Internet via NAT when enabled.

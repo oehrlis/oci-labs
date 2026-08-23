@@ -1,6 +1,7 @@
 # Naming module
 
-Consistent naming and tagging helpers for OraDBA lab stacks. The module builds a core name segment and a base freeform tag map so resources share predictable identifiers.
+Consistent naming and tagging helpers for OraDBA lab stacks. The module builds a core name segment
+and a base freeform tag map so resources share predictable identifiers.
 
 ## Inputs
 
@@ -8,7 +9,8 @@ Consistent naming and tagging helpers for OraDBA lab stacks. The module builds a
 - `environment_code` (string): Environment code, e.g. `l` (lab), `ws` (workshop), `d`, `t`, `p`. Default: `l`.
 - `stack_code` (string): Stack / lab type, e.g. `odb19eng`, `odb21eng`, `odb26ai`, `odbaud`.
 - `lab_instance` (number): Lab instance index, rendered as two digits (1 -> `01`). Default: `1`.
-- `common_freeform_tags` (map(string)): Base freeform tags (default includes `project` and `owner`). Merged with stack-specific tags inside the module.
+- `common_freeform_tags` (map(string)): Base freeform tags (default includes `project` and `owner`).
+  Merged with stack-specific tags inside the module.
 
 ## Outputs
 

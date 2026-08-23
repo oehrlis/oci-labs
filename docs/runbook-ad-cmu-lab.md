@@ -63,7 +63,7 @@ flowchart TB
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Component | Resource | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | **VCN** | `oci_core_vcn` (`vcn-chzh-l-windc-01`) | Lab-dedicated VCN, `10.19.0.0/16`. Attached to existing DRG for home lab VPN. |
 | **DRG Attachment** | `oci_core_drg_attachment` (`drga-chzh-l-windc-01`) | Attaches VCN to existing DRG (deep-thought VPN). Routes `192.168.1.0/24`, `10.8.0.0/24` via DRG in Windows route table. |
 | **Windows Subnet** | `oci_core_subnet` (`sn-chzh-l-windc-01`) | Dedicated /24 for the DC; public-capable (public IP assignable) but defaults to private IP only. |
@@ -72,7 +72,7 @@ flowchart TB
 | **NSG** | `oci_core_network_security_group` (`nsg-chzh-l-windc-01-dc-01`) | Instance-level NSG repeating AD ports. Defence-in-depth alongside Security List. |
 | **Resource Scheduler** | `oci_resource_scheduler_schedule` (`sched-chzh-l-windc-01-dc-stop-01`) | Daily auto-stop at 18:00 UTC (20:00 CEST / 19:00 CET). Start manually via Console or CLI. |
 | **ad-lab scripts** | External repo (oehrlis/ad-lab) | PowerShell scripts for AD DS install, user/SPN setup, DNS, CA, and CMU config. Referenced at Ansible deploy time. |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ---
 
@@ -80,7 +80,7 @@ flowchart TB
 
 <!-- markdownlint-disable MD013 -->
 | Port | Protocol | Service | Required for |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 3389 | TCP | RDP | Management access (via VPN; no public IP assigned by default) |
 | 5985 | TCP | WinRM HTTP | Ansible management |
 | 5986 | TCP | WinRM HTTPS | Ansible management (encrypted) |
@@ -91,7 +91,7 @@ flowchart TB
 | 53 | TCP/UDP | DNS | Name resolution within VCN |
 | 3268 | TCP | Global Catalog | Forest-wide LDAP queries |
 | 3269 | TCP | Global Catalog SSL | Forest-wide LDAP over TLS |
-<!-- markdownlint-enable MD013 -->
+<!-- markdownlint-restore -->
 
 ---
 
@@ -99,7 +99,7 @@ flowchart TB
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Requirement | Detail |
-|---|---|
+| --- | --- |
 | OCI Tenancy | ACE tenancy, compartment `cmp-oradba-labs` (OCID in `terraform.tfvars`) |
 | OCI CLI configured | `~/.oci/config` with `[ACE]` profile |
 | Terraform >= 1.5 | `terraform version` |
@@ -108,7 +108,7 @@ flowchart TB
 | Home lab VPN active | UDM site-to-site IPSec to OCI DRG (deep-thought); `10.19.0.0/16` added to UDM remote networks |
 | Ansible with ansible.windows | `ansible-galaxy collection install ansible.windows` |
 | ad-lab repo checked out | `git clone https://github.com/oehrlis/ad-lab.git` adjacent to oci-labs |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ---
 
@@ -205,7 +205,7 @@ auto_stop_schedule_id = "ocid1.resourceschedulerschedule.oc1..."
 Connect via VPN (home lab IPSec or WireGuard). No public IP is assigned by default.
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Host | `terraform output -raw windows_private_ip` (e.g. `10.19.50.x`) |
 | Port | `3389` |
 | Username | `Administrator` |
@@ -223,6 +223,7 @@ open "rdp://full%20address=s:${WIN_IP}:3389&username=s:Administrator"
 ```
 
 Or use the Microsoft Remote Desktop app directly:
+
 - New PC → PC name: `10.19.50.x` → User account: `Administrator` / password from 1Password
 
 ---
@@ -288,13 +289,13 @@ Expected progression:
 
 <!-- markdownlint-disable MD013 -->
 | Files present | Phase | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `cloudinit-phase1.log` (0 B) | Phase 1 starting | WinRM enabled, downloading scripts, installing AD DS role |
 | `cloudinit-phase1.log` (> 0 B), no phase2 log | Phase 1 complete | AD DS installed, instance rebooting into domain promote |
 | `cloudinit-phase2.log` (0 B) | Phase 2 starting | DC rebooted, waiting for AD Web Services |
 | `cloudinit-phase2.log` (> 0 B) | Phase 2 running | AD setup scripts executing |
 | `setup-complete.txt` present | Done | Full lab setup complete |
-<!-- markdownlint-enable MD013 -->
+<!-- markdownlint-restore -->
 
 **Tail phase 1 log (AD DS role install, ~5-10 min):**
 
@@ -500,6 +501,7 @@ terraform -chdir=terraform/envs/ad-cmu-test apply \
 ```
 
 What happens:
+
 1. Old instance is destroyed
 2. New instance is created with a new OCID and new private IP
 3. `null_resource.wait_for_winrm` detects the OCID change (trigger) and re-runs
@@ -528,7 +530,7 @@ and the Resource Scheduler. The DRG itself is managed by deep-thought and is NOT
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Symptom | Likely cause | Fix |
-|---|---|---|
+| --- | --- | --- |
 | `win_ping` connection refused | WinRM not yet ready | Wait 5-10 min after instance start; check cloudbase-init in OCI Console serial output |
 | `win_ping` connection refused (VPN) | VPN tunnel down or wrong remote CIDR | Check UDM VPN status; verify `10.19.0.0/16` is in UDM remote networks |
 | `win_ping` auth error | Wrong password or WinRM Basic auth disabled | Verify cloudbase-init completed; re-run with correct password from 1Password |
@@ -543,4 +545,4 @@ and the Resource Scheduler. The DRG itself is managed by deep-thought and is NOT
 | CMU LDAP queries fail | LDAP port blocked | Check NSG and Security List allow TCP 389 from DB subnet and `home_cidrs` |
 | `terraform apply` 404 NotAuthorized | Wrong OCI profile or `hashicorp/oci` picked over `oracle/oci` | Verify `provider.tf` has `config_file_profile = "ACE"`; delete `.terraform/` and `.terraform.lock.hcl`, re-run `terraform init` |
 | Instance not starting (auto-stop fired) | Resource Scheduler stopped it as scheduled | `oci compute instance action --profile ACE --instance-id $(terraform -chdir=terraform/envs/ad-cmu-test output -raw windows_instance_id) --action START` |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->

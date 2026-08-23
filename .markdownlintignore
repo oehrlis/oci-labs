@@ -1,0 +1,4 @@
+# Generated or vendored content - not part of the source we lint.
+ansible/reports/
+node_modules/
+.terraform/

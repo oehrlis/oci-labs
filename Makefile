@@ -189,13 +189,13 @@ lint-yaml: ## Lint YAML files with yamllint
 	$(Q)"$(YAMLLINT)" "$(ANSIBLE_DIR)"
 
 .PHONY: lint-markdown
+# markdownlint expands the glob itself so that .markdownlintignore applies.
+# A find/xargs pipeline passes explicit paths, which the ignore file cannot
+# override - generated reports under ansible/reports/ were linted that way.
 lint-markdown: ## Lint markdown files with markdownlint
 	@[[ -n "$(MARKDOWNLINT)" ]] || \
 	  { echo "❌ markdownlint not found. Install: npm install -g markdownlint-cli"; exit 1; }
-	$(Q)find . -type f -name "*.md" \
-		-not -path "./.git/*" \
-		-not -path "./node_modules/*" -print0 | \
-		xargs -0 "$(MARKDOWNLINT)"
+	$(Q)"$(MARKDOWNLINT)" "**/*.md"
 
 .PHONY: lint-shell
 lint-shell: ## Lint shell scripts with shellcheck

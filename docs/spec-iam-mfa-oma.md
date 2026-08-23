@@ -207,7 +207,7 @@ Jeder Terraform-Ressource-Block wird im README mit dem OCI CLI
 
 Beispiel-Struktur im README:
 
-```
+```markdown
 ## Resources
 
 ### OAuth Confidential Application
@@ -268,6 +268,6 @@ $ oci email sender create \
 
 ## Referenz
 
-- Oracle MFA Tutorial: https://docs.oracle.com/en/learn/mfa-db23ai-oma/
+- Oracle MFA Tutorial: <https://docs.oracle.com/en/learn/mfa-db23ai-oma/>
 - Talk Demo Guide: talks/oracle-db-mfa/demos.md
 - Blog Post (geplant): oradba.ch

@@ -12,6 +12,7 @@ setup (`~/Repos/accenture/tvd-cpureport/oci/`) uses cloud-init + bash with
 manually uploaded OCI bucket patches - too manual, not reusable.
 
 **Goal**: A modular, reusable lab in `oci-labs` that:
+
 - Builds an OL8 OCI compute instance with Oracle DB 19c installed via oradba
 - Patches from a configurable base RU to the current target RU using AutoUpgrade
   (out-of-place, new ORACLE_HOME)
@@ -25,7 +26,7 @@ manually uploaded OCI bucket patches - too manual, not reusable.
 
 ### Primary (build here)
 
-```
+```text
 ~/Repos/own/oehrlis/oci-labs/
   terraform/
     modules/naming/       - existing naming module (use as-is)
@@ -42,7 +43,7 @@ manually uploaded OCI bucket patches - too manual, not reusable.
 
 ### Reference (read-only, do not modify)
 
-```
+```text
 ~/Repos/accenture/tvd-cpureport/oci/host_db19c/  - old cloud-init pattern
 ~/Repos/own/oehrlis/cpu-patch-tests/scripts/      - au_*.sh AutoUpgrade scripts
 ~/Repos/own/oehrlis/cpu-patch-tests/patches/      - patch dir structure (19/21/26)
@@ -50,16 +51,16 @@ manually uploaded OCI bucket patches - too manual, not reusable.
 
 ### External References
 
-- oradba environment scripts: https://github.com/oehrlis/oradba
+- oradba environment scripts: <https://github.com/oehrlis/oradba>
   (environment setup, aliases, config, scripts - replaces old BasEnv)
-- oradba_init: https://github.com/oehrlis/oradba_init
+- oradba_init: <https://github.com/oehrlis/oradba_init>
   (old init/setup/config scripts - reference only, not used directly)
 - Oracle AutoUpgrade docs for out-of-place patching
 
 ## Architecture Decisions (final)
 
 | Decision | Choice | Reason |
-|---|---|---|
+| --- | --- | --- |
 | OS | OL8 | OL9 cannot run native 19.3.0; OL8 is safe baseline |
 | DB install method | Ansible + oradba scripts | Replaces cloud-init; reusable |
 | Patch method | AutoUpgrade out-of-place | No manual patch download; new ORACLE_HOME per RU |
@@ -132,6 +133,7 @@ Work gate by gate. Present output and ask for go/no-go before next gate.
 **Scope**: `terraform/envs/cpu-patch-test/`
 
 Files to create:
+
 - `provider.tf` - OCI provider, use ACE profile pattern from `ad-cmu-test`
 - `variables.tf` - all inputs (see parametrization above)
 - `main.tf` - assemble: naming + network + compute module(s)
@@ -141,6 +143,7 @@ Files to create:
 - `README.md` - quick start, variable reference
 
 New module to create: `terraform/modules/oracle_db_host/`
+
 - OL8 compute instance
 - Shape variable (default: `VM.Standard.E4.Flex`, 2 OCPU, 16GB for CPU tests)
 - `is_pv_encryption_in_transit_enabled = true`
@@ -160,12 +163,14 @@ Do NOT apply yet - present plan output for review.
 **Scope**: `ansible/roles/db19_engineering/` + new role `oracle_db_install/`
 
 Context on oradba:
+
 - Clone `https://github.com/oehrlis/oradba` to `/opt/oradba` on the host
 - oradba provides: environment config, aliases, helper scripts for Oracle DBs
 - DB software install: use oradba scripts OR Oracle response file method
 - Do NOT use the old `oradba_init` scripts directly; they are reference only
 
 Tasks:
+
 1. Flesh out `roles/db19_engineering/` with:
    - OS prerequisites (kernel params, limits, packages for OL8)
    - oradba installation from GitHub
@@ -190,12 +195,14 @@ Tasks:
 **Scope**: `ansible/roles/db19_engineering/` (patch tasks) + config
 
 AutoUpgrade approach:
+
 - AutoUpgrade downloads patches from Oracle (no manual MOS download needed)
 - Run out-of-place: new `ORACLE_HOME` per target RU
 - Config file generated from template (Jinja2 in Ansible)
 - Parameters driven by `db_base_ru` and `db_target_ru` variables
 - Key autoupgrade config options:
-  ```
+
+  ```text
   global.autoupg_log_dir=/u01/app/oracle/cfgtoollogs/autoupgrade
   upg1.source_home={{ db_oracle_home_base }}
   upg1.target_home={{ db_oracle_home_target }}
@@ -203,9 +210,11 @@ AutoUpgrade approach:
   upg1.mode=upgrade          # or 'patch' for same-version RU patching
   upg1.upgrade_node=localhost
   ```
+
 - After patch: verify new home active, old home can remain for rollback testing
 
 Add Makefile target in `cpu-patch-tests` for documentation (not code):
+
 - Document: "to run lab, source `.env` then `ansible-playbook ... --tags patch`"
 
 **Done when**: AutoUpgrade completes on the lab instance, new ORACLE_HOME
@@ -233,6 +242,7 @@ cpu-lab-cycle:   ## Full cycle: apply → patch → verify → destroy
 Each target sources `.env` if present, otherwise expects TF_VARs set.
 
 Runbook: `docs/runbook-cpu-patch-lab.md`
+
 - Prerequisites (OCI CLI, Terraform, Ansible, op or .env)
 - Step-by-step for a CPU quarter cycle
 - Variable reference table
@@ -293,6 +303,7 @@ claude
 ```
 
 Read these files first (before writing any code):
+
 1. `terraform/envs/ad-cmu-test/` (all files - env pattern reference)
 2. `terraform/modules/network/main.tf` (network module, check Accenture standards)
 3. `terraform/modules/naming/` (naming convention)

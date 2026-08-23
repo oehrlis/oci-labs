@@ -62,7 +62,7 @@ flowchart LR
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Component | Resource | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | **OAuth App** | `oci_identity_domains_app` | Oracle DB uses client_credentials to authenticate against the Identity Domain for OMA Push enrollment and push triggers. Must have roles: MFA Client, User Administrator, Identity Domain Administrator. |
 | **SMTP User** | `oci_identity_user` | Dedicated IAM user for SMTP authentication. Using a dedicated user avoids dependency on personal accounts and allows independent credential rotation. Always created at tenancy root (IAM users are tenancy-wide). |
 | **IAM Group** | `oci_identity_group` | Required wrapper for the SMTP User. Identity Domain tenancies reject `Allow user <name>` policy syntax — only group-based policies are valid. |
@@ -71,7 +71,7 @@ flowchart LR
 | **Email Domain** | `oci_email_email_domain` | Optional. Registers the sender domain in OCI Email Delivery. Required for DKIM. After `apply`, a DNS TXT record must be added to verify ownership. One domain covers all senders under that domain. |
 | **Approved Sender** | `oci_email_sender` | Authorises a specific FROM address to send through OCI Email Delivery. Must match `MFA_SENDER_EMAIL_ID` in the DB. **One sender per FROM address** — multiple DBs can share the same sender address. Create separate senders (e.g. `db1-mfa@oradba.ch`) if per-DB tracking is needed. |
 | **DKIM Record** | `oci_email_dkim` | Optional. Adds a cryptographic signature to outgoing emails, improving deliverability and spam scores. Requires a verified email domain. |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ### Email Domain Deployment Phases
 
@@ -103,7 +103,7 @@ Before deploying this stack, verify the following:
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Requirement                                      | Detail                                                                         |
-|--------------------------------------------------|--------------------------------------------------------------------------------|
+| --- | --- |
 | OCI Tenancy with Identity Domain                 | Classic IAM tenancies are not supported                                        |
 | OCI Email Delivery available                     | Must be enabled in the target region (e.g. eu-zurich-1)                        |
 | Verified email domain                            | The sender domain must be verified in OCI Email Delivery before or after apply |
@@ -111,7 +111,7 @@ Before deploying this stack, verify the following:
 | OCI CLI configured                               | `~/.oci/config` with DEFAULT or named profile                                  |
 | 1Password CLI (`op`)                             | For saving sensitive credentials immediately after apply                       |
 | Oracle Database 23.9 minimum                     | 23.26.1 (26ai) ARM64 has a known regression: `FsDirect not implemented`; use 23.9 |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ---
 
@@ -405,7 +405,7 @@ ALTER SYSTEM SET MFA_SMTP_HOST          = 'smtp.email.eu-zurich-1.oci.oracleclou
 ALTER SYSTEM SET MFA_SMTP_PORT          = 587 SCOPE=BOTH;
 ALTER SYSTEM SET MFA_SENDER_EMAIL_ID    = 'mfa.notification@yourdomain.com' SCOPE=BOTH;
 ```
-<!-- markdownlint-enable MD013 -->
+<!-- markdownlint-restore -->
 
 Also set the display name (not included in Terraform output):
 
@@ -432,7 +432,7 @@ SELECT name, value FROM v$parameter WHERE name = 'wallet_root';
 -- Get the PDB GUID (path component under WALLET_ROOT)
 SELECT guid FROM v$pdbs WHERE name = '<YOUR_PDB_NAME>';
 ```
-<!-- markdownlint-enable MD013 -->
+<!-- markdownlint-restore -->
 
 Set shell variables for use in subsequent commands:
 
@@ -771,7 +771,7 @@ ALTER SYSTEM RESET MFA_SENDER_EMAIL_DISPLAYNAME SCOPE=BOTH;
 
 <!-- markdownlint-disable MD013 MD060 -->
 | Symptom                                                            | Likely Cause                                                             | Fix                                                                                                                         |
-|--------------------------------------------------------------------|--------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| --- | --- | --- |
 | `Error: 404 Not Found` on `oci_identity_domains_app`       | `identity_domain_ocid` is wrong or domain is in a different region       | Verify the OCID in OCI Console under Identity & Security -> Domains                                                         |
 | `Error: Conflict` on `oci_email_sender`                            | Approved Sender already exists in the compartment                        | Remove the existing sender manually in OCI Console or import it: `terraform import oci_email_sender.approved_sender <ocid>` |
 | `Error: 409` on `oci_identity_user`                                | SMTP user name already exists in the tenancy                             | Change `stack` or `lab_instance` in `terraform.tfvars` to generate a different name                                         |
@@ -784,7 +784,7 @@ ALTER SYSTEM RESET MFA_SENDER_EMAIL_DISPLAYNAME SCOPE=BOTH;
 | `orapki secretstore create_entry` fails                            | Wallet does not exist or path is wrong                                   | Verify `$WALLET_ROOT/$PDB_GUID/mfa` exists; re-run `orapki wallet create -pwd ... -compat_v12` |
 | `Cannot modify auto-login (sso) wallet` on `orapki wallet add`     | Wallet was created without `-pwd` (auto_login_only)                      | Delete wallet files and recreate with `-pwd WALLET_PWD -auto_login -compat_v12` |
 | `ORA-28474` / `fsd_notify_cb: FsDirect not implemented` in trace  | Oracle 23.26.1 (26ai) ARM64 regression — MFA not implemented in this build | Use Oracle Database 23.9; `SELECT * FROM v$option WHERE parameter LIKE '%MFA%'` returns no rows on affected builds |
-<!-- markdownlint-enable MD013 MD060 -->
+<!-- markdownlint-restore -->
 
 ---
 

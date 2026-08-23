@@ -1,7 +1,9 @@
 # OCI Resource Naming Concept - OraDBA Labs
 
 This document defines the consistent and scalable naming scheme for all resources in the OraDBA Lab framework.
-The schema is optimized for repeatable, isolated, and automatically deployable lab environments and works for both single labs and workshop scenarios with multiple identical lab instances (via Terraform `count`).
+The schema is optimized for repeatable, isolated, and automatically deployable lab environments and
+works for both single labs and workshop scenarios with multiple identical lab instances (via
+Terraform `count`).
 
 ## Goals of the Naming Concept
 
