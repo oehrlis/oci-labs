@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-23
+
+### Added
+
+- **docs/runbook-cpu-patch-lab.md**: measured step durations for both shapes.
+  A build that takes 40 minutes is fine as long as you know that beforehand;
+  the table exists for predictability, not for speed. Roughly 90 minutes at
+  8 OCPU and 100 at 2 OCPU from nothing to a patched, verified database.
+- **tasks/roadmap-cpu-lab.md**: the reworked plan - milestones, the decisions
+  still open with their trade-offs, and what was deliberately left out.
+- **tasks/state-cpu-lab-2026-08-23.md**: current state. The two earlier state
+  documents are marked superseded; both claimed the feature branch was
+  unmerged, which was already wrong when they were written.
+- **.yamllint** and **.markdownlintignore**: yamllint had no configuration and
+  applied 80 column defaults that contradicted ansible-lint at profile
+  production, so the two linters disagreed on the same files.
+
+### Verified
+
+- **rollback**: `rollback.yml` was written carefully and never exercised. It is
+  now proven against a real guaranteed restore point - flashback, home switch
+  and self-assertion all green, `snapshot-rolledback` written.
+- **reboot**: `oradba-services.service` had been enabled since the lab was
+  built and had never once started. It now brings the listener and the database
+  up unattended in 17 seconds. This needed four oradba releases; see below.
+
+### Fixed
+
+- **Makefile**: the Bastion tunnel now passes `IdentitiesOnly=yes`. A Bastion
+  session accepts exactly the key it was created with and drops the connection
+  after the first key that does not match, so ssh offering agent identities
+  first made the tunnel fail with `Permission denied (publickey)` even with the
+  correct `-i`. It worked until now only because the agent happened to offer
+  the lab key second.
+- **Makefile**: `lint-markdown` lets markdownlint expand the glob so that
+  `.markdownlintignore` applies. The previous find/xargs pipeline passed
+  explicit paths, which an ignore file cannot override, and linted generated
+  reports that are git-ignored.
+- **lint**: the whole suite passes - Terraform, Ansible, YAML, Markdown, Shell.
+  14 `markdownlint-enable` markers replaced with `restore`, since `enable`
+  reactivates rules with default parameters and ignores `.markdownlint.json`.
+  45 further markdown findings, the ansible-lint backlog at profile production,
+  and two 0-byte shell scripts that shellcheck could not assign a shell to.
+
+### Notes
+
+- **oradba 1.0.4 or later is now a hard requirement.** The reboot test exposed
+  six defects in oradba, all pre-existing in v1.0.0 and all of one class: a
+  bare `${VAR}` under `set -euo pipefail` aborts the script when the caller's
+  environment does not define it. An interactive shell has the oradba profile
+  loaded and never triggers it; systemd starts through `su - oracle` with no
+  profile. Earlier versions cannot complete an unattended start. Analysis:
+  `oradba/tasks/review-brief-boot-path-2026-08-23.md`.
+- Five findings in this repository remain open and are tracked in
+  `tasks/roadmap-cpu-lab.md` section 4, the most consequential being that
+  `rollback.yml` leaves `oratab` at `:N` - which would turn any later reboot
+  test into a false green.
+
 ## [Unreleased]
 
 ### Added

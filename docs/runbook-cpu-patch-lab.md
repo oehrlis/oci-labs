@@ -68,6 +68,44 @@ and the quarterly CPU phase.
 Coarse tags wrap them: `install` runs the whole generic phase, `patch` the whole
 CPU phase.
 
+## How long it takes
+
+Measured on a full reference run, 8 OCPU / 32 GB, Oracle Linux 8, 19.31 to
+19.32. The point of this table is predictability, not speed: a build that takes
+40 minutes is fine as long as you know it beforehand.
+
+<!-- markdownlint-disable MD013 -->
+
+| Step | Tag | 8 OCPU / 32 GB | 2 OCPU / 16 GB |
+| --- | --- | --- | --- |
+| Terraform apply, 33 resources | - | ~3 min | ~3 min |
+| prereq, oradba, AutoUpgrade, keystore, download base RU | `install` | ~3 min | ~3 min |
+| Create the base ORACLE_HOME, incl. gold image | `create_home` | 20 min | 25 min |
+| Create the lab database, CDB plus one PDB | `create_db` | 33 min | 38 min |
+| Baseline snapshot | `create_db` | seconds | seconds |
+| Download the target RU | `patch` | ~3 min | ~3 min |
+| Create the target ORACLE_HOME | `patch` | 13 min | - |
+| Out-of-place move, AutoUpgrade deploy | `patch` | 12 min | - |
+| Smoke test | `smoke` | ~2 min | ~2 min |
+| Verification | `verify` | ~2 min | ~2 min |
+| Rollback to the restore point, optional | `rollback` | ~5 min | - |
+| Reboot, database available again | - | ~2 min | - |
+
+<!-- markdownlint-restore -->
+
+A full build from nothing to a patched, verified database is therefore roughly
+**90 minutes** at 8 OCPU and about **100 minutes** at 2 OCPU. The shape is
+dominated by `create_home` and `create_db`, and both are CPU-bound only in
+part - the difference between the two shapes is around 10 minutes, so the
+smaller shape is a reasonable default when nobody is waiting.
+
+Installing from a self-made gold image replaces the 20 minute `create_home`
+with about two minutes and needs no MOS access at all.
+
+A reboot brings the listener and the database back on its own, provided oradba
+1.0.4 or later is installed - earlier versions fail on the boot path. Measured:
+17 seconds from the systemd unit starting to the database being open.
+
 ## Prerequisites
 
 ```bash

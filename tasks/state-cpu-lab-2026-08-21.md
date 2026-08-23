@@ -1,5 +1,8 @@
 # Session State: cpu-patch-test Lab - 2026-08-21
 
+> **Superseded by `state-cpu-lab-2026-08-23.md`.** Kept for the record.
+> The claim that `feat/cpu-patch-test-lab` is unmerged is wrong - it is on `main`.
+
 Resume point for the next session. Supersedes `state-cpu-lab-2026-08-19.md`
 where the two disagree.
 
