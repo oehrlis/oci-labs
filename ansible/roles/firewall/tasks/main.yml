@@ -11,14 +11,14 @@
     enabled: true
 
 - name: Open SSH port in firewalld
-  ansible.builtin.firewalld:
+  ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
     permanent: true
     state: enabled
     immediate: true
 
 - name: Open WireGuard port in firewalld (optional)
-  ansible.builtin.firewalld:
+  ansible.posix.firewalld:
     port: "51820/udp"
     permanent: true
     state: "{{ 'enabled' if enable_wireguard else 'disabled' }}"

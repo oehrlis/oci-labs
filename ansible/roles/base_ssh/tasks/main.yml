@@ -5,8 +5,8 @@
     regexp: '^#?Port '
     line: "Port {{ ssh_port }}"
     state: present
-    backrefs: yes
-  notify: restart sshd
+    backrefs: true
+  notify: Restart sshd
 
 - name: Ensure PasswordAuthentication is disabled
   ansible.builtin.lineinfile:
@@ -14,8 +14,8 @@
     regexp: '^#?PasswordAuthentication '
     line: "PasswordAuthentication no"
     state: present
-    backrefs: yes
-  notify: restart sshd
+    backrefs: true
+  notify: Restart sshd
 
 - name: Allow SSH port in SELinux
   ansible.builtin.command: "semanage port -a -t ssh_port_t -p tcp {{ ssh_port }}"

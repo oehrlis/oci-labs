@@ -280,7 +280,10 @@
     state: started
     daemon_reload: true
 
-- name: Check whether firewalld is running
+# noqa command-instead-of-module: a read-only state query. The systemd
+# module is built for state changes, and ansible.posix.firewalld needs
+# Python firewall bindings that OL8 does not ship for python3.11.
+- name: Check whether firewalld is running  # noqa: command-instead-of-module
   become: true
   ansible.builtin.command: systemctl is-active firewalld
   register: db19_firewalld
@@ -306,7 +309,9 @@
     - db19_firewalld.stdout | default('') | trim == 'active'
     - db19_fw_query.rc | default(1) != 0
 
-- name: Reload firewalld
+# noqa no-handler: the role is stepped through by tag, and a handler does
+# not fire when only a single tag is run. The reload has to be immediate.
+- name: Reload firewalld  # noqa: no-handler
   become: true
   ansible.builtin.command: firewall-cmd --reload
   changed_when: true

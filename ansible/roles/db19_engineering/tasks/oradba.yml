@@ -109,12 +109,16 @@
   changed_when: db19_oradba_install.rc == 0
   when: not db19_oradba_installed.stat.exists or (db19_oradba_force_install | bool)
 
-- name: Report the installer output
+# noqa no-handler: a handler runs at the end of the play, so the installer
+# output would appear detached from the task it belongs to.
+- name: Report the installer output  # noqa: no-handler
   ansible.builtin.debug:
     msg: "{{ (db19_oradba_install.stdout_lines | default([]))[-20:] }}"
   when: db19_oradba_install is changed
 
-- name: Ensure the oradba tree is owned by the oracle user
+# noqa no-handler: ownership has to be correct before the following tasks
+# read the tree. A handler would run after them, at the end of the play.
+- name: Ensure the oradba tree is owned by the oracle user  # noqa: no-handler
   become: true
   ansible.builtin.file:
     path: "{{ db19_oradba_dir }}"

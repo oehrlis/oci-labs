@@ -1,0 +1,29 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: lab-db19eng.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.23
+# Version....: v0.1.0
+# Purpose....: Oracle 19c engineering lab.
+# Notes......: Placeholder. The CPU patch lab uses playbooks/lab-cpu-patch.yml today;
+#              this entry point is reserved for the engineering variant
+#              (persistent host, extra data volume).
+#              Runs no tasks; the assertion states that plainly instead of
+#              succeeding silently on an empty play.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Oracle 19c engineering lab
+  hosts: db19_hosts
+  gather_facts: false
+
+  tasks:
+    - name: Report that this playbook is not implemented yet
+      ansible.builtin.assert:
+        that: false
+        fail_msg: >-
+          lab-db19eng.yml is a placeholder and has no tasks yet.
+          See tasks/roadmap-cpu-lab.md for the milestone that fills it.
