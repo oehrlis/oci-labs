@@ -364,7 +364,10 @@
         {{ db19_smoke_check_plsql | default('skipped') }},
         {{ db19_smoke_check_ojvm | default('skipped') }},
         {{ db19_smoke_check_datapump | default('skipped') }}
-      - "restore point ...................: {{ (db19_post.restore_points | default([]) | map(attribute=0) | join(', ')) | default('none', true) }}"
+      - >-
+        restore point ...................:
+        {{ (db19_post.restore_points | default([]) | map(attribute=0)
+            | join(', ')) | default('none', true) }}
       - "old home retained for rollback ..: {{ oracle_home_base }}"
 
 - name: Write the result artifacts on the host

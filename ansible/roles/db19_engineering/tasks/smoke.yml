@@ -236,7 +236,10 @@
   ansible.builtin.debug:
     msg:
       - "smoke PL/SQL package compile + call : {{ db19_smoke_check_plsql | ternary('PASS', 'FAIL') }}"
-      - "smoke OJVM Java stored procedure ...: {{ db19_smoke_check_ojvm | ternary('PASS', 'FAIL') }} (JDK {{ db19_smoke_jdk }})"
+      - >-
+        smoke OJVM Java stored procedure ...:
+        {{ db19_smoke_check_ojvm | ternary('PASS', 'FAIL') }}
+        (JDK {{ db19_smoke_jdk }})
       - "smoke Data Pump export/import round : {{ db19_smoke_check_datapump | ternary('PASS', 'FAIL') }}"
 
 - name: Show the output of any failed smoke test

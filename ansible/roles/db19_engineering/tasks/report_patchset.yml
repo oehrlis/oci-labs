@@ -125,7 +125,8 @@
       # Platform: {{ db19_autoupgrade_platform }}
       # MRP.....: {{ (db19_patchset_mrp | length > 0) | ternary('yes', 'no') }}
       {% for p in db19_patchset %}
-      {{ p.description }} | {{ p.files | map(attribute='name') | join(',') }} | {{ (p.files | first)['checksum-256'] | default('-', true) }}
+      {{ p.description }} | {{ p.files | map(attribute='name') | join(',') }} |
+      {{ (p.files | first)['checksum-256'] | default('-', true) }}
       {% endfor %}
   when: db19_patches_info_stat.stat.exists
 

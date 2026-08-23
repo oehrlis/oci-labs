@@ -1,0 +1,55 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: .yamllint
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.08.23
+# Version....: v0.1.0
+# Purpose....: yamllint configuration matching the Ansible content in this repo.
+# Notes......: Without this file yamllint applies its own defaults - 80 column
+#              lines and indent-sequences: true - which contradict both the
+#              repo convention and what ansible-lint enforces at profile
+#              production. The two linters then disagree on the same files.
+#              This config mirrors the yamllint settings ansible-lint bundles,
+#              with line-length raised to 120 to match .markdownlint.json.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+extends: default
+
+# Vendored and generated content. The downloaded Ansible collections alone
+# account for 1378 of 1383 findings - third-party code we neither own nor ship.
+ignore: |
+  ansible/.ansible/
+  .ansible/
+  **/.ansible/
+  ansible/reports/
+  ansible/inventories/generated/
+  .terraform/
+
+rules:
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  document-start:
+    present: true
+  empty-lines:
+    max: 2
+  indentation:
+    spaces: consistent
+    indent-sequences: consistent
+  line-length:
+    max: 120
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+  truthy:
+    allowed-values: ["true", "false"]

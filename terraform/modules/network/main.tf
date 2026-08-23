@@ -65,21 +65,21 @@ locals {
 
   # Windows AD ingress rules from VCN (all required AD + management ports)
   windows_ad_ingress_rules = [
-    { name = "rdp",             description = "Allow RDP (TCP 3389)",               protocol = local.tcp_protocol,  tcp_min = 3389, tcp_max = 3389, udp_min = null, udp_max = null, icmp_type = null },
-    { name = "winrm_http",      description = "Allow WinRM HTTP (TCP 5985)",         protocol = local.tcp_protocol,  tcp_min = 5985, tcp_max = 5985, udp_min = null, udp_max = null, icmp_type = null },
-    { name = "winrm_https",     description = "Allow WinRM HTTPS (TCP 5986)",        protocol = local.tcp_protocol,  tcp_min = 5986, tcp_max = 5986, udp_min = null, udp_max = null, icmp_type = null },
-    { name = "ldap_tcp",        description = "Allow LDAP (TCP 389)",                protocol = local.tcp_protocol,  tcp_min = 389,  tcp_max = 389,  udp_min = null, udp_max = null, icmp_type = null },
-    { name = "ldap_udp",        description = "Allow LDAP (UDP 389)",                protocol = local.udp_protocol,  tcp_min = null, tcp_max = null, udp_min = 389,  udp_max = 389,  icmp_type = null },
-    { name = "ldaps",           description = "Allow LDAPS (TCP 636)",               protocol = local.tcp_protocol,  tcp_min = 636,  tcp_max = 636,  udp_min = null, udp_max = null, icmp_type = null },
-    { name = "kerberos_tcp",    description = "Allow Kerberos (TCP 88)",             protocol = local.tcp_protocol,  tcp_min = 88,   tcp_max = 88,   udp_min = null, udp_max = null, icmp_type = null },
-    { name = "kerberos_udp",    description = "Allow Kerberos (UDP 88)",             protocol = local.udp_protocol,  tcp_min = null, tcp_max = null, udp_min = 88,   udp_max = 88,   icmp_type = null },
-    { name = "kerberos_pwd_tcp",description = "Allow Kerberos password (TCP 464)",   protocol = local.tcp_protocol,  tcp_min = 464,  tcp_max = 464,  udp_min = null, udp_max = null, icmp_type = null },
-    { name = "kerberos_pwd_udp",description = "Allow Kerberos password (UDP 464)",   protocol = local.udp_protocol,  tcp_min = null, tcp_max = null, udp_min = 464,  udp_max = 464,  icmp_type = null },
-    { name = "dns_tcp",         description = "Allow DNS (TCP 53)",                  protocol = local.tcp_protocol,  tcp_min = 53,   tcp_max = 53,   udp_min = null, udp_max = null, icmp_type = null },
-    { name = "dns_udp",         description = "Allow DNS (UDP 53)",                  protocol = local.udp_protocol,  tcp_min = null, tcp_max = null, udp_min = 53,   udp_max = 53,   icmp_type = null },
-    { name = "gc",              description = "Allow Global Catalog (TCP 3268)",     protocol = local.tcp_protocol,  tcp_min = 3268, tcp_max = 3268, udp_min = null, udp_max = null, icmp_type = null },
-    { name = "gc_ssl",          description = "Allow Global Catalog SSL (TCP 3269)", protocol = local.tcp_protocol,  tcp_min = 3269, tcp_max = 3269, udp_min = null, udp_max = null, icmp_type = null },
-    { name = "icmp_from_vcn",   description = "Allow ICMP echo from VCN",            protocol = local.icmp_protocol, tcp_min = null, tcp_max = null, udp_min = null, udp_max = null, icmp_type = 8   },
+    { name = "rdp", description = "Allow RDP (TCP 3389)", protocol = local.tcp_protocol, tcp_min = 3389, tcp_max = 3389, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "winrm_http", description = "Allow WinRM HTTP (TCP 5985)", protocol = local.tcp_protocol, tcp_min = 5985, tcp_max = 5985, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "winrm_https", description = "Allow WinRM HTTPS (TCP 5986)", protocol = local.tcp_protocol, tcp_min = 5986, tcp_max = 5986, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "ldap_tcp", description = "Allow LDAP (TCP 389)", protocol = local.tcp_protocol, tcp_min = 389, tcp_max = 389, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "ldap_udp", description = "Allow LDAP (UDP 389)", protocol = local.udp_protocol, tcp_min = null, tcp_max = null, udp_min = 389, udp_max = 389, icmp_type = null },
+    { name = "ldaps", description = "Allow LDAPS (TCP 636)", protocol = local.tcp_protocol, tcp_min = 636, tcp_max = 636, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "kerberos_tcp", description = "Allow Kerberos (TCP 88)", protocol = local.tcp_protocol, tcp_min = 88, tcp_max = 88, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "kerberos_udp", description = "Allow Kerberos (UDP 88)", protocol = local.udp_protocol, tcp_min = null, tcp_max = null, udp_min = 88, udp_max = 88, icmp_type = null },
+    { name = "kerberos_pwd_tcp", description = "Allow Kerberos password (TCP 464)", protocol = local.tcp_protocol, tcp_min = 464, tcp_max = 464, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "kerberos_pwd_udp", description = "Allow Kerberos password (UDP 464)", protocol = local.udp_protocol, tcp_min = null, tcp_max = null, udp_min = 464, udp_max = 464, icmp_type = null },
+    { name = "dns_tcp", description = "Allow DNS (TCP 53)", protocol = local.tcp_protocol, tcp_min = 53, tcp_max = 53, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "dns_udp", description = "Allow DNS (UDP 53)", protocol = local.udp_protocol, tcp_min = null, tcp_max = null, udp_min = 53, udp_max = 53, icmp_type = null },
+    { name = "gc", description = "Allow Global Catalog (TCP 3268)", protocol = local.tcp_protocol, tcp_min = 3268, tcp_max = 3268, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "gc_ssl", description = "Allow Global Catalog SSL (TCP 3269)", protocol = local.tcp_protocol, tcp_min = 3269, tcp_max = 3269, udp_min = null, udp_max = null, icmp_type = null },
+    { name = "icmp_from_vcn", description = "Allow ICMP echo from VCN", protocol = local.icmp_protocol, tcp_min = null, tcp_max = null, udp_min = null, udp_max = null, icmp_type = 8 },
   ]
 
   # Gemeinsame Egress-Regeln für alle internen Subnets und Public

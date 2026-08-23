@@ -23,20 +23,20 @@ locals {
     rdp          = { port = 3389, description = "RDP" }
     winrm_http   = { port = 5985, description = "WinRM HTTP" }
     winrm_https  = { port = 5986, description = "WinRM HTTPS" }
-    ldap_tcp     = { port = 389,  description = "LDAP" }
-    ldaps        = { port = 636,  description = "LDAPS" }
-    kerberos_tcp = { port = 88,   description = "Kerberos" }
-    kpwd_tcp     = { port = 464,  description = "Kerberos pwd change" }
-    dns_tcp      = { port = 53,   description = "DNS" }
+    ldap_tcp     = { port = 389, description = "LDAP" }
+    ldaps        = { port = 636, description = "LDAPS" }
+    kerberos_tcp = { port = 88, description = "Kerberos" }
+    kpwd_tcp     = { port = 464, description = "Kerberos pwd change" }
+    dns_tcp      = { port = 53, description = "DNS" }
     gc           = { port = 3268, description = "Global Catalog" }
     gc_ssl       = { port = 3269, description = "Global Catalog SSL" }
   }
 
   nsg_udp_rules = {
     ldap_udp     = { port = 389, description = "LDAP UDP" }
-    kerberos_udp = { port = 88,  description = "Kerberos UDP" }
+    kerberos_udp = { port = 88, description = "Kerberos UDP" }
     kpwd_udp     = { port = 464, description = "Kerberos pwd change UDP" }
-    dns_udp      = { port = 53,  description = "DNS UDP" }
+    dns_udp      = { port = 53, description = "DNS UDP" }
   }
 }
 
