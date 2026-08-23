@@ -3,12 +3,12 @@
 Supersedes `state-cpu-lab-2026-08-21.md` and `state-cpu-lab-2026-08-19.md`.
 Steering document is `tasks/roadmap-cpu-lab.md`.
 
-- Branch: everything is on `main` and pushed. The claim in the 08-21 state
-  document that `feat/cpu-patch-test-lab` was unmerged was already wrong when
-  it was written.
-- Lab: running, database `CPUDB` open at **19.31.0.0.0** from the base home
-  after the rollback test.
+- Branch: everything is on `main` and pushed, `v0.3.0` tagged.
+- Lab: **stopped, not destroyed.** Database `CPUDB` is at **19.31.0.0.0** from
+  the base home after the rollback test. `make cpu-lab-start` brings it back.
 - Gold image: in the `orarepo` bucket, so a rebuild is cheap either way.
+- oradba on the host: **1.0.4**, which is the minimum for a lab that survives a
+  reboot.
 
 ## What is proven now
 
@@ -57,24 +57,70 @@ The important part for this repo: **oradba 1.0.4 or later is a hard
 requirement** for a lab that has to survive a reboot. Earlier versions cannot
 complete an unattended start.
 
+## Fixed after the reboot test
+
+All six findings are closed. Four are proven on the host, one is documented,
+one is written but unexercised.
+
+| # | Finding | State |
+| --- | --- | --- |
+| B1 | oradba never wired into the oracle profile | fixed, proven |
+| B2 | `rollback.yml` leaves `oratab` at `:N` | fixed, **not exercised** |
+| B3 | tunnel without `IdentitiesOnly` | fixed |
+| B4 | Bastion sessions unstable, `UNREACHABLE` mid-run | fixed, proven |
+| B5 | rollout cannot upgrade | documented |
+| B6 | `/var/log/oracle` missing | fixed, proven |
+
+B1, measured on the host - four empty values before, now:
+
+```text
+ORADBA_BASE=[/u00/app/oracle/local/oradba]
+ORACLE_SID=[CPUDB]
+ORACLE_HOME=[/u00/app/oracle/product/19.31/dbhome_1]
+```
+
+B4 is the one that matters for automation. Use `BASTION=1` on any Ansible
+target and the tunnel is established, probed with a real command and re-created
+if the session was dropped:
+
+```bash
+make cpu-lab-step TAG=oradba BASTION=1
+```
+
+**B2 is honestly unproven.** Exercising it needs a guaranteed restore point,
+which needs another patch run, which needs MOS credentials from 1Password - and
+`op` is not signed in in a non-interactive session. It sits exactly where
+`rollback.yml` sat before this weekend: written carefully, never run.
+
+## Also done
+
+- **M1**: `cpu-patch-tests/tools/import_lab_results.py` plus
+  `make import-lab`. Fills the report CSV from the lab artifacts. Committed
+  locally in that repo, not pushed - your uncommitted work on `VERSION` and
+  `data/2026-07.yaml` is next to it and untouched.
+- **M2, partly**: `terraform/modules/core/` and `terraform/envs/core/` exist,
+  validate, and plan cleanly against the live tenancy. **Not applied.**
+  Migrating `cpu-patch-test` to consume the core was deliberately left alone -
+  the stack is live, and both currently claim `10.29.0.0/16`, so the migration
+  needs a decision rather than a copy-paste.
+
 ## Open in this repo
 
-Numbered as in `tasks/roadmap-cpu-lab.md` section 4.
+Two of them come from `cpu-patch-tests` rather than from here, surfaced by the
+M1 converter on its first run.
 
-- **B1** oradba is never wired into the oracle user's profile. The role runs
-  the installer as root, so the profile line lands in `/root/.bash_profile`.
-  `su - oracle -c 'echo $ORACLE_HOME'` is empty on the lab.
-- **B2** `rollback.yml` leaves `oratab` at `:N` and never restores `:Y`. After a
-  successful rollback the database no longer starts on boot. This turns a
-  reboot test into a false green.
-- **B4** Bastion sessions are less stable than the Makefile assumes: a fresh
-  session needs seconds before it accepts SSH, and one session was `DELETED`
-  three minutes into a three hour TTL. Blocks unattended runs, roadmap M6.
-- **B5** The oradba rollout cannot upgrade. It needs
-  `db19_oradba_force_install=true`, which is undocumented.
-- **B6** `/var/log/oracle` is neither created nor handed to `oracle:oinstall`.
-
-Fixed on the way: **B3**, the Bastion tunnel needed `IdentitiesOnly=yes`.
+- **The period data and the lab do not test the same patch list.** The period
+  lists JDK `39329591`, the lab installs `39791916`, and the lab tests DPBP
+  `39657094` which the period does not track. Combo patches, GI RU and the
+  Windows bundle are legitimately absent from a single-instance Linux lab. One
+  of the two JDK numbers is wrong and it is worth finding out which.
+- **`results.matrix` was never filled automatically for the database.**
+  `import_test_results.py` mapped the `db` product to `oracle database` while
+  every period since 2025-04 labels its rows `RDBMS 19.0.0.0`. Fixed and
+  verified by comparison. The overview had been maintained by hand without
+  anyone knowing why.
+- **`INJECT_FACTS_AS_VARS` deprecation** in the role, mechanical and role-wide.
+- **Migrating `cpu-patch-test` onto the shared core**, the rest of M2.
 
 ## Still untested
 
@@ -98,10 +144,11 @@ single `make cpu-lab-par`.
 
 ```bash
 make cpu-lab-start
-make cpu-lab-bastion-session && make cpu-lab-bastion-tunnel
-make cpu-lab-progress ANSIBLE_EXTRA="-e ansible_host=127.0.0.1 -e ansible_port=2222"
+make cpu-lab-progress BASTION=1
 ```
 
-Every Ansible target needs that `ANSIBLE_EXTRA` override while the direct
-inbound path stays broken. Retry the tunnel if it does not come up on the first
-attempt, see B4.
+`BASTION=1` replaces the old `ANSIBLE_EXTRA` dance: it sets host and port and
+makes the tunnel a prerequisite, retrying and re-creating the session as needed.
+
+For a patch run you also need `eval $(op signin)` - the MOS credentials come
+from 1Password.
