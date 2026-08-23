@@ -227,6 +227,39 @@ check-version: ## Validate semantic version format in VERSION file
 # Every target sources $(CPU_ENV_FILE) when present, so TF_VAR_* overrides are
 # picked up without the caller having to remember 'source .env'.
 
+# ==============================================================================
+# Core stack - shared, long-lived resources
+# ==============================================================================
+# Optional. A lab env can build its own core when none is found; deploying this
+# is what makes the core survive a lab destroy. See terraform/envs/core/README.md
+# for the ownership rule.
+
+CORE_ENV_DIR := $(TF_DIR)/envs/core
+
+.PHONY: core-init
+core-init: guard-terraform ## Init Terraform for the shared core env
+	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" init -input=false
+
+.PHONY: core-plan
+core-plan: guard-terraform ## Plan the shared core env (dry-run)
+	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" plan -input=false
+
+.PHONY: core-apply
+core-apply: guard-terraform ## Build the shared core (network, bucket, Bastion)
+	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" apply -input=false
+
+.PHONY: core-output
+core-output: guard-terraform ## Show the core outputs a lab stack consumes
+	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" output
+
+.PHONY: core-destroy
+core-destroy: guard-terraform ## Tear the shared core down (asks, YES=1 to skip)
+	@echo "⚠️  This removes the network every lab stack depends on."
+	@if [[ "$(YES)" != "1" ]]; then \
+	  read -r -p "    Continue? [y/N] " a; [[ "$$a" == "y" ]] || { echo "aborted"; exit 1; }; \
+	fi
+	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" destroy -input=false $(if $(YES),-auto-approve,)
+
 .PHONY: cpu-lab-init
 cpu-lab-init: guard-terraform ## Init Terraform for the cpu-patch-test env
 	$(Q)cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" init -input=false

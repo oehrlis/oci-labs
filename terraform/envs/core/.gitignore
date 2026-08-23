@@ -1,0 +1,8 @@
+.env
+.ssh/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+tfplan
+terraform.tfvars

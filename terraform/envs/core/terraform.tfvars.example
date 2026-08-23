@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and adapt. Never commit the real file.
+
+oci_config_profile = "TRIVADIS"
+compartment_name   = "cmp-oradba-labs"
+tenancy_ocid       = "ocid1.tenancy.oc1..REPLACE_ME"
+
+region_key       = "chzh"
+environment_code = "l"
+stack_code       = "core"
+
+vcn_cidr          = "10.29.0.0/16"
+allowed_ssh_cidrs = []
+
+# The bucket predates Terraform in trivadisbdsxsp. In a fresh tenancy set this
+# to true so the core stack creates it.
+manage_artifact_bucket = false
+artifact_bucket_name   = "orarepo"
+
+enable_bastion = true
