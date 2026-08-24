@@ -1,1 +1,0 @@
-../../../ai-toolkit/claude/rules/oci-naming.md

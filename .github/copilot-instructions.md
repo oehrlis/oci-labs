@@ -1,1 +1,0 @@
-../../ai-toolkit/copilot/copilot-instructions.md

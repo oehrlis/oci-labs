@@ -1,1 +1,0 @@
-../../../ai-toolkit/claude/rules/markdown-lint.md
