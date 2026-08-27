@@ -74,14 +74,21 @@ rsp fuer 19c und 26ai, die das Lab heute ignoriert - das ist schlicht
 Doppelarbeit und gehoert zusammengefuehrt. Die AutoUpgrade-Seite dagegen hat
 mit der interaktiven Toolbox nichts zu tun.
 
-**Entschieden 2026-08-27: B.** Damit ist M3 nicht mehr blockiert. Konkret:
+**Entschieden 2026-08-27: B - und am selben Tag korrigiert.**
 
-- `dbca`-rsp und `sqlnet.ora`-Vorlagen kommen aus `oradba`, das Lab hoert auf,
-  eigene zu fuehren
-- AutoUpgrade-cfg-Vorlagen, Patch-Listen-Vokabular, MOS-Keystore-Handling und
-  die Verifikations-SQL gehen nach `odb_autoupgrade`
-- beide Quellen muessen auf dem Zielsystem liegen - das ist der bewusst
-  akzeptierte Preis
+Die oradba-Haelfte gilt: `dbca`-rsp und `sqlnet`-Vorlagen kommen mittelfristig
+aus `oradba`. Weil dort eine eigene Session arbeitet, geht das als **Change
+Request** raus (`tasks/cr-oradba-shared-templates.md`), nicht als Edit von hier.
+Bis dahin bleiben die Vorlagen im Lab und funktionieren.
+
+Die `odb_autoupgrade`-Haelfte ist **gestrichen**. Das Lab benutzt dieses Repo
+nicht - es laedt `autoupgrade.jar` direkt von Oracle und ruft
+`java -jar autoupgrade.jar`. Kein Verweis darauf im ganzen Repo. Option B nannte
+es, und ich habe die halbe Planung darauf gestellt, ohne es zu pruefen. Die
+AutoUpgrade-cfg-Vorlagen, das Patch-Listen-Vokabular und das
+MOS-Keystore-Handling **bleiben im Lab**.
+
+Details und der neue Zuschnitt: `tasks/plan-m3-shared-assets.md`.
 
 ### E3 - Braucht oradba einen generellen Review?
 
@@ -127,8 +134,8 @@ Meine Empfehlung weiterhin **A**.
 | M0 | v0.3.0 einfrieren: Rollback, Reboot, Doku, Lint, Tag | M | **fertig**, getaggt und gepusht |
 | M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | **fertig**, gepusht auf `feat/report-redesign-schema-v5`; Merge nach `main` offen |
 | M2 | Core als Modul, implizites Bauen mit Besitzregel, tenant-faehig | M | **`envs/core` angewendet** 2026-08-27, kein Drift; Migration von `cpu-patch-test` offen |
-| M3 | Geteilte Assets herausloesen | M | Bestandsaufnahme fertig, Plan in `tasks/plan-m3-shared-assets.md`, **noch nichts verschoben** |
-| M4 | 26ai (P1) | M | wartet auf M3 (nicht mehr auf einen Entscheid) |
+| M3 | Geteilte Assets herausloesen | S | **neu zugeschnitten** - `odb_autoupgrade` gestrichen, das Lab nutzt plain AutoUpgrade. Bleibt: Change Request an die oradba-Session, `tasks/cr-oradba-shared-templates.md` |
+| M4 | 26ai (P1) | M | **nicht mehr blockiert** - die AutoUpgrade-Assets bleiben im Lab, M3 ist keine Vorbedingung mehr |
 | M5 | MOS-Spike, dann WLS und OUD (P2) | M-L | Spike jederzeit moeglich |
 | M6 | Alle-Tests-Prozess und Zeitsteuerung | M | wartet auf M4, M5 |
 
