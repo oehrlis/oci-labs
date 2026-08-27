@@ -69,10 +69,19 @@ konsumiert, nicht von einem Menschen an der Kommandozeile.
 | **B: dbca-rsp und sqlnet nach oradba** (dort schon vorhanden), AutoUpgrade-Assets nach `odb_autoupgrade` | jedes Repo behaelt seinen Zweck; `odb_autoupgrade` ist genau dafuer gebaut | zwei Quellen statt einer, beide muessen auf dem Zielsystem liegen |
 | **C: neues schlankes Repo** nur fuer Automations-Assets | sauberste Trennung | ein Repo mehr zu pflegen, und die Verifikations-SQL braucht Oracle-Kontext |
 
-Meine Empfehlung: **B**. `oradba/src/templates/dbca/` enthaelt bereits fertige
+Meine Empfehlung war **B**. `oradba/src/templates/dbca/` enthaelt bereits fertige
 rsp fuer 19c und 26ai, die das Lab heute ignoriert - das ist schlicht
 Doppelarbeit und gehoert zusammengefuehrt. Die AutoUpgrade-Seite dagegen hat
 mit der interaktiven Toolbox nichts zu tun.
+
+**Entschieden 2026-08-27: B.** Damit ist M3 nicht mehr blockiert. Konkret:
+
+- `dbca`-rsp und `sqlnet.ora`-Vorlagen kommen aus `oradba`, das Lab hoert auf,
+  eigene zu fuehren
+- AutoUpgrade-cfg-Vorlagen, Patch-Listen-Vokabular, MOS-Keystore-Handling und
+  die Verifikations-SQL gehen nach `odb_autoupgrade`
+- beide Quellen muessen auf dem Zielsystem liegen - das ist der bewusst
+  akzeptierte Preis
 
 ### E3 - Braucht oradba einen generellen Review?
 
@@ -118,8 +127,8 @@ Meine Empfehlung weiterhin **A**.
 | M0 | v0.3.0 einfrieren: Rollback, Reboot, Doku, Lint, Tag | M | **fertig**, getaggt und gepusht |
 | M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | **fertig**, gepusht auf `feat/report-redesign-schema-v5`; Merge nach `main` offen |
 | M2 | Core als Modul, implizites Bauen mit Besitzregel, tenant-faehig | M | **`envs/core` angewendet** 2026-08-27, kein Drift; Migration von `cpu-patch-test` offen |
-| M3 | Geteilte Assets herausloesen | M | **wartet auf E2** |
-| M4 | 26ai (P1) | M | wartet auf M3 |
+| M3 | Geteilte Assets herausloesen | M | **frei** - E2 am 2026-08-27 als B entschieden |
+| M4 | 26ai (P1) | M | wartet auf M3 (nicht mehr auf einen Entscheid) |
 | M5 | MOS-Spike, dann WLS und OUD (P2) | M-L | Spike jederzeit moeglich |
 | M6 | Alle-Tests-Prozess und Zeitsteuerung | M | wartet auf M4, M5 |
 
@@ -217,22 +226,47 @@ lab home carries 39657094 - no row in the period data
 
 Combo-Patches, GI RU und Windows Bundle fehlen zu Recht - das Lab ist eine
 Single-Instance auf Linux. Aber der JDK-Patch weicht ab, und den DPBP `39657094`
-testet das Lab, ohne dass der Report ihn fuehrt. **Zu klaeren:** ist die
-Periodendatei veraltet, oder testet das Lab die falsche Patch-Liste?
+testet das Lab, ohne dass der Report ihn fuehrt.
 
-## 4c. Was ich am Montag zuerst von dir brauche
+**Geklaert 2026-08-27.** Keine der beiden Seiten ist falsch, und die Periodendatei
+ist auch nicht veraltet - es sind zwei verschiedene Auswahlmechanismen:
 
-In dieser Reihenfolge, weil das eine das andere blockiert.
+- `39329591` ist der **im Juli-CPU publizierte** JDK-Patch (JDK8u501), pro
+  DB-Release eigen - 21c fuehrt dafuer `39747770`
+- `39791916` ist der **am Lauftag aktuelle** JDK Bundle Patch
+  (19.0.0.0.260818, vom 18.08.) - das AutoUpgrade-Keyword `JDK` loest immer auf
+  den aktuellen auf und nimmt keine Patch-Nummer an. Genau das steht als Caveat
+  in `db19_engineering/defaults/main.yml` und war von Anfang an bekannt
 
-1. **`eval $(op signin)`** - danach kann ich den Patch-Lauf fahren, der den
-   B2-Fix beweist und das Lab wieder in den getesteten Zielzustand bringt.
-2. **E2 entscheiden** - wo die geteilten Assets leben. Blockiert M3 und damit
-   M4 (26ai).
-3. **Den JDK-Unterschied klaeren** - Periodendaten sagen 39329591, das Lab
-   installiert 39791916. Eines von beiden ist falsch.
-4. **`cpu-patch-tests` pushen oder nicht** - dort liegt mein M1-Commit lokal,
-   neben deinen unfertigen Aenderungen an `VERSION` und `data/2026-07.yaml`,
-   die ich nicht angefasst habe.
+Der echte Defekt liegt woanders: `data/2026-07.yaml` fuehrt `39329591` mit
+`result: ok`, also als getestet - installiert wurde er nie. Der Report behauptet
+etwas, das der Lauf nicht belegt.
+
+**Entschieden: der Report sagt, was getestet wurde.** Die aufgeloeste Menge aus
+`patchset-<RU>.json` wird die Quelle der `tested_patches`, `39329591` wird als
+nicht getestet gefuehrt. Pinnen waere die Alternative gewesen, kostet aber einen
+eigenen Download- und Apply-Schritt ausserhalb der AutoUpgrade-Patchliste.
+
+Naechster Schritt, in `cpu-patch-tests`: `import_lab_results.py` schreibt die
+aufgeloeste Menge in die Ergebnisliste, statt die Differenz nur zu melden.
+Gleiches gilt fuer den DPBP `39657094`, den das Lab testet und der Report nicht
+fuehrt.
+
+## 4c. Die vier Punkte vom Montag - Stand 2026-08-27
+
+| # | Punkt | Stand |
+| --- | --- | --- |
+| 1 | Patch-Lauf auf 19.32, beweist den B2-Fix | **offen** - braucht `eval $(op signin)` in einer interaktiven Sitzung |
+| 2 | E2, wo die geteilten Assets leben | **entschieden: B**, siehe oben. M3 ist frei |
+| 3 | JDK-Unterschied | **geklaert und entschieden**, siehe Abschnitt 4b |
+| 4 | `cpu-patch-tests` pushen | **erledigt** - `main` per Fast-Forward auf `20c722f`, M1-Commit `d56b1fe` ist auf `main` und dem Remote |
+
+Zu 4: der M1-Commit war bereits gepusht, auf `feat/report-redesign-schema-v5`.
+Was fehlte, war der Merge nach `main` - 30 Commits, als Fast-Forward ohne
+Merge-Commit. Dein unfertiger Arbeitsstand im Worktree wurde dabei nicht
+angefasst; `make check` scheitert dort an elf leeren Feldern des
+August-2026-CSPU-Blocks, alle aus dem uncommitteten Stand. `HEAD` fuehrt
+`cspu: []` und validiert fehlerfrei.
 
 ## 5. Offene Punkte aus dem alten Stand
 
