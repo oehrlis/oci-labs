@@ -22,7 +22,7 @@
   register: semanage_result
   changed_when: semanage_result.rc == 0
   failed_when: semanage_result.rc not in [0, 1]
-  when: ansible_selinux.status == "enabled"
+  when: (ansible_facts['selinux']['status'] | default('disabled')) == "enabled"
 
 - name: Ensure sshd is enabled and running
   ansible.builtin.service:

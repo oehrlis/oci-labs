@@ -248,6 +248,6 @@
     group: "{{ oracle_os_group_install }}"
     mode: "0644"
     content: |
-      RU {{ db19_home_ru }} staged {{ ansible_date_time.iso8601 | default('unknown') }}
+      RU {{ db19_home_ru }} staged {{ ansible_facts['date_time']['iso8601'] | default('unknown') }}
       gold_image_used={{ db19_gold_image_used | default(false) }}
   when: not db19_download_stamp.stat.exists

@@ -37,7 +37,7 @@
     db19_report_stem: >-
       {{ 'cputest-' ~ oracle_sid ~ '-' ~ (db_base_ru | replace('.', '_'))
          ~ '-to-' ~ (db_target_ru | replace('.', '_')) ~ '-'
-         ~ (ansible_date_time.date | replace('-', '')) }}
+         ~ (ansible_facts['date_time']['date'] | replace('-', '')) }}
 
 - name: Resolve the ORACLE_HOME registered in oratab
   become: true
@@ -291,7 +291,7 @@
       {{ {
            'database': oracle_sid,
            'host': inventory_hostname,
-           'date': ansible_date_time.iso8601 | default('unknown'),
+           'date': ansible_facts['date_time']['iso8601'] | default('unknown'),
            'base_ru': db_base_ru,
            'target_ru': db_target_ru,
            'base_home': oracle_home_base,

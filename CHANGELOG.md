@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **terraform/envs/core applied**: the shared core stack is no longer only
+  validated. `chzh-l-core-01` in tenancy `trivadisbdsxsp` - VCN, three subnets,
+  IGW and NAT, three route tables, three security lists, VCN flow logs, one
+  Bastion - 20 resources, re-plan without drift, all 19 OCI resources tagged
+  `core_owner = "core"`. Nothing consumes it yet: `cpu-patch-test` still owns
+  its own network on the same CIDR in a separate VCN, untouched while its
+  database is live. The two coexist because they are never peered.
+- **assert_vars.yml**: an assertion that the `date_time` fact is present. Two
+  artifact names are derived from it - the cputest report stem and the gold
+  image name - and neither carries a fallback. Without the fact they rendered
+  without a date, so a second run would overwrite the first run's evidence
+  under an identical name instead of failing. Found by rendering the changed
+  expressions offline against an empty fact dict.
+
+### Changed
+
+- **facts are addressed as `ansible_facts['name']`** throughout the Ansible
+  layer, and `inject_facts_as_vars = False` is pinned in `ansible.cfg`. Ansible
+  deprecated the injected top-level `ansible_<name>` variables and will flip
+  that default; pinning it now means a missed reference fails loudly here
+  instead of silently working until the default changes. Twelve references in
+  eight files - the roadmap's "mechanical, role-wide" estimate came from a
+  count that included the vendored collections tree and connection variables
+  such as `ansible_user`, which this deprecation does not touch.
+
+### Fixed
+
+- **CHANGELOG**: 365 lines of work that shipped in `v0.3.0` were filed under a
+  second `## [Unreleased]` heading below the `[0.3.0]` section - verified by
+  reading the heading out of the `v0.3.0` tag itself. Both blocks are now one
+  `[0.3.0]` section, merged per subsection; the content is byte-identical, 393
+  lines in and 393 out as the same multiset.
+
 ## [0.3.0] - 2026-08-23
 
 ### Added
@@ -20,51 +57,6 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **.yamllint** and **.markdownlintignore**: yamllint had no configuration and
   applied 80 column defaults that contradicted ansible-lint at profile
   production, so the two linters disagreed on the same files.
-
-### Verified
-
-- **rollback**: `rollback.yml` was written carefully and never exercised. It is
-  now proven against a real guaranteed restore point - flashback, home switch
-  and self-assertion all green, `snapshot-rolledback` written.
-- **reboot**: `oradba-services.service` had been enabled since the lab was
-  built and had never once started. It now brings the listener and the database
-  up unattended in 17 seconds. This needed four oradba releases; see below.
-
-### Fixed
-
-- **Makefile**: the Bastion tunnel now passes `IdentitiesOnly=yes`. A Bastion
-  session accepts exactly the key it was created with and drops the connection
-  after the first key that does not match, so ssh offering agent identities
-  first made the tunnel fail with `Permission denied (publickey)` even with the
-  correct `-i`. It worked until now only because the agent happened to offer
-  the lab key second.
-- **Makefile**: `lint-markdown` lets markdownlint expand the glob so that
-  `.markdownlintignore` applies. The previous find/xargs pipeline passed
-  explicit paths, which an ignore file cannot override, and linted generated
-  reports that are git-ignored.
-- **lint**: the whole suite passes - Terraform, Ansible, YAML, Markdown, Shell.
-  14 `markdownlint-enable` markers replaced with `restore`, since `enable`
-  reactivates rules with default parameters and ignores `.markdownlint.json`.
-  45 further markdown findings, the ansible-lint backlog at profile production,
-  and two 0-byte shell scripts that shellcheck could not assign a shell to.
-
-### Notes
-
-- **oradba 1.0.4 or later is now a hard requirement.** The reboot test exposed
-  six defects in oradba, all pre-existing in v1.0.0 and all of one class: a
-  bare `${VAR}` under `set -euo pipefail` aborts the script when the caller's
-  environment does not define it. An interactive shell has the oradba profile
-  loaded and never triggers it; systemd starts through `su - oracle` with no
-  profile. Earlier versions cannot complete an unattended start. Analysis:
-  `oradba/tasks/review-brief-boot-path-2026-08-23.md`.
-- Five findings in this repository remain open and are tracked in
-  `tasks/roadmap-cpu-lab.md` section 4, the most consequential being that
-  `rollback.yml` leaves `oratab` at `:N` - which would turn any later reboot
-  test into a false green.
-
-## [Unreleased]
-
-### Added
 
 - **role/db19_engineering**: verification rewritten into four levels, because a
   patch can fail at four places - binary (`opatch lsinventory` against the
@@ -134,6 +126,178 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   host through the OCI control plane and is independent of inbound connectivity
   to the public IP - which is what made the 2026-08-21 rebuild possible at all
   (see Fixed).
+
+### Verified
+
+- **rollback**: `rollback.yml` was written carefully and never exercised. It is
+  now proven against a real guaranteed restore point - flashback, home switch
+  and self-assertion all green, `snapshot-rolledback` written.
+- **reboot**: `oradba-services.service` had been enabled since the lab was
+  built and had never once started. It now brings the listener and the database
+  up unattended in 17 seconds. This needed four oradba releases; see below.
+
+### Fixed
+
+- **Makefile**: the Bastion tunnel now passes `IdentitiesOnly=yes`. A Bastion
+  session accepts exactly the key it was created with and drops the connection
+  after the first key that does not match, so ssh offering agent identities
+  first made the tunnel fail with `Permission denied (publickey)` even with the
+  correct `-i`. It worked until now only because the agent happened to offer
+  the lab key second.
+- **Makefile**: `lint-markdown` lets markdownlint expand the glob so that
+  `.markdownlintignore` applies. The previous find/xargs pipeline passed
+  explicit paths, which an ignore file cannot override, and linted generated
+  reports that are git-ignored.
+- **lint**: the whole suite passes - Terraform, Ansible, YAML, Markdown, Shell.
+  14 `enable` markers replaced with `restore`, since `enable`
+  reactivates rules with default parameters and ignores `.markdownlint.json`.
+  45 further markdown findings, the ansible-lint backlog at profile production,
+  and two 0-byte shell scripts that shellcheck could not assign a shell to.
+
+- **role/db19_engineering**: the database registers with the listener again
+  after an out-of-place move. Two defects, both silent - the database was open
+  and healthy while `lsnrctl status` reported "The listener supports no
+  services" and nothing could connect over TNS. First, `tnsnames.ora.j2` never
+  defined `LISTENER_<SID>`, the alias dbca puts into `local_listener`, so
+  rendering the template into the target home removed it. Second, the alias must
+  not use the short host name: `getent hosts oradb01` answers with the IPv6
+  link-local address first and the instance then rejects the parameter with
+  ORA-00141 / ORA-00132, so `db19_net_host` is the FQDN the listener itself binds
+  to. The registration task also re-sets `local_listener` in memory, because
+  `alter system register` reuses the address resolved at startup. Both files now
+  carry the `netconfig` tag so the network configuration can be repaired without
+  repeating the patch. This also took the Data Pump smoke test down with it,
+  which connects through the PDB service - that now passes too.
+- **role/db19_engineering**: `datapatch -prereq` is classified by what it
+  actually prints. The check looked for "nothing to apply" and failed a clean
+  run whose output read "No interim patches need to be applied". It now collects
+  every "need to be" line and drops the ones starting with "No".
+- **role/db19_engineering**: the sqlpatch gate is scoped to the patches of the
+  test. A `WITH ERRORS (PREV PATCH)` row left in the registry by the base
+  installation turned an otherwise clean 19.32 run red. Historical failures are
+  still reported, as `sqlpatch_historical_errors`, but they are no longer a
+  statement about the patch under test.
+- **role/db19_engineering**: the binary comparison ignores entries that cannot
+  appear in `opatch lsinventory`. OPatch (p6880880) is the tool itself, and an
+  MRP is a bundle whose members are registered individually - MRP 39834034
+  showed up as 39661089, 39750798 and 39779336. Both were reported as
+  permanently missing. Bundles are now listed by name instead.
+- **role/db19_engineering**: `patchset-<RU>.json` holds that RU's patches only.
+  It used to be a verbatim copy of `patches_info.json`, which AutoUpgrade
+  accumulates across jobs sharing a folder, so the target manifest carried the
+  base RU's patches and the verification reported them as missing from the
+  target home.
+- **role/db19_engineering**: the Data Pump smoke test is diagnosable. Export and
+  import output went to `/dev/null` and the logs were deleted moments later, so
+  a failed round trip left nothing but `ORA-00942`. The output is kept, the logs
+  are printed on failure, and the working directory survives when a check fails.
+- **playbook/lab-cpu-patch**: added `UserKnownHostsFile=/dev/null` to the SSH
+  arguments. With a Bastion port-forwarding tunnel every lab host answers on the
+  same `127.0.0.1:2222`, so a recorded host key belongs to whichever instance
+  came first and every replacement then failed with "REMOTE HOST IDENTIFICATION
+  HAS CHANGED". `StrictHostKeyChecking=no` alone does not help, because a
+  conflicting entry is refused regardless. Pinning a host key to a reused local
+  port carries no security value - the identity that matters is enforced by the
+  Bastion session and the lab keypair.
+- **role/db19_engineering**: the gold-image file name is dot-free. AutoUpgrade
+  26.5.260807 rejects the parameter with "The CREATE_GOLD_IMAGE parameter must
+  resolve to a file name containing only letters, numbers, underscores, hyphens,
+  and the .zip suffix", so the version is written with underscores
+  (`19_31_0_0_0`). Measured 2026-08-21 - the failure aborts `create_home` after
+  four seconds, at config-parse time.
+- **Makefile**: Ansible secrets no longer travel on the command line. The MOS
+  credentials, the database SYS password and the AutoUpgrade keystore password
+  went to `ansible-playbook` as `-e key=value`, which puts them in an argv that
+  any local user can read with `ps` - for the full hour an AutoUpgrade run lasts.
+  `cpu-lab-install`, `cpu-lab-patch` and `cpu-lab-step` now build a `0600` JSON
+  file via `mktemp` and pass `-e @<file>`, with a `trap` that removes it on
+  success, error and interrupt alike. The values reach `python3` through the
+  environment rather than argv for the same reason: `/proc/<pid>/environ` and
+  `ps -E` are owner-restricted, argv is not.
+- **playbook/lab-cpu-patch**: added a `raw`-based SSH wait as the first task. A
+  freshly applied instance is `RUNNING` before sshd accepts logins, so
+  `make cpu-lab-cycle` died on "Connection refused" straight after
+  `terraform apply`. Deliberately not `wait_for_connection`: that runs the ping
+  module, which needs the Python interpreter the *next* task installs, so on a
+  fresh host it can never succeed. `raw` also rides out the window in which sshd
+  answers but `pam_nologin` still rejects the login.
+- **docs/runbook**: corrected the 19c gold-image diagnosis. It is not that
+  "gold_image is rejected on download jobs" - `target_version=19` is the only
+  release whose gold-image resolution goes through the Oracle Update Advisor
+  (`ValidateGoldImage.isGoldImageServiceTargetRelease`), and
+  `POST transport.oracle.com/v2/patchplanner/requests` answers HTTP 500.
+  AutoUpgrade cannot parse the plain-text body as JSON ("Unexpected char 73")
+  and surfaces the outage as `Failed to process the gold_image parameter`.
+  `gold_image=YES` takes the same path; `target_version=19.32` is rejected as
+  not being a single version. 21 and 23 log "The Oracle Update Advisor service
+  is not used for target release 23" and work. Reproduced on the lab host and on
+  macOS with AutoUpgrade 26.5.260807 and the same keystore.
+
+- **Makefile**: new at the repository root. Lint targets (`lint-terraform`,
+  `lint-ansible`, `lint-yaml`, `lint-markdown`, `lint-shell`, `check-version`),
+  the cpu-patch-test lab lifecycle (`cpu-lab-init/plan/apply/install/patch/
+  verify/destroy/cycle`), plus `cpu-lab-step TAG=<tag>` for single-step runs on a
+  test VM. Version and release targets follow the OraDBA standard. Each lab
+  target auto-sources `terraform/envs/cpu-patch-test/.env`; `op read` is called
+  inside recipe bodies only, never at parse time.
+- **env/cpu-patch-test**: new Terraform stack for quarterly Oracle CPU patch
+  testing. Oracle Linux 8 hosts, `lab_count`-parametrised, deploys into an
+  existing base compartment (resolvable by OCID or by name plus `tenancy_ocid`).
+  Generates the Ansible inventory into `ansible/inventories/generated/` so host
+  IPs stay out of git, generates the database SYS password (`random_password`)
+  and a dedicated lab SSH keypair (`tls_private_key`), and authorises the
+  operator's own key from `~/.ssh/id_ed25519.pub` alongside it.
+- **module/oracle_db_host**: new module for N identical Oracle Linux 8 database
+  hosts. Enforces the Accenture standards unconditionally
+  (`is_pv_encryption_in_transit_enabled`, `are_legacy_imds_endpoints_disabled`)
+  on instances and volume attachments. Instance NSG allows SSH from the VCN CIDR
+  plus opt-in external CIDRs, and the Oracle Net listener intra-VCN only.
+  Optional data volume per host. Minimal cloud-init - Ansible does the rest.
+- **role/db19_engineering**: implemented (was an empty stub). Native Ansible OS
+  prerequisites built on `oracle-database-preinstall-19c`, then AutoUpgrade for
+  every software operation: `-mode download`, `-mode create_home` for both the
+  base and target ORACLE_HOME, and `-mode deploy` for the out-of-place move.
+  Split into a generic phase (reusable for any 19c lab) and the quarterly CPU
+  phase, with a tag per step so the flow can be driven one step at a time.
+  The legacy `oradba_init` scripts are deliberately not invoked; `oradba` is
+  installed as the runtime/environment layer only.
+- **playbook/lab-cpu-patch.yml**: entry point for the lab, targets the
+  `cpu_patch_hosts` group from the generated inventory.
+- **ansible/requirements.yml**: collection requirements (`ansible.posix` for
+  `selinux` and `firewalld`, `ansible.windows` for the AD lab).
+- **ansible/.ansible-lint**: skips `var-naming[no-role-prefix]` with the
+  reasoning documented in the file - a deliberate subset of role variables
+  (`oracle_sid`, `db_base_ru`, `db_target_ru`, `oracle_home_base`,
+  `oracle_home_target`) is the Terraform-to-Ansible contract and must not carry
+  a role-name prefix.
+- **.markdownlint.json**: OraDBA markdown standard (line length 120, MD033 off,
+  MD024 siblings only).
+- **docs/runbook-cpu-patch-lab.md**: runbook for a full CPU quarter cycle -
+  architecture, prerequisites, the six steps, variable and secret reference, and
+  a troubleshooting section.
+- **env/ad-cmu-test**: Ansible inventory (`hosts.yml`) is now written immediately at
+  the start of `null_resource.wait_for_winrm` provisioner, before the WinRM polling
+  loop. Previously the IP was only written after WinRM became reachable, leaving the
+  inventory stale when apply was interrupted or run without VPN connectivity.
+- **env/ad-cmu-test**: Inventory path uses `abspath(path.root)` instead of `path.root`
+  so the path resolves correctly regardless of the working directory terraform is
+  invoked from.
+- **env/ad-cmu-test**: Inventory `hosts.yml` added to version control with current
+  private IP (`10.19.50.93`) for the `windc01` host.
+
+### Notes
+
+- **oradba 1.0.4 or later is now a hard requirement.** The reboot test exposed
+  six defects in oradba, all pre-existing in v1.0.0 and all of one class: a
+  bare `${VAR}` under `set -euo pipefail` aborts the script when the caller's
+  environment does not define it. An interactive shell has the oradba profile
+  loaded and never triggers it; systemd starts through `su - oracle` with no
+  profile. Earlier versions cannot complete an unattended start. Analysis:
+  `oradba/tasks/review-brief-boot-path-2026-08-23.md`.
+- Five findings in this repository remain open and are tracked in
+  `tasks/roadmap-cpu-lab.md` section 4, the most consequential being that
+  `rollback.yml` leaves `oratab` at `:N` - which would turn any later reboot
+  test into a false green.
 
 ### Changed
 
@@ -293,139 +457,6 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cost a failed run and filled the log with a misleading configuration error.
 - **env/cpu-patch-test**: `db_host_ocpus` 2 -> 8 and `db_host_memory_gbs`
   16 -> 32 in `terraform.tfvars`, which previously overrode the raised defaults.
-
-### Fixed
-
-- **role/db19_engineering**: the database registers with the listener again
-  after an out-of-place move. Two defects, both silent - the database was open
-  and healthy while `lsnrctl status` reported "The listener supports no
-  services" and nothing could connect over TNS. First, `tnsnames.ora.j2` never
-  defined `LISTENER_<SID>`, the alias dbca puts into `local_listener`, so
-  rendering the template into the target home removed it. Second, the alias must
-  not use the short host name: `getent hosts oradb01` answers with the IPv6
-  link-local address first and the instance then rejects the parameter with
-  ORA-00141 / ORA-00132, so `db19_net_host` is the FQDN the listener itself binds
-  to. The registration task also re-sets `local_listener` in memory, because
-  `alter system register` reuses the address resolved at startup. Both files now
-  carry the `netconfig` tag so the network configuration can be repaired without
-  repeating the patch. This also took the Data Pump smoke test down with it,
-  which connects through the PDB service - that now passes too.
-- **role/db19_engineering**: `datapatch -prereq` is classified by what it
-  actually prints. The check looked for "nothing to apply" and failed a clean
-  run whose output read "No interim patches need to be applied". It now collects
-  every "need to be" line and drops the ones starting with "No".
-- **role/db19_engineering**: the sqlpatch gate is scoped to the patches of the
-  test. A `WITH ERRORS (PREV PATCH)` row left in the registry by the base
-  installation turned an otherwise clean 19.32 run red. Historical failures are
-  still reported, as `sqlpatch_historical_errors`, but they are no longer a
-  statement about the patch under test.
-- **role/db19_engineering**: the binary comparison ignores entries that cannot
-  appear in `opatch lsinventory`. OPatch (p6880880) is the tool itself, and an
-  MRP is a bundle whose members are registered individually - MRP 39834034
-  showed up as 39661089, 39750798 and 39779336. Both were reported as
-  permanently missing. Bundles are now listed by name instead.
-- **role/db19_engineering**: `patchset-<RU>.json` holds that RU's patches only.
-  It used to be a verbatim copy of `patches_info.json`, which AutoUpgrade
-  accumulates across jobs sharing a folder, so the target manifest carried the
-  base RU's patches and the verification reported them as missing from the
-  target home.
-- **role/db19_engineering**: the Data Pump smoke test is diagnosable. Export and
-  import output went to `/dev/null` and the logs were deleted moments later, so
-  a failed round trip left nothing but `ORA-00942`. The output is kept, the logs
-  are printed on failure, and the working directory survives when a check fails.
-- **playbook/lab-cpu-patch**: added `UserKnownHostsFile=/dev/null` to the SSH
-  arguments. With a Bastion port-forwarding tunnel every lab host answers on the
-  same `127.0.0.1:2222`, so a recorded host key belongs to whichever instance
-  came first and every replacement then failed with "REMOTE HOST IDENTIFICATION
-  HAS CHANGED". `StrictHostKeyChecking=no` alone does not help, because a
-  conflicting entry is refused regardless. Pinning a host key to a reused local
-  port carries no security value - the identity that matters is enforced by the
-  Bastion session and the lab keypair.
-- **role/db19_engineering**: the gold-image file name is dot-free. AutoUpgrade
-  26.5.260807 rejects the parameter with "The CREATE_GOLD_IMAGE parameter must
-  resolve to a file name containing only letters, numbers, underscores, hyphens,
-  and the .zip suffix", so the version is written with underscores
-  (`19_31_0_0_0`). Measured 2026-08-21 - the failure aborts `create_home` after
-  four seconds, at config-parse time.
-- **Makefile**: Ansible secrets no longer travel on the command line. The MOS
-  credentials, the database SYS password and the AutoUpgrade keystore password
-  went to `ansible-playbook` as `-e key=value`, which puts them in an argv that
-  any local user can read with `ps` - for the full hour an AutoUpgrade run lasts.
-  `cpu-lab-install`, `cpu-lab-patch` and `cpu-lab-step` now build a `0600` JSON
-  file via `mktemp` and pass `-e @<file>`, with a `trap` that removes it on
-  success, error and interrupt alike. The values reach `python3` through the
-  environment rather than argv for the same reason: `/proc/<pid>/environ` and
-  `ps -E` are owner-restricted, argv is not.
-- **playbook/lab-cpu-patch**: added a `raw`-based SSH wait as the first task. A
-  freshly applied instance is `RUNNING` before sshd accepts logins, so
-  `make cpu-lab-cycle` died on "Connection refused" straight after
-  `terraform apply`. Deliberately not `wait_for_connection`: that runs the ping
-  module, which needs the Python interpreter the *next* task installs, so on a
-  fresh host it can never succeed. `raw` also rides out the window in which sshd
-  answers but `pam_nologin` still rejects the login.
-- **docs/runbook**: corrected the 19c gold-image diagnosis. It is not that
-  "gold_image is rejected on download jobs" - `target_version=19` is the only
-  release whose gold-image resolution goes through the Oracle Update Advisor
-  (`ValidateGoldImage.isGoldImageServiceTargetRelease`), and
-  `POST transport.oracle.com/v2/patchplanner/requests` answers HTTP 500.
-  AutoUpgrade cannot parse the plain-text body as JSON ("Unexpected char 73")
-  and surfaces the outage as `Failed to process the gold_image parameter`.
-  `gold_image=YES` takes the same path; `target_version=19.32` is rejected as
-  not being a single version. 21 and 23 log "The Oracle Update Advisor service
-  is not used for target release 23" and work. Reproduced on the lab host and on
-  macOS with AutoUpgrade 26.5.260807 and the same keystore.
-
-- **Makefile**: new at the repository root. Lint targets (`lint-terraform`,
-  `lint-ansible`, `lint-yaml`, `lint-markdown`, `lint-shell`, `check-version`),
-  the cpu-patch-test lab lifecycle (`cpu-lab-init/plan/apply/install/patch/
-  verify/destroy/cycle`), plus `cpu-lab-step TAG=<tag>` for single-step runs on a
-  test VM. Version and release targets follow the OraDBA standard. Each lab
-  target auto-sources `terraform/envs/cpu-patch-test/.env`; `op read` is called
-  inside recipe bodies only, never at parse time.
-- **env/cpu-patch-test**: new Terraform stack for quarterly Oracle CPU patch
-  testing. Oracle Linux 8 hosts, `lab_count`-parametrised, deploys into an
-  existing base compartment (resolvable by OCID or by name plus `tenancy_ocid`).
-  Generates the Ansible inventory into `ansible/inventories/generated/` so host
-  IPs stay out of git, generates the database SYS password (`random_password`)
-  and a dedicated lab SSH keypair (`tls_private_key`), and authorises the
-  operator's own key from `~/.ssh/id_ed25519.pub` alongside it.
-- **module/oracle_db_host**: new module for N identical Oracle Linux 8 database
-  hosts. Enforces the Accenture standards unconditionally
-  (`is_pv_encryption_in_transit_enabled`, `are_legacy_imds_endpoints_disabled`)
-  on instances and volume attachments. Instance NSG allows SSH from the VCN CIDR
-  plus opt-in external CIDRs, and the Oracle Net listener intra-VCN only.
-  Optional data volume per host. Minimal cloud-init - Ansible does the rest.
-- **role/db19_engineering**: implemented (was an empty stub). Native Ansible OS
-  prerequisites built on `oracle-database-preinstall-19c`, then AutoUpgrade for
-  every software operation: `-mode download`, `-mode create_home` for both the
-  base and target ORACLE_HOME, and `-mode deploy` for the out-of-place move.
-  Split into a generic phase (reusable for any 19c lab) and the quarterly CPU
-  phase, with a tag per step so the flow can be driven one step at a time.
-  The legacy `oradba_init` scripts are deliberately not invoked; `oradba` is
-  installed as the runtime/environment layer only.
-- **playbook/lab-cpu-patch.yml**: entry point for the lab, targets the
-  `cpu_patch_hosts` group from the generated inventory.
-- **ansible/requirements.yml**: collection requirements (`ansible.posix` for
-  `selinux` and `firewalld`, `ansible.windows` for the AD lab).
-- **ansible/.ansible-lint**: skips `var-naming[no-role-prefix]` with the
-  reasoning documented in the file - a deliberate subset of role variables
-  (`oracle_sid`, `db_base_ru`, `db_target_ru`, `oracle_home_base`,
-  `oracle_home_target`) is the Terraform-to-Ansible contract and must not carry
-  a role-name prefix.
-- **.markdownlint.json**: OraDBA markdown standard (line length 120, MD033 off,
-  MD024 siblings only).
-- **docs/runbook-cpu-patch-lab.md**: runbook for a full CPU quarter cycle -
-  architecture, prerequisites, the six steps, variable and secret reference, and
-  a troubleshooting section.
-- **env/ad-cmu-test**: Ansible inventory (`hosts.yml`) is now written immediately at
-  the start of `null_resource.wait_for_winrm` provisioner, before the WinRM polling
-  loop. Previously the IP was only written after WinRM became reachable, leaving the
-  inventory stale when apply was interrupted or run without VPN connectivity.
-- **env/ad-cmu-test**: Inventory path uses `abspath(path.root)` instead of `path.root`
-  so the path resolves correctly regardless of the working directory terraform is
-  invoked from.
-- **env/ad-cmu-test**: Inventory `hosts.yml` added to version control with current
-  private IP (`10.19.50.93`) for the `windc01` host.
 
 ## [0.2.1] - 2026-06-26
 

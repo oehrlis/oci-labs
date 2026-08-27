@@ -102,7 +102,7 @@
       {{ {
            'label': db19_snapshot_label,
            'home': db19_snapshot_home,
-           'collected': ansible_date_time.iso8601 | default('unknown'),
+           'collected': ansible_facts['date_time']['iso8601'] | default('unknown'),
            'db': dict(db19_snapshot_lines | select('match', '^DB\|')
                       | map('regex_replace', '^DB\|', '')
                       | map('split', '|') | list),

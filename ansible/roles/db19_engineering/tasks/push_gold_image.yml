@@ -82,7 +82,7 @@
            'platform': db19_autoupgrade_platform,
            'oracle_base': oracle_base,
            'built_on': inventory_hostname,
-           'built_at': ansible_date_time.iso8601 | default('unknown'),
+           'built_at': ansible_facts['date_time']['iso8601'] | default('unknown'),
            'autoupgrade': db19_autoupgrade_version | default('unknown'),
            'requested_patch_list': db19_patch_list_base | trim,
            'resolved_patches': (db19_gold_patchset_raw.content | b64decode

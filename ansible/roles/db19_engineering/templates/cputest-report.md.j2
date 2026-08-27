@@ -9,8 +9,9 @@
    --------------------------------------------------------------------------- #}
 # CPU Patch Test {{ oracle_sid }} - {{ db_base_ru }} to {{ db_target_ru }}
 
-- Date: {{ ansible_date_time.iso8601 | default('unknown') }}
-- Host: {{ inventory_hostname }} ({{ ansible_distribution | default('?') }} {{ ansible_distribution_version | default('') }})
+- Date: {{ ansible_facts['date_time']['iso8601'] | default('unknown') }}
+- Host: {{ inventory_hostname }} ({{ ansible_facts['distribution'] | default('?') }}
+  {{ ansible_facts['distribution_version'] | default('') }})
 - AutoUpgrade: {{ db19_autoupgrade_version | default('unknown') }}
 - Base home: `{{ oracle_home_base }}`
 - Target home: `{{ oracle_home_target }}`

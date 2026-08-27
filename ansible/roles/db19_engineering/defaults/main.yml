@@ -329,7 +329,7 @@ db19_gold_image_name: >-
   {{ 'goldimage-db-' ~ (db19_home_ru ~ '.0.0.0') | replace('.', '_') ~ '-'
      ~ (db19_autoupgrade_platform | lower | replace('.', '-')) ~ '-'
      ~ (db19_edition | lower) ~ '-'
-     ~ (ansible_date_time.date | replace('-', '')) ~ '.zip' }}
+     ~ (ansible_facts['date_time']['date'] | replace('-', '')) ~ '.zip' }}
 
 # Job state for a gold-image run that happens AFTER a deploy. The deploy keeps
 # its Guaranteed Restore Point (db19_drop_grp_after_patching=false), so its job

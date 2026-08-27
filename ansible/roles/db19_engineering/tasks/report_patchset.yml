@@ -105,7 +105,7 @@
       {{ {'release_update': db19_home_ru,
           'requested': db19_patch_list | trim,
           'mrp_included': (db19_patchset_mrp | length > 0),
-          'collected': ansible_date_time.iso8601 | default('unknown'),
+          'collected': ansible_facts['date_time']['iso8601'] | default('unknown'),
           'patches': db19_patchset} | to_nice_json }}
   when: db19_patches_info_stat.stat.exists
 
@@ -119,7 +119,7 @@
     content: |
       # Resolved AutoUpgrade patch set - RU {{ db19_home_ru }}
       # Host....: {{ inventory_hostname }}
-      # Date....: {{ ansible_date_time.iso8601 | default('unknown') }}
+      # Date....: {{ ansible_facts['date_time']['iso8601'] | default('unknown') }}
       # Role....: {{ (db19_home_ru == db_target_ru) | ternary('target (CPU test)', 'base (control)') }}
       # Request.: {{ db19_patch_list | trim }}
       # Platform: {{ db19_autoupgrade_platform }}

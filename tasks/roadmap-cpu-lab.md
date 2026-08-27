@@ -270,12 +270,26 @@ August-2026-CSPU-Blocks, alle aus dem uncommitteten Stand. `HEAD` fuehrt
 
 ## 5. Offene Punkte aus dem alten Stand
 
-- `INJECT_FACTS_AS_VARS` Deprecation - die Rolle nutzt `ansible_date_time` und
-  Verwandte durchgaengig als Top-Level-Variablen. Mechanisch, rollenweit.
-- Lint-Schulden: 7 ansible-lint-Findings, 14 fehlerhafte markdownlint-Marker in
-  `docs/` und `terraform/modules/iam_mfa_oma/README.md`.
-- Konsument des Report-JSON weiter unbeantwortet - solange niemand es liest,
-  ist das Schema billig zu aendern. M1 beantwortet das.
+- ~~`INJECT_FACTS_AS_VARS` Deprecation~~ - **erledigt 2026-08-27.** Die
+  Schaetzung "mechanisch, rollenweit" war falsch: es waren **zwoelf** Referenzen
+  in acht Dateien, nicht 82. Der hohe Zaehlwert kam vom vendorten
+  Collections-Baum unter `ansible/.ansible/` und von Connection-Variablen wie
+  `ansible_user` oder `ansible_become`, die diese Deprecation gar nicht
+  betrifft. Alle Facts laufen jetzt ueber `ansible_facts['name']`, und
+  `inject_facts_as_vars = False` ist in `ansible.cfg` gepinnt - damit scheitert
+  eine uebersehene Referenz laut, statt bis zum naechsten Ansible-Default still
+  zu funktionieren. Verifiziert durch Offline-Rendering der elf geaenderten
+  Ausdruecke, `--syntax-check` ueber alle sieben Playbooks und `make lint`.
+- ~~Lint-Schulden~~ - **erledigt.** `make lint` ist repo-weit gruen, ansible-lint
+  bei Profil `production` mit 0 Findings, und der `verify`-Grep auf
+  `enable`-Marker liefert 0 Treffer. Der letzte Treffer war eine
+  CHANGELOG-Zeile, die den Marker im Klartext nannte - kein aktiver Marker, aber
+  die Regel prueft per grep.
+- Konsument des Report-JSON: **beantwortet.** `import_lab_results.py` in
+  `cpu-patch-tests` liest es, und `measured.home_patches` im cputest-JSON traegt
+  die tatsaechlich installierten Patch-IDs - damit ist der JDK-Entscheid aus 4b
+  ohne Lab-Aenderung umsetzbar. Das Schema ist ab jetzt **nicht** mehr billig zu
+  aendern.
 - `assign_public_ip = false` als Default, gehoert zu M2.
 - Die PAR-Frist ist **kein** Termindruck. Es existieren zwei PARs, und ein
   neues Minten ist ein einzelner Make-Aufruf. Das hatte ich aus dem alten
