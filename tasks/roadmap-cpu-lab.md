@@ -290,7 +290,13 @@ August-2026-CSPU-Blocks, alle aus dem uncommitteten Stand. `HEAD` fuehrt
   die tatsaechlich installierten Patch-IDs - damit ist der JDK-Entscheid aus 4b
   ohne Lab-Aenderung umsetzbar. Das Schema ist ab jetzt **nicht** mehr billig zu
   aendern.
-- `assign_public_ip = false` als Default, gehoert zu M2.
+- ~~`assign_public_ip = false` als Default~~ - **erledigt 2026-08-27**, in
+  `envs/cpu-patch-test` und `modules/oracle_db_host`. Der Schalter waehlt
+  zusaetzlich das Subnetz und die IPs, aus denen die Ansible-Inventory gebaut
+  wird - unter dem neuen Default braucht jedes Ansible-Ziel `BASTION=1`. Der
+  laufende Stack setzt den Wert explizit und ist nicht betroffen; der Plan zeigt
+  dort nur `local_file.ansible_inventory`, weil die gestoppte Instanz ihre
+  ephemere Public IP freigegeben hat.
 - Die PAR-Frist ist **kein** Termindruck. Es existieren zwei PARs, und ein
   neues Minten ist ein einzelner Make-Aufruf. Das hatte ich aus dem alten
   State-Dokument uebernommen, ohne es zu pruefen.

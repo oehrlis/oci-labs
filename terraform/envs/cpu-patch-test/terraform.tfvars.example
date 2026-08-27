@@ -38,8 +38,9 @@ db_subnet_cidr      = "10.29.30.0/24"
 enable_flow_logs            = true
 flow_log_retention_duration = 30
 
-# Required for SSH access when assign_public_ip = true. Default is [] - no
-# external SSH at all, which locks you out of a public-IP host.
+# Only relevant when assign_public_ip = true. Default is [] - no external SSH
+# at all, which locks you out of a public-IP host. With the default
+# assign_public_ip = false this list is irrelevant; access runs over the Bastion.
 allowed_ssh_cidrs = ["203.0.113.10/32"]
 
 # Optional site-to-site VPN via an existing DRG
@@ -52,7 +53,10 @@ db_host_shape                = "VM.Standard.E4.Flex"
 db_host_ocpus                = 2
 db_host_memory_gbs           = 16
 db_host_boot_volume_size_gbs = 200
-assign_public_ip             = true
+# false is the default - the Bastion path is proven, so a lab host has no
+# reason to be reachable from the internet. Set true only to shortcut the
+# tunnel; then allowed_ssh_cidrs must carry your own address.
+assign_public_ip             = false
 
 # Optional extra volume - engineering labs only, not needed for CPU tests
 attach_data_volume   = false

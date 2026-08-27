@@ -33,6 +33,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   count that included the vendored collections tree and connection variables
   such as `ansible_user`, which this deprecation does not touch.
 
+- **assign_public_ip defaults to false** in `envs/cpu-patch-test` and
+  `modules/oracle_db_host`. The Bastion path is proven (finding B4), so a lab
+  host has no reason to be reachable from the internet. The switch also selects
+  the subnet and the addresses the generated Ansible inventory is built from, so
+  under the new default every Ansible target needs `BASTION=1` - now stated in
+  the env README and `terraform.tfvars.example`, and the README no longer claims
+  a private host needs a jumphost or DRG/VPN. The running lab sets the value
+  explicitly and is unaffected.
+
 ### Fixed
 
 - **CHANGELOG**: 365 lines of work that shipped in `v0.3.0` were filed under a

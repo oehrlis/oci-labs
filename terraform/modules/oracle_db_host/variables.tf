@@ -108,7 +108,7 @@ variable "boot_volume_size_gbs" {
 variable "assign_public_ip" {
   type        = bool
   description = "Assign a public IP. Requires a public-capable subnet and allowed_ssh_cidrs."
-  default     = true
+  default     = false
 }
 
 # -----------------------------------------------------------------------------

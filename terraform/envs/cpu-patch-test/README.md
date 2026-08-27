@@ -81,15 +81,20 @@ files are covered by `.gitignore` here and at the repository root.
 
 | `assign_public_ip` | Subnet | Reachability |
 | --- | --- | --- |
-| `true` (default) | public subnet | Public IP, SSH restricted to `allowed_ssh_cidrs` |
-| `false` | private DB subnet | Intra-VCN only - needs a jumphost or DRG/VPN |
+| `false` (default) | private DB subnet | OCI Bastion (`BASTION=1`), or a jumphost or DRG/VPN |
+| `true` | public subnet | Public IP, SSH restricted to `allowed_ssh_cidrs` |
 
 <!-- markdownlint-restore -->
 
-`allowed_ssh_cidrs` defaults to `[]`, which means **no external SSH**. With
-`assign_public_ip = true` and an empty list the host gets a public IP that
-nobody can reach - set your own address (`x.x.x.x/32`) before applying. SSH from
-inside the VCN CIDR is always permitted.
+`allowed_ssh_cidrs` defaults to `[]`, which means **no external SSH**. That is
+harmless under the default `assign_public_ip = false`, where access runs over
+the Bastion. With `assign_public_ip = true` and an empty list the host gets a
+public IP that nobody can reach - set your own address (`x.x.x.x/32`) before
+applying. SSH from inside the VCN CIDR is always permitted.
+
+The switch also decides which addresses the generated Ansible inventory is
+built from. Under the default those are private, so every Ansible target needs
+`BASTION=1`.
 
 ## Accenture OCI security standards
 
@@ -172,7 +177,7 @@ it, no manual editing required.
 | `db_host_ocpus` | number | `2` | OCPUs per host. |
 | `db_host_memory_gbs` | number | `16` | Memory in GB per host. |
 | `db_host_boot_volume_size_gbs` | number | `200` | Boot volume in GB (min 100). |
-| `assign_public_ip` | bool | `true` | Public subnet + public IP. |
+| `assign_public_ip` | bool | `false` | `true` puts hosts in the public subnet with a public IP. |
 | `attach_data_volume` | bool | `false` | Extra block volume per host. |
 | `data_volume_size_gbs` | number | `100` | Data volume size in GB. |
 | `ssh_public_key` | string | - | **Required.** Public key for `opc`. |

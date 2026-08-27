@@ -246,8 +246,14 @@ variable "db_host_boot_volume_size_gbs" {
 
 variable "assign_public_ip" {
   type        = bool
-  description = "Place DB hosts in the public subnet with a public IP. Requires allowed_ssh_cidrs."
-  default     = true
+  description = <<-EOT
+    Place DB hosts in the public subnet with a public IP. Requires
+    allowed_ssh_cidrs. Defaults to false: the Bastion path is proven, so a lab
+    host has no reason to be reachable from the internet. Note this switch also
+    selects the subnet (public vs db) and the addresses the Ansible inventory
+    is built from - with the default, every Ansible target needs BASTION=1.
+  EOT
+  default     = false
 }
 
 variable "attach_data_volume" {
