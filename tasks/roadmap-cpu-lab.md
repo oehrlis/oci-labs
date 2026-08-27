@@ -17,7 +17,7 @@ nacheinander, ohne Rueckfrage. Gold Image vertagt.
 | Schritt 3 Reboot-Test | **gruen** im dritten Anlauf - 17 s bis die DB offen ist, unbeaufsichtigt |
 | oradba | v1.0.1 bis v1.0.4 released, sechs Defekte behoben |
 | M0 Doku/Lint/Tag | **abgeschlossen**, `v0.3.0` getaggt und gepusht |
-| M1 Report-Konverter | **fertig**, in `cpu-patch-tests` committet (lokal, nicht gepusht) |
+| M1 Report-Konverter | **fertig und gepusht** - Commit `d56b1fe` auf `feat/report-redesign-schema-v5`, nicht auf `main` |
 | Befunde B1 bis B6 | **alle behoben**, B2 geschrieben aber noch nicht ausgefuehrt |
 | Gold-Image-Test | vertagt, wie entschieden |
 
@@ -116,8 +116,8 @@ Meine Empfehlung weiterhin **A**.
 | M | Inhalt | Aufwand | Status |
 | --- | --- | --- | --- |
 | M0 | v0.3.0 einfrieren: Rollback, Reboot, Doku, Lint, Tag | M | **fertig**, getaggt und gepusht |
-| M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | **fertig**, committet, nicht gepusht |
-| M2 | Core als Modul, implizites Bauen mit Besitzregel, tenant-faehig | M | entschieden, nicht begonnen |
+| M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | **fertig**, gepusht auf `feat/report-redesign-schema-v5`; Merge nach `main` offen |
+| M2 | Core als Modul, implizites Bauen mit Besitzregel, tenant-faehig | M | **`envs/core` angewendet** 2026-08-27, kein Drift; Migration von `cpu-patch-test` offen |
 | M3 | Geteilte Assets herausloesen | M | **wartet auf E2** |
 | M4 | 26ai (P1) | M | wartet auf M3 |
 | M5 | MOS-Spike, dann WLS und OUD (P2) | M-L | Spike jederzeit moeglich |

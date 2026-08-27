@@ -52,7 +52,19 @@ see `docs/runbook-cpu-patch-lab.md`.
 
 ## Status
 
-Written 2026-08-23, validated with `terraform validate`, **not yet applied**.
-The running `cpu-patch-test` stack still builds and owns its own network; it was
-deliberately left untouched while a database it needs is live on it. Migrating
-it is the remaining part of milestone M2 in `tasks/roadmap-cpu-lab.md`.
+**Applied 2026-08-27** in tenancy `trivadisbdsxsp`, compartment `cpureport`, as
+`chzh-l-core-01`: VCN, three subnets, IGW and NAT, three route tables, three
+security lists, VCN flow logs, one Bastion - 20 resources, and a re-plan that
+reports no drift. All 19 OCI resources carry `core_owner = "core"`; the two
+untagged entries in state are `terraform_data.compartment_guard` and the
+Object Storage namespace lookup, neither of which is a destroyable resource.
+The artifact bucket stays out of state (`manage_artifact_bucket = false`) - it
+predates Terraform in this tenancy.
+
+Nothing consumes this core yet. The running `cpu-patch-test` stack still builds
+and owns its own network, on the same CIDR `10.29.0.0/16` in a separate VCN; it
+was deliberately left untouched while a database it needs is live on it. The two
+VCNs coexist without conflict because they are never peered. Migrating
+`cpu-patch-test` to consume this core - the point at which the ownership rule
+above actually earns its keep - is the remaining part of milestone M2 in
+`tasks/roadmap-cpu-lab.md`.
