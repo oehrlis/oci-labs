@@ -68,12 +68,51 @@ gehoert nicht in denselben Schritt.
 4. `cpu-patch-tests`: die 5 Perioden-cfg auf die geteilte Quelle umstellen -
    **zuletzt**, und nur abgestimmt, weil dort parallel gearbeitet wird.
 
-## 4. Was zu entscheiden bleibt
+## 4. Entscheide vom 2026-08-27 und was die Pruefung ergab
 
-- **Wie kommen die Assets auf das Zielsystem?** Zwei Quellen statt einer war
-  der bewusst akzeptierte Preis von B - aber der Weg (Git-Clone der Rolle,
-  Submodul, Paket) ist offen. Das ist die eigentliche offene Frage von M3.
-- **Duerfen die 15 statischen `download_RU19.*.cfg` weg?** Sie sind
-  moeglicherweise dokumentarisch wertvoll, auch wenn sie nicht mehr laufen.
+**Transport: Paket / Release-Tarball.** Ich hatte als Preis genannt, dass beide
+Repos erst einen Release-Prozess fuer Assets brauchen. **Das war falsch, jedenfalls
+fuer `odb_autoupgrade`:** dort existiert er vollstaendig.
+
+- `make build` ruft `scripts/build.sh --dist`, und `CONTENT_PATHS` enthaelt
+  `etc` und `lib` bereits
+- der Release-Workflow haengt `odb_autoupgrade-<VERSION>.tar.gz` **plus
+  `.sha256`** an das Release
+
+Der Entscheid kostet fuer dieses Repo also nichts. Fuer `oradba` ist es
+unbestaetigt: das Repo liegt mit 21 geaenderten Dateien auf
+`fix/boot-path-gates`, und genau `Makefile` und `.github/workflows/release.yml`
+sind Teil der Aenderung. **Erst nachpruefen, wenn dieser Branch gelandet ist.**
+
+**Die 15 statischen `download_RU19.*.cfg` werden geloescht.** Zwei Pruefungen
+stuetzen das ueber die Begruendung im Entscheid hinaus:
+
+1. **Kein Skript im Repo referenziert sie.** `grep` ueber `bin/` und `lib/`
+   findet keinen Konsumenten - sie sind inert, ein Mensch hat sie von Hand an
+   AutoUpgrade gegeben. Loeschen bricht keinen Codepfad.
+2. **Der parameterisierte Weg existiert dort schon.**
+   `bin/run_autoupgrade.sh` loest jede cfg per **`envsubst`** auf und sucht sie
+   in `${AUTOUPGRADE_BASE}/etc/`. Die statischen Dateien sind Altlast von vor
+   dieser Faehigkeit - eine von ihnen nutzt bereits `$AUTOUPGRADE_BASE`.
+
+Einschraenkung, die ich nicht verschweige: dass sie gegen AutoUpgrade 26.5
+scheitern **wuerden**, ist ein Schluss aus dem dokumentierten Lab-Verhalten
+(kein `gold_image` gesetzt, Default `AUTO`, Update Advisor antwortet HTTP 500),
+kein Test gegen genau diese Dateien.
+
+## 5. Der Vertrag - damit ist der naechste Schritt mechanisch
+
+Die Form der Vorlagen ist damit nicht mehr zu entscheiden, das Repo gibt sie vor:
+
+- **`${VAR}`-Platzhalter, nicht Jinja.** `envsubst` ist der Aufloeser, `etc/`
+  der Ort, `run_autoupgrade.sh --cfg <name>` der Aufruf.
+- Die Ansible-Rolle konsumiert **dieselbe Datei**: Umgebungsvariablen setzen und
+  `envsubst` aufrufen, statt eine zweite Jinja-Kopie zu pflegen. Genau die
+  zweite Kopie ist das Problem, das M3 loest.
+- Die vier Lab-Vorlagen (`autoupgrade-download`, `-create-home`, `-deploy`,
+  `-download-gold`) wandern in dieser Form nach `etc/` und nehmen mit, was das
+  Lab teuer gelernt hat: `download_folder` statt `folder`, `target_version`,
+  und `gold_image=NO` fuer `target_version=19`.
+- Das Lab pinnt eine Tarball-Version und prueft die `.sha256`.
 
 <!-- EOF -->
