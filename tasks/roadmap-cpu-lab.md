@@ -127,7 +127,7 @@ Meine Empfehlung weiterhin **A**.
 | M0 | v0.3.0 einfrieren: Rollback, Reboot, Doku, Lint, Tag | M | **fertig**, getaggt und gepusht |
 | M1 | JSON zu CSV Konverter in `cpu-patch-tests/tools/` | S | **fertig**, gepusht auf `feat/report-redesign-schema-v5`; Merge nach `main` offen |
 | M2 | Core als Modul, implizites Bauen mit Besitzregel, tenant-faehig | M | **`envs/core` angewendet** 2026-08-27, kein Drift; Migration von `cpu-patch-test` offen |
-| M3 | Geteilte Assets herausloesen | M | **frei** - E2 am 2026-08-27 als B entschieden |
+| M3 | Geteilte Assets herausloesen | M | Bestandsaufnahme fertig, Plan in `tasks/plan-m3-shared-assets.md`, **noch nichts verschoben** |
 | M4 | 26ai (P1) | M | wartet auf M3 (nicht mehr auf einen Entscheid) |
 | M5 | MOS-Spike, dann WLS und OUD (P2) | M-L | Spike jederzeit moeglich |
 | M6 | Alle-Tests-Prozess und Zeitsteuerung | M | wartet auf M4, M5 |
