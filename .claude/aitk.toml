@@ -4,5 +4,5 @@ profiles = [
     "oci",
 ]
 link_mode = "symlink"
-initialized_at = "2026-08-24T14:35:43Z"
-aitk_version = "3.2.0"
+initialized_at = "2026-08-29T07:28:11Z"
+aitk_version = "3.3.0"

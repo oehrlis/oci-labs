@@ -36,3 +36,6 @@ ansible/reports/
 .claude/commands/
 .claude/agents/
 .github/copilot-instructions.md
+.claude/worktrees/
+.claude/settings.local.json
+.claude/settings.json
