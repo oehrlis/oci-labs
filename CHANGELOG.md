@@ -8,6 +8,21 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks
+  defaults with rules for OCI pre-authenticated request URLs, real OCIDs and
+  API key fingerprints - the defaults find none of them. The GitHub Actions
+  job `.github/workflows/gitleaks.yml` scans the full history on every push
+  and pull request (checkout pinned by SHA, gitleaks by version and SHA-256).
+  The reviewed historical findings are allowlisted by commit, path and rule.
+- **`make hooks`** installs a gitleaks pre-commit hook
+  (`tools/git-hooks/pre-commit`); **`make lint-secrets`** scans the history
+  and is part of `make lint`.
+- **README.md, SECURITY.md, LICENSE (Apache-2.0)** - the public repo had no
+  landing page, no reporting path and no license file.
+- **Review lens and register** (`docs/review-lens.md`,
+  `tasks/review-register.md`) from the first `/repo-audit`: history findings
+  in 93d3f77 and f70530f are recorded as accepted (owner decision, no
+  history rewrite), open gate gaps stay tracked there.
 - **terraform/envs/core applied**: the shared core stack is no longer only
   validated. `chzh-l-core-01` in tenancy `trivadisbdsxsp` - VCN, three subnets,
   IGW and NAT, three route tables, three security lists, VCN flow logs, one
@@ -23,6 +38,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   expressions offline against an empty fact dict.
 
 ### Changed
+
+- **lint-terraform** names every env it skips (no `provider.tf`) instead of
+  a silent `continue`; **lint-shell** also checks `tools/git-hooks/`.
 
 - **facts are addressed as `ansible_facts['name']`** throughout the Ansible
   layer, and `inject_facts_as_vars = False` is pinned in `ansible.cfg`. Ansible
@@ -43,6 +61,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   explicitly and is unaffected.
 
 ### Fixed
+
+- **docs/runbook-ad-cmu-lab.md** carried the real compartment and DRG OCID in
+  its `terraform.tfvars` example - replaced by `<compartment_ocid>` and
+  `<drg_ocid>`. The history keeps the old values (identifiers, not
+  credentials).
 
 - **CHANGELOG**: 365 lines of work that shipped in `v0.3.0` were filed under a
   second `## [Unreleased]` heading below the `[0.3.0]` section - verified by

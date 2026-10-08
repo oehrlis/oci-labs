@@ -47,12 +47,14 @@ nicht still mit-akzeptiert (`regel` INV-5 statt `history`).
 - begruendung: Identifikatoren, kein Credential; im Baum durch Platzhalter ersetzt (RA-oci-labs-004), die Historie behaelt die alten Werte - kein History-Rewrite, wie bei 93d3f77 - Stefan Oehrli 2026-10-08
 
 ### RA-oci-labs-004 - Echte Compartment- und DRG-OCID im AD/CMU-Runbook
-- status: offen
+- status: behoben
 - schwere: hoch
 - rolle: security
 - ort: docs/runbook-ad-cmu-lab.md
 - regel: INV-4
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 7769324
 - beleg: docs/runbook-ad-cmu-lab.md:136 - compartment_ocid = "ocid1.compartment.oc1....."; :144 - drg_id = "ocid1.drg.oc1.eu-zurich-1...."
 
 ### RA-oci-labs-005 - Object-Storage-Namespace des Lab-Tenants im Baum
@@ -70,30 +72,36 @@ Begruendung) oder durch `<namespace>` ersetzen. `ort` ist die Linse, weil dort d
 Entscheid landet.
 
 ### RA-oci-labs-006 - Kein Secret-Scan in der CI
-- status: offen
+- status: behoben
 - schwere: hoch
 - rolle: security
 - ort: .github/workflows/gitleaks.yml
 - regel: ci-gate
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 1930b7f
 - beleg: .github/workflows fehlt; kein gitleaks, trufflehog oder anderer Secret-Scan; keine `.gitleaks.toml`
 
 ### RA-oci-labs-007 - Kein lokaler Pre-commit-Secret-Scan
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: tools/git-hooks/pre-commit
 - regel: ci-gate
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 410d177
 - beleg: .git/hooks fehlt, kein core.hooksPath, keine .pre-commit-config.yaml
 
 ### RA-oci-labs-008 - make lint ohne Secret-Scan, validate ueberspringt Envs still
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: Makefile
 - regel: lint-gate
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 410d177
 - beleg: Makefile:180 - `[[ -f "$$env/provider.tf" ]] || continue` (stiller Skip, trifft heute terraform/envs/site2site-udm); Makefile:167 - lint ohne gitleaks
 
 Geprueft und legitim (keine Fehlermaskierung in Lint-Targets): die `|| true` in
@@ -102,30 +110,36 @@ leeres Ergebnis danach explizit behandelt wird, oder Aufraeum-/Retry-Schritte;
 Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| true`.
 
 ### RA-oci-labs-009 - LICENSE fehlt
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: LICENSE
 - regel: license
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 017228c
 - beleg: keine LICENSE-Datei; Makefile-Kopf verweist auf Apache 2.0, ohne Lizenzdatei gilt fuer Leser "all rights reserved"
 
 ### RA-oci-labs-010 - SECURITY.md fehlt
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: SECURITY.md
 - regel: security-md
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 017228c
 - beleg: keine SECURITY.md - kein Meldeweg fuer ein gefundenes Secret
 
 ### RA-oci-labs-011 - Kein README im Repo-Root
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: README.md
 - regel: readme
 - gefunden: 2026-10-08
+- erledigt: 2026-10-08
+- commit: 017228c
 - beleg: README.md fehlt - die GitHub-Startseite des public Repos ist leer; Einstieg nur ueber docs/
 
 ### RA-oci-labs-012 - CONTRIBUTING fehlt
