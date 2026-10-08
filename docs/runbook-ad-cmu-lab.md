@@ -130,10 +130,12 @@ git clone https://github.com/oehrlis/ad-lab.git ../../../ad-lab
 ## Step 2 - Configure terraform.tfvars
 
 `terraform.tfvars` is gitignored (contains compartment OCID). Create from the example
-or copy the existing file. Key values for this stack:
+or copy the existing file. Key values for this stack - replace `<compartment_ocid>` with
+the OCID of the lab compartment and `<drg_ocid>` with the OCID of the existing DRG that
+terminates the home-lab VPN (`oci network drg list --compartment-id <compartment_ocid>`):
 
 ```hcl
-compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaxq7bir4bjy3bzozyjd4idlvharoco3ww5jx5nzzvv6rhcypb6cfa"
+compartment_ocid = "<compartment_ocid>"
 region_key       = "chzh"
 domain_name      = "oradba.ch"
 
@@ -141,7 +143,7 @@ windows_shape      = "VM.Standard.E4.Flex"
 windows_ocpus      = 2
 windows_memory_gbs = 8
 
-drg_id = "ocid1.drg.oc1.eu-zurich-1.aaaaaaaa6lag2i4uv64up6elwntezqd64xbtpcal5nqltps2cxculppgncka"
+drg_id = "<drg_ocid>"
 home_cidrs = [
   "192.168.1.0/24",
   "10.8.0.0/24",
