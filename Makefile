@@ -76,6 +76,7 @@ YAMLLINT     := $(shell PATH="$(PATH)" command -v yamllint 2>/dev/null)
 MARKDOWNLINT := $(shell PATH="$(PATH)" command -v markdownlint 2>/dev/null || \
                         PATH="$(PATH)" command -v markdownlint-cli 2>/dev/null)
 SHELLCHECK   := $(shell PATH="$(PATH)" command -v shellcheck 2>/dev/null)
+GITLEAKS     := $(shell PATH="$(PATH)" command -v gitleaks 2>/dev/null)
 OP           := $(shell PATH="$(PATH)" command -v op 2>/dev/null)
 OCI          := $(shell PATH="$(PATH)" command -v oci 2>/dev/null)
 GIT          := $(shell PATH="$(PATH)" command -v git 2>/dev/null)
@@ -127,6 +128,10 @@ help: ## Show this help message
 	@grep -E '^(tag|release):.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo -e "$(COLOR_BOLD)Setup:$(COLOR_RESET)"
+	@grep -E '^hooks:.*?## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo -e "$(COLOR_BOLD)Info:$(COLOR_RESET)"
 	@grep -E '^status:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
@@ -164,7 +169,7 @@ CPU_INVENTORY_ABS := $(ANSIBLE_DIR)/$(CPU_INVENTORY)
 # ==============================================================================
 
 .PHONY: lint
-lint: lint-terraform lint-ansible lint-yaml lint-markdown lint-shell check-version ## Run all lint checks
+lint: lint-terraform lint-ansible lint-yaml lint-markdown lint-shell lint-secrets check-version ## Run all lint checks
 
 .PHONY: fmt-terraform
 fmt-terraform: guard-terraform ## Format Terraform files in-place
@@ -177,7 +182,7 @@ lint-terraform: guard-terraform ## Check Terraform formatting and validate every
 	$(Q)"$(TERRAFORM)" fmt -check -recursive "$(TF_DIR)"
 	@echo -e "$(COLOR_BOLD)terraform validate per env$(COLOR_RESET)"
 	@for env in $(TF_DIR)/envs/*/; do \
-	  [[ -f "$$env/provider.tf" ]] || continue; \
+	  [[ -f "$$env/provider.tf" ]] || { echo "--- $$env SKIPPED: no provider.tf, nothing to validate"; continue; }; \
 	  echo "--- $$env"; \
 	  ( cd "$$env" && "$(TERRAFORM)" init -backend=false -input=false >/dev/null && "$(TERRAFORM)" validate ); \
 	done
@@ -214,12 +219,46 @@ lint-shell: ## Lint shell scripts with shellcheck
 	  { echo "❌ shellcheck not found. Install: brew install shellcheck"; exit 1; }
 	$(Q)find "$(TOOLS_DIR)" bootstrap -type f -name "*.sh" -print0 2>/dev/null | \
 		xargs -0 -r "$(SHELLCHECK)" -x -S warning
+	$(Q)"$(SHELLCHECK)" -x -S warning "$(TOOLS_DIR)"/git-hooks/*
+
+# Full history, all refs, with the repo config (default rules + OCI rules). The
+# reviewed historical findings are allowlisted in .gitleaks.toml by commit, path
+# and rule - anything else fails. Local untracked files (state, .env) are not
+# scanned: they are not in the repo.
+.PHONY: lint-secrets
+lint-secrets: ## Scan the git history for secrets with gitleaks (.gitleaks.toml)
+	@[[ -n "$(GITLEAKS)" ]] || \
+	  { echo "❌ gitleaks not found. Install: brew install gitleaks"; exit 1; }
+	$(Q)"$(GITLEAKS)" git --config .gitleaks.toml --redact --no-banner --log-opts=--all .
 
 .PHONY: check-version
 check-version: ## Validate semantic version format in VERSION file
 	@grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' VERSION \
 		&& echo "Version is valid: $(VERSION)" \
 		|| (echo "Invalid version format in VERSION"; exit 1)
+
+# ==============================================================================
+# Setup
+# ==============================================================================
+
+# Links tools/git-hooks/pre-commit into the hooks dir (gitleaks on staged
+# changes). An existing foreign hook is never overwritten silently: the target
+# stops and names it; FORCE=1 replaces it.
+.PHONY: hooks
+hooks: ## Install the gitleaks pre-commit hook (FORCE=1 replaces a foreign hook)
+	@hooks_dir="$$(git rev-parse --git-path hooks)"; \
+	target="$$hooks_dir/pre-commit"; \
+	src="$(CURDIR)/$(TOOLS_DIR)/git-hooks/pre-commit"; \
+	mkdir -p "$$hooks_dir"; \
+	if [[ -e "$$target" || -L "$$target" ]] && [[ "$$(readlink "$$target" 2>/dev/null)" != "$$src" ]]; then \
+	  if [[ "$(FORCE)" != "1" ]]; then \
+	    echo "❌ $$target exists and is not ours - not replaced. Re-run with FORCE=1" >&2; exit 1; \
+	  fi; \
+	  echo "⚠️  FORCE=1: replacing $$target"; \
+	fi; \
+	ln -sfn "$$src" "$$target"; \
+	echo "✅ pre-commit hook -> $$src"
+	@[[ -n "$(GITLEAKS)" ]] || echo "⚠️  gitleaks not found - the hook blocks every commit until: brew install gitleaks"
 
 # ==============================================================================
 # CPU Patch Lab

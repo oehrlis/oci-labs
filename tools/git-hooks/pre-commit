@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, CH
+# ------------------------------------------------------------------------------
+# Name.......: pre-commit
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Editor.....: Stefan Oehrli
+# Date.......: 2026.10.08
+# Version....: v0.1.0
+# Purpose....: Git pre-commit hook - scan the staged changes for secrets with
+#              gitleaks and the repo config (.gitleaks.toml, OCI rules).
+# Notes......: Installed by 'make hooks' as a symlink into the hooks dir.
+#              A missing gitleaks blocks the commit - it never passes silently.
+#              Deliberate bypass for one commit: git commit --no-verify
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+# Modified...:
+# 2026.10.08 oehrli - initial version (repo-audit RA-oci-labs-007)
+# ------------------------------------------------------------------------------
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: tools/git-hooks/pre-commit [--help]
+
+Runs 'gitleaks git --pre-commit --staged' with .gitleaks.toml on the staged
+changes. Exit 0 = clean, 1 = finding or gitleaks missing.
+Install: make hooks
+USAGE
+}
+
+main() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    usage
+    return 0
+  fi
+
+  local repo_root config
+  repo_root="$(git rev-parse --show-toplevel)"
+  config="${repo_root}/.gitleaks.toml"
+
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "ERROR: gitleaks not found - commit blocked. Install: brew install gitleaks" >&2
+    echo "       Deliberate bypass for this commit only: git commit --no-verify" >&2
+    return 1
+  fi
+  if [[ ! -f "${config}" ]]; then
+    echo "ERROR: ${config} missing - commit blocked" >&2
+    return 1
+  fi
+
+  if ! gitleaks git --pre-commit --staged --redact --no-banner \
+      --config "${config}" "${repo_root}"; then
+    echo "ERROR: gitleaks found a secret in the staged changes - commit blocked" >&2
+    echo "       Remove it from the index, or record a reviewed exception in .gitleaks.toml" >&2
+    return 1
+  fi
+}
+
+main "$@"
