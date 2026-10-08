@@ -12,7 +12,7 @@
 
 - INV-1: kein Credential (Token, PAR, Passwort, Private Key) im Baum - Secrets nur per `op read` zur Laufzeit
 - INV-2: kein Lab-Zugang ohne Ablauf - PARs mit Ablaufdatum, Bastion-Sessions mit TTL, Labs mit Auto-Stop
-- INV-3: `git ls-files .claude` liefert nur `CLAUDE.md` und `aitk.toml`
+- INV-3: `git ls-files .claude` liefert hoechstens `CLAUDE.md` und `aitk.toml` (hier liegt CLAUDE.md im Root)
 - INV-4: keine echten OCIDs oder API-Key-Fingerprints im Baum - Platzhalter wie `<compartment_ocid>`
 - INV-5: keine echten OCIDs oder Fingerprints in neuen Commits; bekannte Altlasten nur ueber das Register
 - INV-6: Tenancy-Namespace und Tenancy-Namen nur nach Owner-Entscheid im Baum
