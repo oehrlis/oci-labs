@@ -1,0 +1,49 @@
+# gitleaks - secret scan over the full git history (all refs) on every push and PR.
+#
+# Config: .gitleaks.toml (gitleaks defaults + OCI rules for PAR URLs, OCIDs and API
+# key fingerprints). The reviewed historical findings are allowlisted there by
+# commit, path and rule - any other finding fails the job.
+#
+# Pinning: actions/checkout by commit SHA, gitleaks by version plus the SHA-256
+# from the release's checksums file. To upgrade gitleaks, change both values.
+---
+name: gitleaks
+
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: secret scan (history, all refs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks (pinned, checksum verified)
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" gitleaks
+          "${RUNNER_TEMP}/gitleaks" version
+
+      - name: Scan history
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/gitleaks" git --config .gitleaks.toml --redact --no-banner \
+            --log-opts=--all --exit-code 1 .

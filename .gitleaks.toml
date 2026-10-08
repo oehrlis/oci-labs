@@ -1,0 +1,89 @@
+# .gitleaks.toml - secret scan config for oci-labs (CI, pre-commit, make lint-secrets)
+#
+# Based on gitleaks-oci.toml from the ai-toolkit repo-audit skill (v0.2.0): the
+# gitleaks defaults plus rules for OCI pre-authenticated requests (PAR), real OCIDs
+# and API key fingerprints. The defaults alone know none of these - a real PAR URL
+# sat in this public history and a default run reported 0 findings.
+#
+# Local run, all refs:
+#   gitleaks git --config .gitleaks.toml --redact --log-opts=--all .
+#
+title = "oci-labs - gitleaks default + OCI / Oracle"
+
+[extend]
+useDefault = true
+
+# OCI pre-authenticated request. Covers the short form .../p/<token>/ and the long
+# form .../p/<token>/n/<namespace>/b/<bucket>/o/<object>, on the classic and the
+# dedicated endpoint (<ns>.objectstorage.<region>.oci.customer-oci.com).
+[[rules]]
+id = "oci-par-url"
+description = "OCI Object Storage pre-authenticated request (PAR) URL with token"
+regex = '''objectstorage\.[a-z0-9-]+\.(?:oraclecloud\.com|oci\.customer-oci\.com)/p/([A-Za-z0-9_-]{20,})/'''
+secretGroup = 1
+keywords = ["objectstorage"]
+
+[[rules.allowlists]]
+description = "placeholder tokens (xxxx, 0000, ...)"
+regexTarget = "match"
+regexes = ['''/p/(?:[xX]+|0+|[aA]+)/''']
+
+# Real OCIDs: ocid1.<type>.<realm>.<region-or-empty>.<unique>. Tenancy, user and
+# compartment carry an empty region (ocid1.tenancy.oc1..aaaa...), regional resources a
+# region key or name (ocid1.instance.oc1.eu-zurich-1.anl...). Real unique parts often
+# start with "aaaaaaaa" - only an unique part made of a/x/0 alone is a placeholder.
+[[rules]]
+id = "oci-ocid"
+description = "OCI resource OCID (identifies tenancy, users, resources)"
+regex = '''ocid1\.(?:tenancy|user|compartment|instance|vcn|subnet|drg|dbsystem|database|autonomousdatabase|vault|key|bucket|group|dynamicgroup|policy)\.oc[0-9]+\.[a-z0-9-]*\.[a-z0-9]{40,}'''
+keywords = ["ocid1."]
+
+[[rules.allowlists]]
+description = "placeholder OCIDs (aaaa..., xxxx..., 0000...)"
+regexTarget = "match"
+regexes = ['''\.[ax0]{40,}$''']
+
+# OCI API signing key fingerprint (MD5, 16 hex pairs) next to "fingerprint".
+[[rules]]
+id = "oci-api-key-fingerprint"
+description = "OCI API key fingerprint"
+regex = '''(?i)fingerprint["']?\s*[:=]\s*["']?([0-9a-f]{2}(?::[0-9a-f]{2}){15})'''
+secretGroup = 1
+keywords = ["fingerprint"]
+
+[[rules.allowlists]]
+description = "placeholder fingerprints (00:00:..., aa:aa:..., 12:34:...)"
+regexTarget = "secret"
+regexes = ['''^(?:00:){15}00$''', '''^(?:aa:){15}aa$''', '''^(?:xx:){15}xx$''', '''^12:34:56:78:''']
+
+# Private key blocks (-----BEGIN ... PRIVATE KEY-----) are covered by the default
+# rule "private-key" - not repeated here.
+
+# -- Known history, reviewed and accepted (tasks/review-register.md) -----------
+#
+# These findings live in old commits only. The files are gone or fixed in the tree,
+# but the history keeps them, and a full-history scan would fail CI forever. Each
+# entry is scoped to exactly one commit AND one path AND the rules that fired there
+# (condition AND), so a new finding in any other commit, file or rule still fails.
+# No values in this file - the register holds the redacted evidence.
+#
+# RA-oci-labs-001 (PAR, akzeptiert) and RA-oci-labs-002 (OCIDs, fingerprint,
+# akzeptiert): 93d3f77, 2026-02-09, monorepo merge; the file was deleted 13 minutes
+# later in ad47625. Owner decision Stefan Oehrli 2026-10-08: PAR time-limited and
+# expired, no rotation, no history rewrite.
+[[allowlists]]
+description = "RA-oci-labs-001/-002: accepted history in 93d3f77 (deleted tfvars)"
+condition = "AND"
+commits = ["93d3f7704a7ab02f5a56c915652274c9c29e6782"]
+paths = ['''^infra/stacks/lab-db19c-baseline/terraform\.tfvars$''']
+targetRules = ["oci-par-url", "oci-ocid", "oci-api-key-fingerprint"]
+
+# RA-oci-labs-003 (OCIDs, akzeptiert): f70530f, 2026-06-28, compartment and DRG
+# OCID in the AD/CMU runbook. Replaced by placeholders in the tree (RA-oci-labs-004);
+# the history keeps the old values - identifiers, not credentials.
+[[allowlists]]
+description = "RA-oci-labs-003: accepted history in f70530f (runbook OCIDs)"
+condition = "AND"
+commits = ["f70530fca93b02a19a1d6fb1d397cde8af38ee54"]
+paths = ['''^docs/runbook-ad-cmu-lab\.md$''']
+targetRules = ["oci-ocid"]
