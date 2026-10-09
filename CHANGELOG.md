@@ -14,8 +14,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   interruption. Description updated, tfvars.example and docs revised.
 - **RA-oci-labs-005 + 030**: Tenancy namespace `<namespace>`, OCI profile
   `<oci_profile>` and compartment `<compartment_name>` replace the real values in
-  all docs, examples, CHANGELOG and code comments. `git grep trivadisbdsxsp`
-  returns 0 matches. Code defaults in Makefile and `variables.tf` stay (overrideable).
+  all docs, examples, CHANGELOG and code comments. Namespace grep returns 0 matches.
+  Code defaults in Makefile and `variables.tf` stay (overrideable).
 
 ### Removed
 
