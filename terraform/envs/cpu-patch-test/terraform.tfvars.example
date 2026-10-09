@@ -14,7 +14,7 @@
 # Provider / tenancy
 # Base compartment - existing, never created or deleted by Terraform.
 # Alternative: comment this out and set compartment_name + tenancy_ocid instead.
-oci_config_profile = "TRIVADIS"
+oci_config_profile = "<oci_profile>"
 compartment_ocid   = "ocid1.compartment.oc1..xxx"
 
 # Core / naming  ->  chzh-l-cpupt-01

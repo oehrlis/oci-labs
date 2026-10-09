@@ -72,7 +72,7 @@ manually uploaded OCI bucket patches - too manual, not reusable.
 | Count | `lab_count` variable, default=1 | Workshops: `lab_count=4` |
 | Accenture OCI standards | Enforced in network module + compute | See constraints below |
 | VCN scope | One VCN per env | Build, use, destroy |
-| Tenant | trivadisbdsxsp | Stefan's lab tenant |
+| Tenant | <namespace> | Stefan's lab tenant |
 
 ## Accenture OCI Security Standards (mandatory)
 

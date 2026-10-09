@@ -24,7 +24,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in 93d3f77 and f70530f are recorded as accepted (owner decision, no
   history rewrite), open gate gaps stay tracked there.
 - **terraform/envs/core applied**: the shared core stack is no longer only
-  validated. `chzh-l-core-01` in tenancy `trivadisbdsxsp` - VCN, three subnets,
+  validated. `chzh-l-core-01` in tenancy `<namespace>` - VCN, three subnets,
   IGW and NAT, three route tables, three security lists, VCN flow logs, one
   Bastion - 20 resources, re-plan without drift, all 19 OCI resources tagged
   `core_owner = "core"`. Nothing consumes it yet: `cpu-patch-test` still owns

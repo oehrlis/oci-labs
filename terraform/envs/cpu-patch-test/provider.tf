@@ -9,7 +9,7 @@
 # Purpose....: Configure Terraform and OCI provider for the cpu-patch-test stack.
 #              Oracle Linux 8 hosts for quarterly CPU patch testing.
 # Notes......: Uses the local OCI CLI config (~/.oci/config). The profile is
-#              configurable via oci_config_profile (default: TRIVADIS).
+#              configurable via oci_config_profile (default: `<oci_profile>`).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------

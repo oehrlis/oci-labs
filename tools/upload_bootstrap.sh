@@ -24,7 +24,7 @@ set -euo pipefail
 #   profile>] [-N <namespace>] [-r <region>]
 #
 # Example:
-#   tools/upload_bootstrap.sh -b tvd-cpureport -N trivadisbdsxsp -r eu-zurich-1
+#   tools/upload_bootstrap.sh -b tvd-cpureport -N <namespace> -r eu-zurich-1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR%/tools}"

@@ -52,7 +52,7 @@ see `docs/runbook-cpu-patch-lab.md`.
 
 ## Status
 
-**Applied 2026-08-27** in tenancy `trivadisbdsxsp`, compartment `cpureport`, as
+**Applied 2026-08-27** in tenancy `<namespace>`, compartment `<compartment_name>`, as
 `chzh-l-core-01`: VCN, three subnets, IGW and NAT, three route tables, three
 security lists, VCN flow logs, one Bastion - 20 resources, and a re-plan that
 reports no drift. All 19 OCI resources carry `core_owner = "core"`; the two

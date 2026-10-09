@@ -17,7 +17,7 @@ modified from here.
 
 - Terraform >= 1.5
 - OCI CLI config `~/.oci/config` with a profile for the lab tenancy
-  (default `TRIVADIS`; `DEFAULT` points at the same tenancy `trivadisbdsxsp`)
+  (default `<oci_profile>`; `DEFAULT` points at the same tenancy `<namespace>`)
 - Ansible (for Gates 2 and 3)
 - Optional: 1Password CLI (`op`) - otherwise use a `.env` file
 
@@ -144,7 +144,7 @@ it, no manual editing required.
 
 | Variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `oci_config_profile` | string | `TRIVADIS` | Profile in `~/.oci/config`. |
+| `oci_config_profile` | string | `<oci_profile>` | Profile in `~/.oci/config`. |
 | `compartment_ocid` | string | - | **Required.** Compartment for all resources. |
 | `region_key` | string | `chzh` | Region key used in names. |
 | `environment_code` | string | `l` | `l` lab, `ws` workshop, `t` test. |

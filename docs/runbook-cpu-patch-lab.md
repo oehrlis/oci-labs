@@ -11,14 +11,14 @@ modified from here.
 
 - Stack code: `cpupt` - resources are named `chzh-l-cpupt-01`
 - Filesystem roots: `/u00` binaries, `/u01` data, `/u02` archive
-- Tenancy: `trivadisbdsxsp`, OCI profile `TRIVADIS`, compartment `cpureport`
+- Tenancy: `<namespace>`, OCI profile `<oci_profile>`, compartment `<compartment_name>`
 - OS: Oracle Linux 8 - OL9 cannot run the 19.3.0 base release
 - Lifecycle: build, install, patch, verify, destroy
 
 ## Architecture
 
 ```text
-Workstation (macOS)                        OCI - compartment cpureport
+Workstation (macOS)                        OCI - compartment <compartment_name>
 +---------------------------+              +-----------------------------------+
 | terraform                 |  API         | VCN 10.29.0.0/16                  |
 |   envs/cpu-patch-test     |------------->|   public  10.29.10.0/24           |
@@ -114,8 +114,8 @@ npm install -g markdownlint-cli
 ansible-galaxy collection install -r ansible/requirements.yml
 ```
 
-- OCI CLI config `~/.oci/config` with the `TRIVADIS` profile (`DEFAULT` points at
-  the same tenancy `trivadisbdsxsp`)
+- OCI CLI config `~/.oci/config` with the `<oci_profile>` profile (`DEFAULT` points at
+  the same tenancy `<namespace>`)
 - 1Password item `secrets/Oracle-MOS` with fields `username` and `password`.
   No `op signin` needed - the desktop app integration prompts on demand.
 - An SSH key at `~/.ssh/id_ed25519.pub`. Terraform also generates a dedicated
@@ -158,7 +158,7 @@ Consequences for the lab:
 
 Until then, stage `LINUX.X64_193000_db_home.zip` via `db_base_image_url`. The
 file already exists in the tenancy - bucket `orarepo`, namespace
-`trivadisbdsxsp`, 3'059'705'302 bytes:
+`<namespace>`, 3'059'705'302 bytes:
 
 ```bash
 make cpu-lab-par PAR_DAYS=7

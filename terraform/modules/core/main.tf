@@ -66,7 +66,7 @@ module "network" {
 # Artifact bucket
 # ---------------------------------------------------------------------------
 # Gold images and staged patch media. Off by default in a tenancy where the
-# bucket predates Terraform - trivadisbdsxsp has carried "orarepo" outside any
+# bucket predates Terraform - <namespace> has carried "orarepo" outside any
 # state since before this repository existed.
 
 data "oci_objectstorage_namespace" "ns" {
