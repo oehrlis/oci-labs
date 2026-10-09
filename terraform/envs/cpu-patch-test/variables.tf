@@ -307,8 +307,8 @@ variable "lab_keypair_name" {
 
 variable "enable_auto_stop" {
   type        = bool
-  description = "Create a daily auto-stop schedule. Default off - an AutoUpgrade run must not be interrupted."
-  default     = false
+  description = "Create a daily auto-stop schedule. Safe default: true (nightly STOP_RESOURCE at 18:00 UTC). AutoUpgrade runs must set enable_auto_stop = false explicitly - a mid-run stop corrupts the patch attempt."
+  default     = true
 }
 
 variable "auto_stop_cron" {

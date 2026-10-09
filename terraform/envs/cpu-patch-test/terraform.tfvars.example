@@ -62,8 +62,10 @@ assign_public_ip             = false
 attach_data_volume   = false
 data_volume_size_gbs = 100
 
-# Auto-stop is off by default: an AutoUpgrade run must not be interrupted.
-enable_auto_stop = false
+# Auto-stop is on by default (nightly STOP_RESOURCE at 18:00 UTC).
+# Disable for AutoUpgrade runs: a mid-run stop corrupts the patch attempt.
+# enable_auto_stop = true   # default - safe for idle labs
+# enable_auto_stop = false  # required for cpu-lab-apply / AutoUpgrade runs
 # auto_stop_cron = "0 18 * * *"
 
 # Oracle DB / patch level - consumed by the Ansible layer

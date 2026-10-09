@@ -181,7 +181,7 @@ it, no manual editing required.
 | `attach_data_volume` | bool | `false` | Extra block volume per host. |
 | `data_volume_size_gbs` | number | `100` | Data volume size in GB. |
 | `ssh_public_key` | string | - | **Required.** Public key for `opc`. |
-| `enable_auto_stop` | bool | `false` | Daily auto-stop schedule. |
+| `enable_auto_stop` | bool | `true` | Daily auto-stop schedule. Set to `false` for AutoUpgrade runs. |
 | `auto_stop_cron` | string | `0 18 * * *` | Auto-stop cron (UTC). |
 
 ### Oracle DB and patch level
@@ -235,9 +235,10 @@ it, no manual editing required.
   returns HTTP 500 for gold-image lookups. Set `db_base_image_url` to a
   pre-authenticated request. See the runbook for the exact command.
 
-- **Auto-stop is off by default.** A daily `STOP_RESOURCE` in the middle of an
-  AutoUpgrade run corrupts the patch attempt. Enable it only for a lab that
-  idles between test runs.
+- **Auto-stop is on by default** (nightly `STOP_RESOURCE` at 18:00 UTC). This is
+  safe for idle labs. For AutoUpgrade runs set `enable_auto_stop = false` explicitly
+  in `terraform.tfvars` or via `TF_VAR_enable_auto_stop=false` - a mid-run stop
+  corrupts the patch attempt.
 - **Boot volume sizing.** Two `ORACLE_HOME`s (base RU + target RU) plus install
   media need real space; do not drop below the 200 GB default without testing.
 - **Image OCID drift.** The instance ignores changes to the image OCID

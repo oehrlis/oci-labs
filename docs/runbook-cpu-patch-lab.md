@@ -604,7 +604,7 @@ The ones that matter per quarter:
 | `allowed_ssh_cidrs` | `.env` / tfvars | `[]` | External CIDRs allowed to SSH |
 | `compartment_ocid` | `.env` / tfvars | - | Base compartment, never created by Terraform |
 | `assign_public_ip` | tfvars | `true` | Public subnet plus public IP |
-| `enable_auto_stop` | tfvars | `false` | Daily auto-stop schedule |
+| `enable_auto_stop` | tfvars | `true` | Daily auto-stop schedule; set `false` for AutoUpgrade runs |
 
 <!-- markdownlint-restore -->
 
@@ -705,9 +705,10 @@ afterwards. AutoUpgrade prints them to the console and to
 
 ### Auto-stop interrupted a patch run
 
-`enable_auto_stop` is `false` by default precisely because a daily
-`STOP_RESOURCE` in the middle of an AutoUpgrade run wrecks the attempt. Enable
-it only for a lab that idles between test runs.
+`enable_auto_stop` is `true` by default (nightly `STOP_RESOURCE` at 18:00 UTC).
+For AutoUpgrade runs set `enable_auto_stop = false` explicitly in `terraform.tfvars`
+or via `TF_VAR_enable_auto_stop=false` before applying - a mid-run stop wrecks the
+patch attempt. The default is intentionally safe for idle labs; opt out when you run.
 
 ## Related documents
 
