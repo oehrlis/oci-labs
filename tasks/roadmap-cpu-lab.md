@@ -319,4 +319,33 @@ August-2026-CSPU-Blocks, alle aus dem uncommitteten Stand. `HEAD` fuehrt
 - Konsolidierung des AutoUpgrade-**Aufrufs**. Eine Zeile, keine Abstraktion
   wert. Geteilt gehoeren die Daten, nicht die Aufrufschicht.
 
+## 7. Geplant
+
+### Lab-Stacks odb19eng-single und odb19sec-dg
+
+Beide Stacks sind in `docs/architecture-overview.md` und `terraform/modules/naming/`
+als Stack-Codes (`odb19eng`, `odb19sec`) referenziert; die Platzhalter-Runbooks
+(`docs/lab-odb19eng-single.md`, `docs/lab-odb19sec-dg.md`) wurden entfernt.
+
+- **odb19eng-single**: Oracle DB 19c Engineering Single-Instance - ein eigenstaendiges
+  Lab fuer Engineering-Tests ausserhalb des CPU-Patch-Kontexts.
+- **odb19sec-dg**: Oracle DB 19c Security mit Data Guard - Dual-Instance-Lab fuer
+  Security- und HA-Szenarien.
+
+### Ansible-Teil: Migration nach oradba-ansible
+
+Ansible-Teil: zieht nach oradba-ansible (Collection oradba.automation, Repo existiert
+noch nicht). Plan: <https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/design.md#cross-repository-ownership>
+
+Phase 3: 1 oradba-Konventionsseite, 2 oradba-ansible + Ansible-Standard anlegen,
+3 db19_engineering aus oci-labs auf Collection-Rollen migrieren, 4 docker,
+5 cpu-patch-tests. Regeln: Ansible nur in oradba-ansible; AutoUpgrade nur ueber die
+odb_autoupgrade-Engine; oci-labs behaelt Inventory, Terraform und duenne
+Szenario-Playbooks. Bis Phase 3 Schritt 3 bleibt oci-labs/ansible/ in Betrieb.
+
+### odb_autoupgrade Entscheid E2 wieder oeffnen
+
+Der fruehere Lab-Entscheid "odb_autoupgrade gestrichen" (E2, 2026-08-27) wird mit
+odb_autoupgrade 0.6.0 wieder geoeffnet.
+
 <!-- EOF -->

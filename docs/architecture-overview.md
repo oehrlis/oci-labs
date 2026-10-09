@@ -136,8 +136,8 @@ oci-labs/
 | Stack | Path | Stack-code | Runbook |
 | --- | --- | --- | --- |
 | **ad-cmu-test** | `envs/ad-cmu-test` | `windc` | [runbook-ad-cmu-lab.md](runbook-ad-cmu-lab.md) |
-| **odb19eng-single** | `envs/odb19eng-single` | `odb19eng` | [lab-odb19eng-single.md](lab-odb19eng-single.md) |
-| **odb19sec-dg** | `envs/odb19sec-dg` | `odb19sec` | [lab-odb19sec-dg.md](lab-odb19sec-dg.md) |
+| **odb19eng-single** | `envs/odb19eng-single` | `odb19eng` | planned - see roadmap |
+| **odb19sec-dg** | `envs/odb19sec-dg` | `odb19sec` | planned - see roadmap |
 | **mfa_oma_setup** | `envs/mfa_oma_setup` | `mfaoma` | [runbook-mfa-oma.md](runbook-mfa-oma.md) |
 <!-- markdownlint-restore -->
 
