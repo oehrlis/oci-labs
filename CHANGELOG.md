@@ -6,6 +6,28 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **RA-oci-labs-014**: `enable_auto_stop` default changed from `false` to `true`
+  in `terraform/envs/cpu-patch-test`. Idle labs stop nightly at 18:00 UTC.
+  AutoUpgrade runs must set `enable_auto_stop = false` explicitly to avoid
+  interruption. Description updated, tfvars.example and docs revised.
+- **RA-oci-labs-005 + 030**: Tenancy namespace `<namespace>`, OCI profile
+  `<oci_profile>` and compartment `<compartment_name>` replace the real values in
+  all docs, examples, CHANGELOG and code comments. `git grep trivadisbdsxsp`
+  returns 0 matches. Code defaults in Makefile and `variables.tf` stay (overrideable).
+
+### Removed
+
+- **RA-oci-labs-018**: Deleted `tools/infra-tools/scripts/setup_common_os.sh` -
+  dead code with a known default credential (`oracle:oracle`), no callers in repo.
+- **RA-oci-labs-034..039**: Deleted 6 empty placeholder docs:
+  `ansible/docs/ansible-workflow.md`, `ansible/docs/architecture-config.md`,
+  `ansible/docs/profiles-overview.md`, `ansible/inventories/README.md`,
+  `docs/lab-odb19eng-single.md`, `docs/lab-odb19sec-dg.md`.
+  Links in `docs/architecture-overview.md` updated; planned labs and Ansible
+  migration roadmap added to `tasks/roadmap-cpu-lab.md`.
+
 ### Added
 
 - **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks
