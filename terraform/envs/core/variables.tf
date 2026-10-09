@@ -12,7 +12,7 @@
 variable "oci_config_profile" {
   description = "Profile in ~/.oci/config. The only thing that changes for another tenancy."
   type        = string
-  default     = "TRIVADIS"
+  default     = "DEFAULT"
 }
 
 variable "tenancy_ocid" {

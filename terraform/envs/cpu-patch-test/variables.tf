@@ -23,7 +23,7 @@
 variable "oci_config_profile" {
   type        = string
   description = "Profile in ~/.oci/config used by the OCI provider."
-  default     = "TRIVADIS"
+  default     = "DEFAULT"
 }
 
 variable "compartment_ocid" {

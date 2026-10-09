@@ -402,7 +402,7 @@ cpu-lab-ssh: guard-terraform ## Print the SSH command(s) for the lab host(s)
 .PHONY: cpu-lab-stop
 cpu-lab-stop: guard-oci guard-terraform ## Stop the lab instance(s) without deleting anything
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  ids="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -json db_instance_ids 2>/dev/null \
 	    | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).values()))' 2>/dev/null || true)"; \
 	  if [[ -z "$$ids" ]]; then \
@@ -420,7 +420,7 @@ cpu-lab-stop: guard-oci guard-terraform ## Stop the lab instance(s) without dele
 .PHONY: cpu-lab-start
 cpu-lab-start: guard-oci guard-terraform ## Start the stopped lab instance(s)
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  ids="$$(python3 -c "import json; d=json.load(open('$(CPU_ENV_DIR)/terraform.tfstate')); print(' '.join(i['attributes']['id'] for r in d['resources'] if r['type']=='oci_core_instance' for i in r['instances']))")"; \
 	  [[ -n "$$ids" ]] || { echo "❌ No instance found in the state"; exit 1; }; \
 	  for id in $$ids; do \
@@ -477,7 +477,7 @@ PAR_DAYS   ?= 7
 .PHONY: cpu-lab-par
 cpu-lab-par: guard-oci guard-terraform ## Mint a short-lived PAR for the 19c base image and write it to .env (PAR_DAYS=7)
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
 	  echo -e "$(COLOR_BOLD)Minting a pre-authenticated request$(COLOR_RESET)"; \
 	  echo "  profile : $$profile"; \
@@ -507,7 +507,7 @@ cpu-lab-par: guard-oci guard-terraform ## Mint a short-lived PAR for the 19c bas
 .PHONY: cpu-lab-par-list
 cpu-lab-par-list: guard-oci ## List existing PARs on the base image bucket
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  "$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
 	    --query 'data[].{name:name,object:"object-name",access:"access-type",expires:"time-expires"}' \
 	    --output table
@@ -515,7 +515,7 @@ cpu-lab-par-list: guard-oci ## List existing PARs on the base image bucket
 .PHONY: cpu-lab-par-revoke
 cpu-lab-par-revoke: guard-oci ## Revoke the base-image PARs on the bucket and clear the .env entry
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
 	      --query 'data[?name==`$(PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
 	  if [[ -z "$$ids" ]]; then echo "No PAR named $(PAR_NAME) found."; exit 0; fi; \
@@ -547,7 +547,7 @@ GOLD_PAR_HOURS ?= 2
 .PHONY: cpu-lab-goldimage-push
 cpu-lab-goldimage-push: guard-oci guard-ansible guard-cpu-env ## Push the gold image built on the lab host into the orarepo bucket
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  expires="$$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=$(GOLD_PAR_HOURS))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))')"; \
 	  echo "Minting a write PAR on $(PAR_BUCKET), valid $(GOLD_PAR_HOURS)h (expires $$expires)"; \
 	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
@@ -572,7 +572,7 @@ cpu-lab-goldimage-push: guard-oci guard-ansible guard-cpu-env ## Push the gold i
 .PHONY: cpu-lab-goldimage-list
 cpu-lab-goldimage-list: guard-oci ## List the gold images in the orarepo bucket
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
-	  profile="$${profile:-TRIVADIS}"; \
+	  profile="$${profile:-DEFAULT}"; \
 	  "$(OCI)" --profile "$$profile" os object list --bucket-name "$(PAR_BUCKET)" \
 	    --prefix goldimage-db- \
 	    --query 'data[].{name:name,size:size,modified:"time-modified"}' --output table
@@ -620,7 +620,7 @@ cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forw
 	  fi; \
 	  ip="$$("$(TERRAFORM)" output -json db_private_ips | python3 -c 'import json,sys;print(list(json.load(sys.stdin).values())[0])')"; \
 	  key="$$("$(TERRAFORM)" output -raw lab_private_key_path)"; \
-	  profile="$${TF_VAR_oci_config_profile:-TRIVADIS}"; \
+	  profile="$${TF_VAR_oci_config_profile:-DEFAULT}"; \
 	  echo "Bastion : $$bid"; \
 	  echo "Target  : $$ip:22"; \
 	  sid="$$("$(OCI)" --profile "$$profile" bastion session create-port-forwarding \
@@ -686,7 +686,7 @@ cpu-lab-bastion-list: guard-oci guard-terraform ## List active Bastion sessions
 	  set -a; [[ -f .env ]] && . ./.env; set +a; \
 	  bid="$$("$(TERRAFORM)" output -raw bastion_id 2>/dev/null || true)"; \
 	  [[ -n "$$bid" && "$$bid" != "null" ]] || { echo "No Bastion in this stack."; exit 0; }; \
-	  "$(OCI)" --profile "$${TF_VAR_oci_config_profile:-TRIVADIS}" bastion session list \
+	  "$(OCI)" --profile "$${TF_VAR_oci_config_profile:-DEFAULT}" bastion session list \
 	    --bastion-id "$$bid" --all \
 	    --query 'data[?"lifecycle-state"==`ACTIVE`].{name:"display-name",state:"lifecycle-state",ttl:"session-ttl-in-seconds",created:"time-created"}' \
 	    --output table
