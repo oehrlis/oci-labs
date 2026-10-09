@@ -397,7 +397,7 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 
 ### RA-oci-labs-030 - OCI-CLI-Profilname und Compartment-Name als Defaults im Baum
 
-- status: behoben
+- status: offen
 - schwere: niedrig
 - rolle: security
 - ort: Makefile
@@ -406,8 +406,10 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: Makefile:405, 423, 480 (u.a., 9 Zeilen) - `profile="$${profile:-<profilname>}"`; Profilname in 16 getrackten
   Dateien, darunter terraform/envs/cpu-patch-test/provider.tf und variables.tf; Compartment-Name in
   terraform/envs/cpu-patch-test/.env.example:16 und ansible/roles/db19_engineering/defaults/main.yml
-- erledigt: 2026-10-09
-- commit: 1efe0de
+- teilweise: Doku und Beispiele in 1efe0de auf Platzhalter umgestellt; die Code-Defaults
+  (Makefile 9 Zeilen, terraform/envs/*/variables.tf 2x) tragen den Profilnamen weiter
+- entscheid-offen: Default auf das OCI-Standardprofil umstellen (lokale Laeufe brauchen dann
+  ein gesetztes Profil) oder als akzeptiert fuehren - Stefan, nach 2026-10-09 zurueckgesetzt
 
 ### RA-oci-labs-031 - CLAUDE.md nennt falsches Lint-Kommando
 
