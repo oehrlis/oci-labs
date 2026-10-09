@@ -58,9 +58,6 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without a date, so a second run would overwrite the first run's evidence
   under an identical name instead of failing. Found by rendering the changed
   expressions offline against an empty fact dict.
-
-### Changed
-
 - **lint-terraform** names every env it skips (no `provider.tf`) instead of
   a silent `continue`; **lint-shell** also checks `tools/git-hooks/`.
 
