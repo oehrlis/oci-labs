@@ -15,6 +15,7 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.08.19 oehrli - initial version
+# 2026.10.15 oehrli - ignore ssh_authorized_keys drift (no replacement)
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
@@ -81,8 +82,15 @@ resource "oci_core_instance" "db_host" {
 
   # Image OCIDs change when Oracle publishes a new OL8 build - do not force
   # a replacement of a running lab host just because the lookup moved on.
+  #
+  # ssh_authorized_keys likewise: cloud-init reads it on the first boot only,
+  # so a changed workstation key cannot reach a running host through Terraform
+  # anyway - the only effect would be a replacement that destroys the database.
+  # The output ssh_authorized_key_comments still shows the configured keys. To
+  # really roll the keys, replace the host on purpose:
+  #   terraform apply -replace='module.oracle_db_host.oci_core_instance.db_host["01"]'
   lifecycle {
-    ignore_changes = [source_details[0].source_id]
+    ignore_changes = [source_details[0].source_id, metadata["ssh_authorized_keys"]]
   }
 
   freeform_tags = merge(var.freeform_tags, { role = "oracle-db-host" })
