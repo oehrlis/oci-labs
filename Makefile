@@ -65,8 +65,12 @@ ANSIBLE_EXTRA ?=
 # it is up first. Without it the host/port override had to be repeated on every
 # single call, and a tunnel that died mid-session produced UNREACHABLE rather
 # than a retry. See the Bastion section for why a listening port is not proof.
+#
+# 'override' is required: without it a command-line ANSIBLE_EXTRA="-e ..."
+# replaces this append wholesale, and Ansible silently goes to the public IP
+# from the inventory instead of the tunnel.
 ifeq ($(BASTION),1)
-ANSIBLE_EXTRA += -e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)
+override ANSIBLE_EXTRA += -e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)
 BASTION_DEP := cpu-lab-bastion-tunnel
 else
 BASTION_DEP :=
@@ -587,6 +591,80 @@ cpu-lab-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Roll the databas
 	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
 	  --tags rollback $(ANSIBLE_EXTRA)
 	@echo "✅ Rollback done - the lab runs from the base home again"
+
+# ==============================================================================
+# oradba.automation collection lab test
+# ==============================================================================
+# Runs the oradba-ansible collection against the real CPUDB database of the
+# cpu-patch-test lab - the switch and rollback roles of v0.2.0 have only seen
+# molecule stubs so far. Same host, same tunnel, same secrets as the lab role;
+# the collection installs into its own tree (odb_autoupgrade engine under
+# ORACLE_BASE/local, homes as product/<RU>.0.0), so it does not disturb the
+# lab role's /opt/autoupgrade and product/<RU>/dbhome_1 homes.
+# Runbook: docs/runbook-oradba-automation-lab.md
+
+COLL_VERSION  ?= 0.2.0
+COLL_SHA256   ?= d20a9ea976a10e81def958d8b3bcd10ddc9bb38820242cf5ba42be9da5da54ef
+COLL_TARBALL  := oradba-automation-$(COLL_VERSION).tar.gz
+COLL_URL      := https://github.com/oehrlis/oradba-ansible/releases/download/v$(COLL_VERSION)/$(COLL_TARBALL)
+COLL_DIST_DIR := $(ANSIBLE_DIR)/collections/.dist
+COLL_PLAYBOOK := playbooks/lab-oradba-automation.yml
+# Second inventory source: only the collection variables, see its header.
+COLL_INVENTORY_VARS := inventories/cpu-patch-test
+COLL_INVENTORY_ARGS := -i "$(CPU_INVENTORY)" -i "$(COLL_INVENTORY_VARS)"
+COLL_STEPS    := setup download home apply verify
+# Profiles come from the sibling cpu-patch-tests checkout (read-only). Exported
+# so the group_vars lookup resolves the same path for playbook and ad-hoc runs.
+CPU_PATCH_TESTS_DIR ?= $(abspath $(CURDIR)/../cpu-patch-tests)
+export CPU_PATCH_TESTS_DIR
+
+.PHONY: cpu-lab-coll-install
+cpu-lab-coll-install: guard-ansible ## Install oradba.automation COLL_VERSION into ansible/collections (sha256-pinned)
+	$(Q)mkdir -p "$(COLL_DIST_DIR)" && cd "$(COLL_DIST_DIR)" && \
+	  { curl -fsSLo "$(COLL_TARBALL)" "$(COLL_URL)" || { echo "❌ download failed: $(COLL_URL)"; exit 1; }; } && \
+	  { echo "$(COLL_SHA256)  $(COLL_TARBALL)" | shasum -a 256 -c - || \
+	    { echo "❌ $(COLL_TARBALL) does not match COLL_SHA256 - not installed"; rm -f "$(COLL_TARBALL)"; exit 1; }; }
+	$(Q)cd "$(ANSIBLE_DIR)" && ansible-galaxy collection install --force \
+	  -p collections "collections/.dist/$(COLL_TARBALL)"
+	@echo "✅ oradba.automation $(COLL_VERSION) in $(ANSIBLE_DIR)/collections"
+
+.PHONY: cpu-lab-coll-check
+cpu-lab-coll-check: guard-ansible guard-cpu-env ## Offline check of the collection test: syntax and resolved variables, no host contact
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" $(COLL_INVENTORY_ARGS) \
+	  "$(COLL_PLAYBOOK)" --syntax-check
+	$(Q)cd "$(ANSIBLE_DIR)" && ansible $(COLL_INVENTORY_ARGS) cpu_patch_hosts \
+	  -c local -m ansible.builtin.debug -e ansible_python_interpreter=python3 -a "msg={{ { \
+	    'engine': odb_autoupgrade_install_version, \
+	    'profile': oradba_patch_profile, \
+	    'profile_file': patch_download_profiles[0], \
+	    'profile_file_exists': patch_download_profiles[0] is file, \
+	    'databases': oradba_patch_databases, \
+	    'listeners': oracle_home_switch_listeners } }}"
+
+.PHONY: cpu-lab-coll
+cpu-lab-coll: $(BASTION_DEP) guard-ansible guard-cpu-env ## Run one collection step: make cpu-lab-coll STEP=setup|download|home|apply|verify
+	@[[ " $(COLL_STEPS) " == *" $(STEP) "* ]] || \
+	  { echo "❌ STEP must be one of: $(COLL_STEPS)"; exit 1; }
+	$(Q)if [[ "$(STEP)" == "setup" || "$(STEP)" == "download" ]]; then \
+	    [[ -n "$(OP)" ]] || { echo "❌ STEP=$(STEP) needs the MOS keystore - 1Password CLI not found"; exit 1; }; \
+	    $(cpu_lab_ansible_secrets); \
+	    vars_arg=(-e @"$$vars_file"); \
+	  else \
+	    vars_arg=(); \
+	  fi; \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" $(COLL_INVENTORY_ARGS) \
+	    "$(COLL_PLAYBOOK)" --tags "$(STEP)" "$${vars_arg[@]}" $(ANSIBLE_EXTRA)
+
+.PHONY: cpu-lab-coll-rollback
+cpu-lab-coll-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Collection rollback: make cpu-lab-coll-rollback MODE=restore|home
+	@[[ "$(MODE)" == "restore" || "$(MODE)" == "home" ]] || \
+	  { echo "❌ MODE is required and has no default: MODE=restore (flashback) or MODE=home (keep data)"; exit 1; }
+	@echo "⚠️  oradba.automation rollback, mode $(MODE), against CPUDB."
+	@if [[ "$(YES)" != "1" ]]; then \
+	  read -r -p "    Continue? [y/N] " a; [[ "$$a" == "y" ]] || { echo "aborted"; exit 1; }; \
+	fi
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" $(COLL_INVENTORY_ARGS) \
+	  "$(COLL_PLAYBOOK)" --tags rollback -e oracle_home_rollback_mode="$(MODE)" $(ANSIBLE_EXTRA)
 
 # ==============================================================================
 # OCI Bastion sessions
