@@ -1,5 +1,9 @@
 # Plan: CPU Patch Test Lab in oci-labs
 
+> **Superseded.** Steering document since 2026-08-23 is
+> `tasks/roadmap-cpu-lab.md`. Gates 1-5 are built; gate status and the
+> October 2026 cycle: `tasks/plan-cpu-2026-10.md`.
+>
 > Autonomous implementation brief. Run this in a Claude session inside
 > `~/Repos/own/oehrlis/oci-labs`. Work gate by gate; present a diff/summary
 > at each gate before moving to the next. Stop and ask if a decision is

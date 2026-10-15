@@ -1,0 +1,114 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: lab-oradba-automation.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.15
+# Version....: v0.1.0
+# Purpose....: Lab test of the oradba.automation collection against the real
+#              CPUDB database of the cpu-patch-test lab: setup, download, home,
+#              switch and both rollback modes.
+# Notes......: Thin scenario playbook (collection rule 3) - no Oracle logic of
+#              its own except the read-only state report. Every step is a tag,
+#              run them through the make targets:
+#                make cpu-lab-coll-install           # controller, once
+#                make cpu-lab-coll STEP=setup BASTION=1
+#                make cpu-lab-coll STEP=download BASTION=1
+#                make cpu-lab-coll STEP=home BASTION=1
+#                make cpu-lab-coll STEP=apply BASTION=1
+#                make cpu-lab-coll-rollback MODE=restore BASTION=1
+#              Variables: inventories/cpu-patch-test/group_vars/.
+#              Runbook: docs/runbook-oradba-automation-lab.md
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Wait for the lab host
+  hosts: cpu_patch_hosts
+  gather_facts: false
+  tasks:
+    # raw, not wait_for_connection - see lab-cpu-patch.yml for why
+    - name: Wait for SSH on the lab host
+      ansible.builtin.raw: echo ready
+      register: lab_coll_ssh_ready
+      retries: 30
+      delay: 10
+      until: lab_coll_ssh_ready is succeeded
+      changed_when: false
+      tags:
+        - always
+
+- name: Collection setup - groups, user, layout, engine, keystore
+  ansible.builtin.import_playbook: oradba.automation.site_setup
+  tags:
+    - setup
+
+- name: Collection download - patch set by profile
+  ansible.builtin.import_playbook: oradba.automation.patch_download
+  tags:
+    - download
+
+- name: Collection home - new Oracle Home out of place
+  ansible.builtin.import_playbook: oradba.automation.home_create
+  tags:
+    - home
+
+- name: Collection apply - preflight and home switch
+  ansible.builtin.import_playbook: oradba.automation.patch_apply
+  tags:
+    - apply
+
+# 'never': a rollback runs only when asked for by tag, never as part of a
+# plain run of this playbook.
+- name: Collection rollback - mode restore or home
+  ansible.builtin.import_playbook: oradba.automation.patch_rollback
+  tags:
+    - never
+    - rollback
+
+- name: Report the database state
+  hosts: cpu_patch_hosts
+  gather_facts: false
+  tags:
+    - always
+  tasks:
+    - name: Read the oratab entry
+      ansible.builtin.command:
+        argv: [awk, -F, ':', '$1 == "{{ oracle_sid }}" { print $2 ":" $3 }', /etc/oratab]
+      register: lab_coll_oratab
+      changed_when: false
+
+    - name: Query version, open mode, restore points and the last SQL patch
+      become: true
+      become_user: oracle
+      ansible.builtin.shell: |
+        set -o pipefail
+        sqlplus -s -L / as sysdba <<'EOF'
+        set heading off feedback off pagesize 0 linesize 200
+        select 'version: ' || version_full from v$instance;
+        select 'open_mode: ' || open_mode || ', log_mode: ' || log_mode from v$database;
+        select 'restore_point: ' || name || ' guaranteed=' || guarantee_flashback_database from v$restore_point;
+        select 'sql_patch: ' || max(description) keep (dense_rank last order by action_time)
+               || ' / ' || max(status) keep (dense_rank last order by action_time)
+          from dba_registry_sqlpatch;
+        select 'invalid_objects: ' || count(*) from dba_objects where status = 'INVALID';
+        exit
+        EOF
+      args:
+        executable: /bin/bash
+      vars:
+        lab_coll_home: "{{ lab_coll_oratab.stdout.split(':')[0] }}"
+      environment:
+        ORACLE_SID: "{{ oracle_sid }}"
+        ORACLE_HOME: "{{ lab_coll_home }}"
+        PATH: "{{ lab_coll_home }}/bin:/usr/bin:/bin"
+      register: lab_coll_state
+      changed_when: false
+      when: lab_coll_oratab.stdout | length > 0
+
+    - name: Show the database state
+      ansible.builtin.debug:
+        msg: >-
+          {{ ['oratab: ' ~ (lab_coll_oratab.stdout or 'no entry for ' ~ oracle_sid)]
+             + (lab_coll_state.stdout_lines | default([])) }}

@@ -27,6 +27,7 @@ ignore: |
   **/.ansible/
   ansible/reports/
   ansible/inventories/generated/
+  ansible/collections/
   .terraform/
 
 rules:

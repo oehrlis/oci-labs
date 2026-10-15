@@ -348,4 +348,9 @@ Szenario-Playbooks. Bis Phase 3 Schritt 3 bleibt oci-labs/ansible/ in Betrieb.
 Der fruehere Lab-Entscheid "odb_autoupgrade gestrichen" (E2, 2026-08-27) wird mit
 odb_autoupgrade 0.6.0 wieder geoeffnet.
 
+Stand 2026-10-15: erster Schritt ist der Lab-Test der Collection v0.2.0 mit
+Engine 0.6.1 gegen `CPUDB` (`docs/runbook-oradba-automation-lab.md`). Die Lab-Rolle
+`db19_engineering` bleibt bis zur Migration unveraendert in Betrieb; Plan und
+Kosten: `tasks/plan-cpu-2026-10.md`.
+
 <!-- EOF -->

@@ -35,3 +35,8 @@ skip_list:
   # Roles use a short, stable prefix instead (db19_, oradba_, ...), which keeps
   # variable names readable without pretending they are private.
   - var-naming[no-role-prefix]
+
+# oradba.automation is installed here by make cpu-lab-coll-install - vendored,
+# pinned by sha256, linted in its own repository.
+exclude_paths:
+  - collections/

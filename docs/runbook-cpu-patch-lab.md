@@ -544,6 +544,14 @@ and starts it from the new one, and repoints `/etc/oratab`.
 
 The old ORACLE_HOME is deliberately left in place for rollback testing.
 
+On a host that has been patched before, give the run its own AutoUpgrade log
+directory, so an open deploy job of the previous run cannot be resumed by
+mistake (see "A pending deploy job blocks every later AutoUpgrade job"):
+
+```bash
+make cpu-lab-patch BASTION=1 ANSIBLE_EXTRA="-e db19_autoupgrade_log_dir=/u00/app/oracle/cfgtoollogs/autoupgrade-2026-10"
+```
+
 ## Step 5 - Verify
 
 ```bash

@@ -30,6 +30,16 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **oradba.automation lab test**: `ansible/playbooks/lab-oradba-automation.yml`
+  runs the collection's `site_setup`, `patch_download`, `home_create`,
+  `patch_apply` and `patch_rollback` against the real `CPUDB` of the
+  cpu-patch-test lab, one tag per step, rollback only by tag. Collection
+  variables live in `ansible/inventories/cpu-patch-test/group_vars/`, loaded only
+  by the new targets `make cpu-lab-coll-install` (v0.2.0, sha256-pinned, into
+  `ansible/collections`), `cpu-lab-coll-check` (offline), `cpu-lab-coll STEP=...`
+  and `cpu-lab-coll-rollback MODE=restore|home`. Engine pinned to 0.6.1.
+  Runbook: `docs/runbook-oradba-automation-lab.md`.
+
 - **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks
   defaults with rules for OCI pre-authenticated request URLs, real OCIDs and
   API key fingerprints - the defaults find none of them. The GitHub Actions
@@ -80,6 +90,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   explicitly and is unaffected.
 
 ### Fixed
+
+- **`terraform plan` replaced the lab instance** when the workstation key in
+  `ssh_public_key_files` changed - the database would have been destroyed for a
+  value cloud-init reads on first boot only. `modules/oracle_db_host` now ignores
+  `metadata["ssh_authorized_keys"]`; rolling keys is an explicit `-replace`.
+- **`BASTION=1` with a command-line `ANSIBLE_EXTRA`** dropped the tunnel host and
+  port, and Ansible went to the public IP. The append is now `override`.
 
 - **docs/runbook-ad-cmu-lab.md** carried the real compartment and DRG OCID in
   its `terraform.tfvars` example - replaced by `<compartment_ocid>` and
