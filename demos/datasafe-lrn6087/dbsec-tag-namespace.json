@@ -1,0 +1,12 @@
+{
+  "namespace": {
+    "name": "DBSec",
+    "description": "Database security tags used by odb_datasafe (LRN6087 demo tenancy)"
+  },
+  "tags": [
+    {"name": "Environment", "description": "Environment derived from the compartment name", "validator": null},
+    {"name": "ContainerType", "description": "cdbroot or pdb", "validator": ["cdbroot", "pdb"]},
+    {"name": "ContainerStage", "description": "<type>-<environment>, e.g. pdb-lab", "validator": null},
+    {"name": "Classification", "description": "Data classification, undef by default", "validator": null}
+  ]
+}
