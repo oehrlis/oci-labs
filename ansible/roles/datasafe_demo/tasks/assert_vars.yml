@@ -1,0 +1,40 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/assert_vars.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.19
+# Version....: v0.1.0
+# Purpose....: Fail early on missing inputs instead of half-building the lab.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert inventory values from Terraform
+  ansible.builtin.assert:
+    that:
+      - oracle_sid == 'FREE'
+      - dsdemo_pdbs | length > 0
+      - dsdemo_connector_name | length > 0
+      - dsdemo_compartment_ocid is match('^ocid1\.(compartment|tenancy)\.')
+      - dsdemo_host_private_ip | length > 0
+    fail_msg: >-
+      Inventory values missing - run terraform apply in terraform/envs/datasafe-demo
+      and use inventories/generated/datasafe-demo/hosts.yml.
+    quiet: true
+
+- name: Assert the run-time secrets
+  ansible.builtin.assert:
+    that:
+      - dsdemo_sys_password | length >= 12
+      - dsdemo_ds_secret | length >= 12
+    fail_msg: >-
+      dsdemo_sys_password and dsdemo_ds_secret are required. Use make dsdemo-install
+      (0600 vars file from terraform output and op read) - never -e on the command line.
+    quiet: true
+  no_log: true
+  tags:
+    - container
+    - ds_prereqs
+    - install

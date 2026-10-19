@@ -1,0 +1,36 @@
+# {{ ansible_managed }}
+# Oracle AI Database 26ai Free for the LRN6087 Data Safe demo.
+# Mirrors the odbseed service of oracle-free-labs/docker-compose.yml.
+[Unit]
+Description=Oracle AI Database 26ai Free container ({{ dsdemo_container_name }})
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor={{ dsdemo_data_dir }}
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=0
+TimeoutStopSec=180
+ExecStartPre=-/usr/bin/podman rm -f --ignore {{ dsdemo_container_name }}
+ExecStart=/usr/bin/podman run --rm --name {{ dsdemo_container_name }} \
+  --hostname {{ dsdemo_container_name }} \
+  --env-file /etc/dsdemo/dsdemo-db.env \
+  --shm-size {{ dsdemo_container_shm }} \
+  --memory {{ dsdemo_container_memory }} \
+  --ulimit nofile=1048576:1048576 \
+  -p {{ dsdemo_listener_port }}:1521 \
+  -v {{ dsdemo_data_dir }}/oradata:/opt/oracle/oradata:Z \
+  -v {{ dsdemo_data_dir }}/dbconfig:/opt/oracle/dbconfig:Z \
+  -v {{ dsdemo_data_dir }}/logs:/opt/oracle/scripts/logs:Z \
+  -v {{ dsdemo_data_dir }}/setup:/opt/oracle/scripts/setup:ro,Z \
+  -v {{ dsdemo_data_dir }}/startup:/opt/oracle/scripts/startup:ro,Z \
+  -v {{ dsdemo_pdbarch_dir }}:/opt/oracle/data/pdbarch:ro,z \
+  -v {{ dsdemo_free_labs_dir }}/config/common/scripts:/opt/oracle/common/scripts:ro,z \
+  -v {{ dsdemo_odb_datasafe_base }}:/opt/oracle/local/odb_datasafe:ro,z \
+  {{ dsdemo_image if dsdemo_build_image | bool else dsdemo_base_image }}
+ExecStop=/usr/bin/podman stop -t 150 {{ dsdemo_container_name }}
+
+[Install]
+WantedBy=multi-user.target

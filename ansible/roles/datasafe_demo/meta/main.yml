@@ -1,0 +1,33 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: meta/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.19
+# Version....: v0.1.0
+# Purpose....: Role metadata for datasafe_demo.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+galaxy_info:
+  role_name: datasafe_demo
+  author: Stefan Oehrli
+  description: >-
+    Oracle AI Database 26ai Free in Podman (oracle-free-labs image) with the
+    PDBs FREEPDB1, ODBSEED and ODBREPO, Data Safe service accounts, odb_datasafe
+    and the Data Safe on-premises connector as systemd service - the demo
+    environment for LRN6087.
+  license: Apache-2.0
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+  galaxy_tags:
+    - oracle
+    - datasafe
+    - podman
+
+dependencies: []

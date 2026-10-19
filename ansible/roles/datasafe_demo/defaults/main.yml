@@ -1,0 +1,128 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.19
+# Version....: v0.1.0
+# Purpose....: Default variables for the datasafe_demo role.
+# Notes......: oracle_sid, dsdemo_pdbs, dsdemo_connector_*, dsdemo_compartment_ocid,
+#              dsdemo_region, dsdemo_host_private_ip and dsdemo_instance_principal
+#              come from the Terraform-generated inventory (envs/datasafe-demo).
+#              Secrets (dsdemo_sys_password, dsdemo_ds_secret) come from a 0600
+#              vars file built at run time - never from this file.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Secrets - required, supplied at run time (see docs/datasafe-demo.md)
+# ------------------------------------------------------------------------------
+dsdemo_sys_password: ""
+dsdemo_ds_secret: ""
+
+# ------------------------------------------------------------------------------
+# OS layer
+# ------------------------------------------------------------------------------
+dsdemo_packages:
+  - podman
+  - python3.11
+  - python3.11-pip
+  - java-17-openjdk-headless
+  - jq
+  - unzip
+  - openssl
+  - tar
+  - git
+
+# The connector setup.py needs Python 3.8+, and odb_datasafe calls plain
+# "python3". OL8's dnf runs on platform-python, so switching the python3
+# alternative to 3.11 does not affect the package manager.
+dsdemo_python3: /usr/bin/python3.11
+
+# Host user for odb_datasafe and the connector. Same UID/GID as the oracle
+# user inside the Free container, so bind-mounted files line up.
+dsdemo_os_user: oracle
+dsdemo_os_uid: 54321
+dsdemo_os_group: oinstall
+dsdemo_os_gid: 54321
+dsdemo_os_dba_group: dba
+dsdemo_os_dba_gid: 54322
+
+dsdemo_oracle_base: /u01/app/oracle
+dsdemo_java_home: /usr/lib/jvm/jre-17-openjdk
+
+# ------------------------------------------------------------------------------
+# Container - oracle-free-labs image and common scripts
+# ------------------------------------------------------------------------------
+oracle_sid: FREE
+dsdemo_pdbs:
+  - FREEPDB1
+  - ODBSEED
+  - ODBREPO
+dsdemo_new_pdb: AIPDB1
+
+dsdemo_free_labs_repo: https://github.com/oehrlis/oracle-free-labs.git
+dsdemo_free_labs_version: v1.4.0
+dsdemo_free_labs_dir: /opt/oracle-free-labs
+
+# true = build the extended oracle-free-labs image (build/Dockerfile) on top of
+# dsdemo_base_image; false = run dsdemo_base_image as is.
+dsdemo_build_image: true
+dsdemo_base_image: container-registry.oracle.com/database/free:latest
+dsdemo_image: localhost/oracle-free-labs:dsdemo
+
+dsdemo_container_name: dsdemo
+dsdemo_data_dir: /u01/dsdemo
+dsdemo_listener_port: 1521
+dsdemo_container_memory: 4g
+dsdemo_container_shm: 1g
+dsdemo_timezone: Europe/Zurich
+
+# Optional PDB archives (pdb26ai_odbseed.pdb, pdb26ai_odbrepo.pdb). Stage them
+# in this directory before the first container start to get the OraDBA demo
+# content; without them ODBSEED and ODBREPO are created empty from PDB$SEED.
+dsdemo_pdbarch_dir: "{{ dsdemo_data_dir }}/pdbarch"
+
+# Wait for the first database creation (Free: about 10-15 minutes)
+dsdemo_db_wait_retries: 90
+dsdemo_db_wait_delay: 20
+
+# ------------------------------------------------------------------------------
+# odb_datasafe
+# ------------------------------------------------------------------------------
+dsdemo_odb_datasafe_version: 1.2.1
+dsdemo_odb_datasafe_repo: https://github.com/oehrlis/odb_datasafe
+dsdemo_odb_datasafe_release: "{{ dsdemo_odb_datasafe_repo }}/releases/download/v{{ dsdemo_odb_datasafe_version }}"
+dsdemo_odb_datasafe_url: "{{ dsdemo_odb_datasafe_release }}/odb_datasafe-{{ dsdemo_odb_datasafe_version }}.tar.gz"
+# Pinned from odb_datasafe-1.2.1.tar.gz.sha256 of the GitHub release.
+dsdemo_odb_datasafe_sha256: fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401
+dsdemo_odb_datasafe_base: /opt/oracle/local/odb_datasafe
+
+# Data Safe service account. Root gets C##<user>, PDBs the local <user>.
+dsdemo_ds_user: DS_ADMIN
+
+# Tag environment derived from the compartment name (ds_target_update_tags.sh,
+# ds_target_register.sh). Empty = "undef". Decision open, see the runbook.
+dsdemo_env_comp_regex: ""
+
+# ------------------------------------------------------------------------------
+# Data Safe on-premises connector
+# ------------------------------------------------------------------------------
+dsdemo_connector_name: dsc-zrh-lab-dsdemo-01
+dsdemo_connector_port: 1561
+dsdemo_connector_home: "{{ dsdemo_oracle_base }}/product/{{ dsdemo_connector_name }}"
+
+# true (instance principal): ds_connector_create.sh runs on the host - OCI
+# create, bundle download, setup.py and systemd in one go.
+# false: the bundle is created on the laptop and copied to
+# dsdemo_connector_bundle_dir (runbook fallback), Ansible installs it.
+dsdemo_instance_principal: false
+dsdemo_connector_bundle_dir: /home/{{ dsdemo_os_user }}/connector-bundle
+
+# OCI CLI on the host - instance principal path only
+dsdemo_oci_cli_venv: /opt/oci-cli
+dsdemo_compartment_ocid: ""
+dsdemo_region: eu-zurich-1
+dsdemo_host_private_ip: ""

@@ -1,0 +1,77 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/os.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.19
+# Version....: v0.1.0
+# Purpose....: OS layer: packages, python3.11 as python3, oracle user, directories.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Install the OS packages
+  ansible.builtin.dnf:
+    name: "{{ dsdemo_packages }}"
+    state: present
+  become: true
+
+- name: Read the current python3 alternative
+  ansible.builtin.command: readlink -f /usr/bin/python3
+  register: dsdemo_python3_current
+  changed_when: false
+  failed_when: false
+
+- name: Point python3 at python3.11 (connector setup.py needs 3.8+)
+  ansible.builtin.command: "alternatives --set python3 {{ dsdemo_python3 }}"
+  when: dsdemo_python3_current.stdout != dsdemo_python3
+  changed_when: true
+  become: true
+
+- name: Create the oinstall group
+  ansible.builtin.group:
+    name: "{{ dsdemo_os_group }}"
+    gid: "{{ dsdemo_os_gid }}"
+  become: true
+
+- name: Create the dba group
+  ansible.builtin.group:
+    name: "{{ dsdemo_os_dba_group }}"
+    gid: "{{ dsdemo_os_dba_gid }}"
+  become: true
+
+- name: Create the oracle user for odb_datasafe and the connector
+  ansible.builtin.user:
+    name: "{{ dsdemo_os_user }}"
+    uid: "{{ dsdemo_os_uid }}"
+    group: "{{ dsdemo_os_group }}"
+    groups: "{{ dsdemo_os_dba_group }}"
+    shell: /bin/bash
+  become: true
+
+- name: Create the base directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ dsdemo_os_user }}"
+    group: "{{ dsdemo_os_group }}"
+    mode: "0755"
+  loop:
+    - "{{ dsdemo_oracle_base }}"
+    - "{{ dsdemo_oracle_base }}/product"
+    - /opt/oracle
+    - /opt/oracle/local
+  become: true
+
+- name: Check that JAVA_HOME exists (install_datasafe_service.sh validates it)
+  ansible.builtin.stat:
+    path: "{{ dsdemo_java_home }}/bin/java"
+  register: dsdemo_java_bin
+
+- name: Fail on a missing JAVA_HOME
+  ansible.builtin.assert:
+    that:
+      - dsdemo_java_bin.stat.exists
+    fail_msg: "{{ dsdemo_java_home }}/bin/java not found - set dsdemo_java_home to the installed JRE."
+    quiet: true

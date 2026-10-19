@@ -1,0 +1,96 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/odb_datasafe.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.19
+# Version....: v0.1.0
+# Purpose....: Install the odb_datasafe release and its .env for the demo compartment.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Create the odb_datasafe base directory
+  ansible.builtin.file:
+    path: "{{ dsdemo_odb_datasafe_base }}"
+    state: directory
+    owner: "{{ dsdemo_os_user }}"
+    group: "{{ dsdemo_os_group }}"
+    mode: "0755"
+  become: true
+
+- name: Download the odb_datasafe release (checksum pinned)
+  ansible.builtin.get_url:
+    url: "{{ dsdemo_odb_datasafe_url }}"
+    dest: "/tmp/odb_datasafe-{{ dsdemo_odb_datasafe_version }}.tar.gz"
+    checksum: "sha256:{{ dsdemo_odb_datasafe_sha256 }}"
+    mode: "0644"
+  become: true
+
+- name: Unpack odb_datasafe
+  ansible.builtin.unarchive:
+    src: "/tmp/odb_datasafe-{{ dsdemo_odb_datasafe_version }}.tar.gz"
+    dest: "{{ dsdemo_odb_datasafe_base }}"
+    remote_src: true
+    owner: "{{ dsdemo_os_user }}"
+    group: "{{ dsdemo_os_group }}"
+    creates: "{{ dsdemo_odb_datasafe_base }}/bin/ds_target_list.sh"
+  become: true
+
+- name: Write the odb_datasafe .env (no secrets, compartment and connector only)
+  ansible.builtin.template:
+    src: odb_datasafe.env.j2
+    dest: "{{ dsdemo_odb_datasafe_base }}/.env"
+    owner: "{{ dsdemo_os_user }}"
+    group: "{{ dsdemo_os_group }}"
+    mode: "0640"
+  become: true
+
+- name: Put odb_datasafe on the PATH of the oracle user
+  ansible.builtin.blockinfile:
+    path: "/home/{{ dsdemo_os_user }}/.bashrc"
+    marker: "# {mark} datasafe_demo (oci-labs)"
+    block: |
+      export ODB_DATASAFE_BASE={{ dsdemo_odb_datasafe_base }}
+      export PATH={{ dsdemo_odb_datasafe_base }}/bin:{{ dsdemo_oci_cli_venv }}/bin:$PATH
+      export JAVA_HOME={{ dsdemo_java_home }}
+      export ORACLE_BASE={{ dsdemo_oracle_base }}
+      export LANG=en_US.UTF-8
+      {% if dsdemo_instance_principal | bool %}
+      export OCI_CLI_AUTH=instance_principal
+      {% endif %}
+  become: true
+
+# Instance principal path only: OCI CLI for ds_connector_create.sh.
+- name: Install the OCI CLI into a venv
+  ansible.builtin.pip:
+    name: oci-cli
+    virtualenv: "{{ dsdemo_oci_cli_venv }}"
+    virtualenv_command: "{{ dsdemo_python3 }} -m venv"
+  when: dsdemo_instance_principal | bool
+  become: true
+
+- name: Create the OCI CLI config directory of the oracle user
+  ansible.builtin.file:
+    path: "/home/{{ dsdemo_os_user }}/.oci"
+    state: directory
+    owner: "{{ dsdemo_os_user }}"
+    group: "{{ dsdemo_os_group }}"
+    mode: "0700"
+  when: dsdemo_instance_principal | bool
+  become: true
+
+# odb_datasafe always passes --config-file/--profile. With instance principal
+# auth the profile carries the region only - there is no key on this host.
+- name: Write a key-less OCI CLI profile (region only)
+  ansible.builtin.copy:
+    dest: "/home/{{ dsdemo_os_user }}/.oci/config"
+    content: |
+      [DEFAULT]
+      region={{ dsdemo_region }}
+    owner: "{{ dsdemo_os_user }}"
+    group: "{{ dsdemo_os_group }}"
+    mode: "0600"
+  when: dsdemo_instance_principal | bool
+  become: true

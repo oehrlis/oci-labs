@@ -116,6 +116,10 @@ help: ## Show this help message
 	@grep -E '^cpu-lab-[a-zA-Z_-]*:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo -e "$(COLOR_BOLD)LRN6087 Data Safe Demo:$(COLOR_RESET)"
+	@grep -E '^dsdemo-[a-zA-Z_-]*:.*?## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo -e "$(COLOR_BOLD)Cleanup:$(COLOR_RESET)"
 	@grep -E '^clean[a-zA-Z_-]*:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
@@ -217,7 +221,7 @@ lint-markdown: ## Lint markdown files with markdownlint
 lint-shell: ## Lint shell scripts with shellcheck
 	@[[ -n "$(SHELLCHECK)" ]] || \
 	  { echo "❌ shellcheck not found. Install: brew install shellcheck"; exit 1; }
-	$(Q)find "$(TOOLS_DIR)" bootstrap -type f -name "*.sh" -print0 2>/dev/null | \
+	$(Q)find "$(TOOLS_DIR)" bootstrap demos -type f -name "*.sh" -print0 2>/dev/null | \
 		xargs -0 -r "$(SHELLCHECK)" -x -S warning
 	$(Q)"$(SHELLCHECK)" -x -S warning "$(TOOLS_DIR)"/git-hooks/*
 
@@ -749,6 +753,107 @@ cpu-lab-logs: guard-terraform ## Print the log locations on the lab host
 	@echo "dbca                       : /u00/app/oracle/cfgtoollogs/dbca/<SID>"
 	@echo "staged media               : /opt/stage"
 	@$(MAKE) --no-print-directory cpu-lab-ssh
+
+# ==============================================================================
+# LRN6087 Data Safe demo (terraform/envs/datasafe-demo)
+# ==============================================================================
+# One OL8 host: Oracle AI Database 26ai Free in Podman, Data Safe connector,
+# odb_datasafe. The host has no public IP - every Ansible run and every demo
+# script goes through the Bastion tunnel opened by dsdemo-tunnel. Runbook:
+# docs/datasafe-demo.md. Secrets: SYS password from terraform output, Data
+# Safe secret via op read of $DSDEMO_OP_DS_SECRET (set in the env .env).
+
+DSDEMO_ENV_DIR := $(TF_DIR)/envs/datasafe-demo
+DSDEMO_ENV_FILE := $(DSDEMO_ENV_DIR)/.env
+DSDEMO_PLAN_FILE := tfplan
+DSDEMO_INVENTORY := inventories/generated/datasafe-demo/hosts.yml
+DSDEMO_PLAYBOOK := playbooks/lab-datasafe-demo.yml
+DSDEMO_DEMO_DIR := demos/datasafe-lrn6087
+DSDEMO_LOCAL_PORT ?= 2222
+DSDEMO_ANSIBLE_TUNNEL := -e ansible_host=127.0.0.1 -e ansible_port=$(DSDEMO_LOCAL_PORT)
+
+.PHONY: guard-dsdemo-env
+guard-dsdemo-env:
+	@[[ -f "$(DSDEMO_ENV_FILE)" ]] || \
+	  { echo "❌ $(DSDEMO_ENV_FILE) missing - copy it from .env.example"; exit 1; }
+
+# Same pattern as cpu_lab_ansible_secrets: 0600 JSON file, values via the
+# environment, never on an argv.
+define dsdemo_ansible_secrets
+umask 077; \
+set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
+[[ -n "$${DSDEMO_OP_DS_SECRET:-}" ]] || { echo "❌ DSDEMO_OP_DS_SECRET not set in $(DSDEMO_ENV_FILE)"; exit 1; }; \
+ds_secret="$$("$(OP)" read "$$DSDEMO_OP_DS_SECRET")" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+sys_pass="$$(cd "$(DSDEMO_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password)" || { echo "❌ no db_sys_password - run make dsdemo-apply"; exit 1; }; \
+vars_file="$$(mktemp "$${TMPDIR:-/tmp}/dsdemo-vars.XXXXXX")"; \
+trap 'rm -f "$$vars_file"' EXIT INT TERM; \
+DS_SECRET="$$ds_secret" SYS_PASS="$$sys_pass" \
+  python3 -c 'import json, os, sys; json.dump({"dsdemo_ds_secret": os.environ["DS_SECRET"], "dsdemo_sys_password": os.environ["SYS_PASS"]}, open(sys.argv[1], "w"))' "$$vars_file"
+endef
+
+.PHONY: dsdemo-plan
+dsdemo-plan: guard-terraform guard-dsdemo-env ## Plan the Data Safe demo stack (no changes)
+	$(Q)cd "$(DSDEMO_ENV_DIR)" && set -a && . ./.env && set +a && \
+	  "$(TERRAFORM)" init -input=false >/dev/null && \
+	  "$(TERRAFORM)" plan -input=false -out="$(DSDEMO_PLAN_FILE)"
+
+.PHONY: dsdemo-apply
+dsdemo-apply: guard-terraform guard-dsdemo-env ## Apply the saved Data Safe demo plan
+	@[[ -f "$(DSDEMO_ENV_DIR)/$(DSDEMO_PLAN_FILE)" ]] || \
+	  { echo "❌ No saved plan - run 'make dsdemo-plan' first"; exit 1; }
+	$(Q)cd "$(DSDEMO_ENV_DIR)" && set -a && . ./.env && set +a && \
+	  "$(TERRAFORM)" apply -input=false "$(DSDEMO_PLAN_FILE)" && rm -f "$(DSDEMO_PLAN_FILE)"
+
+.PHONY: dsdemo-tunnel
+dsdemo-tunnel: guard-oci guard-terraform guard-dsdemo-env ## Open the Bastion tunnel to the demo host (127.0.0.1:2222)
+	$(Q)"$(DSDEMO_DEMO_DIR)/tunnel.sh" --port "$(DSDEMO_LOCAL_PORT)"
+
+.PHONY: dsdemo-install
+dsdemo-install: guard-ansible guard-op guard-terraform guard-dsdemo-env ## Install podman, Free container, PDBs, DS accounts, connector
+	$(Q)$(dsdemo_ansible_secrets); \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(DSDEMO_INVENTORY)" "$(DSDEMO_PLAYBOOK)" \
+	    --tags install -e @"$$vars_file" $(DSDEMO_ANSIBLE_TUNNEL) $(ANSIBLE_EXTRA)
+
+.PHONY: dsdemo-step
+dsdemo-step: guard-ansible guard-op guard-terraform guard-dsdemo-env ## Run one tag: make dsdemo-step TAG=connector
+	@[[ -n "$(TAG)" ]] || { echo "❌ TAG is required, e.g. make dsdemo-step TAG=verify"; exit 1; }
+	$(Q)$(dsdemo_ansible_secrets); \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(DSDEMO_INVENTORY)" "$(DSDEMO_PLAYBOOK)" \
+	    --tags "$(TAG)" -e @"$$vars_file" $(DSDEMO_ANSIBLE_TUNNEL) $(ANSIBLE_EXTRA)
+
+.PHONY: dsdemo-verify
+dsdemo-verify: guard-ansible guard-dsdemo-env ## Read-only check of the demo host
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(DSDEMO_INVENTORY)" "$(DSDEMO_PLAYBOOK)" \
+	  --tags verify $(DSDEMO_ANSIBLE_TUNNEL) $(ANSIBLE_EXTRA)
+
+# Stop is not destroy: boot volume, container, PDBs and connector survive and
+# only block storage is billed. The Bastion session does not survive a stop.
+.PHONY: dsdemo-stop
+dsdemo-stop: guard-oci guard-terraform guard-dsdemo-env ## Stop the demo host (cost), nothing is deleted
+	$(Q)set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
+	  id="$$(cd "$(DSDEMO_ENV_DIR)" && "$(TERRAFORM)" output -raw db_instance_id)"; \
+	  "$(OCI)" --profile "$${TF_VAR_oci_config_profile:-DEFAULT}" compute instance action --action SOFTSTOP \
+	    --instance-id "$$id" --wait-for-state STOPPED --query 'data."lifecycle-state"' --raw-output
+	@echo "✅ Demo host stopped - start again with: make dsdemo-start"
+
+.PHONY: dsdemo-start
+dsdemo-start: guard-oci guard-terraform guard-dsdemo-env ## Start the demo host (database and connector start via systemd)
+	$(Q)set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
+	  id="$$(cd "$(DSDEMO_ENV_DIR)" && "$(TERRAFORM)" output -raw db_instance_id)"; \
+	  "$(OCI)" --profile "$${TF_VAR_oci_config_profile:-DEFAULT}" compute instance action --action START \
+	    --instance-id "$$id" --wait-for-state RUNNING --query 'data."lifecycle-state"' --raw-output
+	@echo "✅ Demo host started - open the tunnel again: make dsdemo-tunnel"
+
+.PHONY: dsdemo-destroy
+dsdemo-destroy: guard-terraform guard-dsdemo-env ## Tear down the demo stack (asks for confirmation, YES=1 to skip)
+	@if [[ "$(YES)" != "1" ]]; then \
+	  echo -e "$(COLOR_YELLOW)This destroys the whole datasafe-demo stack. Deregister the Data Safe targets and the connector first (docs/datasafe-demo.md).$(COLOR_RESET)"; \
+	  read -r -p "Type 'destroy' to confirm: " answer; \
+	  [[ "$$answer" == "destroy" ]] || { echo "Aborted."; exit 1; }; \
+	fi
+	$(Q)cd "$(DSDEMO_ENV_DIR)" && set -a && . ./.env && set +a && \
+	  "$(TERRAFORM)" destroy -input=false -auto-approve
+	@echo "✅ datasafe-demo destroyed"
 
 # ==============================================================================
 # Cleanup
