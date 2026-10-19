@@ -1,0 +1,66 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Purpose....: Variable values template for the datasafe-demo stack (LRN6087).
+#              Copy to terraform.tfvars and fill in your values.
+#              terraform.tfvars is git-ignored - never commit it.
+# Notes......: Placeholders only. No real OCID belongs in this file.
+# ------------------------------------------------------------------------------
+
+# Provider / tenancy - ACE tenancy, profile name as in ~/.oci/config
+oci_config_profile = "ACE"
+region             = "eu-zurich-1"
+
+# Existing compartment - never created or deleted by Terraform.
+# Alternative: comment this out and set compartment_name + tenancy_ocid.
+compartment_ocid = "ocid1.compartment.oc1..xxx"
+# compartment_name = "<compartment_name>"
+# tenancy_ocid     = "ocid1.tenancy.oc1..xxx"
+
+# Naming -> zrh-lab-dsdemo-01, host ci-zrh-lab-dsdemo-01-db-01
+region_key       = "zrh"
+environment_code = "lab"
+stack_code       = "dsdemo"
+lab_instance     = 1
+
+common_freeform_tags = {
+  project = "oradba-labs"
+  owner   = "<your-github-handle>"
+  purpose = "lrn6087-demo"
+}
+
+# Network - own VCN, host without public IP, access via Bastion only
+vcn_cidr            = "10.31.0.0/16"
+public_subnet_cidr  = "10.31.10.0/24"
+private_subnet_cidr = "10.31.20.0/24"
+db_subnet_cidr      = "10.31.30.0/24"
+allowed_ssh_cidrs   = []
+egress_https_only   = true
+enable_bastion      = true
+
+# Host
+db_host_shape                = "VM.Standard.E4.Flex"
+db_host_ocpus                = 2
+db_host_memory_gbs           = 16
+db_host_boot_volume_size_gbs = 100
+
+# Cost: nightly stop at 21:00 UTC. Start the host before every use.
+enable_auto_stop = true
+auto_stop_cron   = "0 21 * * *"
+
+# Instance principal for ds_connector_create.sh on the host. Needs tenancy_ocid
+# and tenancy-level IAM rights (dynamic group). false = laptop fallback.
+enable_instance_principal = false
+# tenancy_ocid            = "ocid1.tenancy.oc1..xxx"
+
+# Database / Data Safe
+oracle_sid        = "FREE"
+demo_pdbs         = ["FREEPDB1", "ODBSEED", "ODBREPO"]
+demo_new_pdb      = "AIPDB1"
+ds_connector_name = "dsc-zrh-lab-dsdemo-01"
+ds_connector_port = 1561
+
+# ssh_public_key is NOT set here - use TF_VAR_ssh_public_key (see .env.example)
+# --- EOF ----------------------------------------------------------------------
