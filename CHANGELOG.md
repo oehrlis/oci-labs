@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **lint-shell** also checks `demos/`.
 - **RA-oci-labs-014**: `enable_auto_stop` default changed from `false` to `true`
   in `terraform/envs/cpu-patch-test`. Idle labs stop nightly at 18:00 UTC.
   AutoUpgrade runs must set `enable_auto_stop = false` explicitly to avoid
@@ -30,6 +31,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **datasafe-demo**: new stack `terraform/envs/datasafe-demo` for the LRN6087 Data Safe demo (Oracle AI
+  World 2026) - own core (VCN, Bastion), one OL8 x86 host, nightly auto-stop, optional instance principal.
+  Ansible role `datasafe_demo` and playbook `lab-datasafe-demo.yml` (Podman, oracle-free-labs 26ai Free
+  image, PDBs FREEPDB1/ODBSEED/ODBREPO, Data Safe service accounts, odb_datasafe 1.2.1, on-premises
+  connector as systemd service). Demo scripts, reset, Bastion tunnel and a synthetic fleet snapshot
+  generator in `demos/datasafe-lrn6087/`, `dsdemo-*` Makefile targets, runbook `docs/datasafe-demo.md`.
+- **oracle_db_host**: optional `egress_https_only` (NSG egress TCP 443 plus intra-VCN). Default `false`;
+  a `moved` block keeps existing stacks free of a rule replacement.
 - **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks
   defaults with rules for OCI pre-authenticated request URLs, real OCIDs and
   API key fingerprints - the defaults find none of them. The GitHub Actions
