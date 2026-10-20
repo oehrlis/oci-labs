@@ -1,0 +1,94 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/create_cdb.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Create one CDB (loop item oradb_db) with its PDBs.
+# Notes......: dbca creates the CDB with the first PDB; the other PDBs come
+#              from dsdemo-pdb create (same path as the live AIPDB1 in the
+#              demo). Passwords only in a 0600 response file, never on argv.
+#              No ARCHIVELOG - not needed for Data Safe, saves FRA space.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Check the oratab registration of {{ oradb_db.sid }}
+  ansible.builtin.command:
+    cmd: "grep -c '^{{ oradb_db.sid }}:' /etc/oratab"
+  register: oradb_oratab_check
+  changed_when: false
+  failed_when: false
+
+- name: Create the CDB with dbca - {{ oradb_db.sid }}
+  when: (oradb_oratab_check.stdout | default('0') | trim | int) == 0
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  block:
+    - name: Render the dbca response file for {{ oradb_db.sid }}
+      ansible.builtin.template:
+        src: dbca.rsp.j2
+        dest: "{{ oracle_base }}/etc/dbca_{{ oradb_db.sid }}.rsp"
+        mode: "0600"
+      no_log: true
+
+    - name: Run dbca, 15-30 minutes - {{ oradb_db.sid }}
+      ansible.builtin.command:
+        cmd: >-
+          {{ oradb_db.home }}/bin/dbca -silent -createDatabase
+          -responseFile {{ oracle_base }}/etc/dbca_{{ oradb_db.sid }}.rsp
+          -ignorePreReqs
+      # CV_ASSUME_DISTID only for 19c - 26ai supports OL8 natively.
+      environment: >-
+        {{ {'ORACLE_HOME': oradb_db.home, 'ORACLE_BASE': oracle_base, 'ORACLE_SID': oradb_db.sid,
+            'TNS_ADMIN': oradb_db.home ~ '/network/admin',
+            'PATH': oradb_db.home ~ '/bin:/usr/local/bin:/usr/bin:/bin'}
+           | combine({'CV_ASSUME_DISTID': oradb19_cv_assume_distid} if oradb_db.release | int == 19 else {}) }}
+      register: oradb_dbca
+      changed_when: oradb_dbca.rc == 0
+      async: "{{ oradb_dbca_timeout }}"
+      poll: 60
+
+    - name: Report the dbca outcome for {{ oradb_db.sid }}
+      ansible.builtin.debug:
+        msg: "{{ (oradb_dbca.stdout_lines | default([]))[-10:] }}"
+
+  always:
+    - name: Remove the dbca response file of {{ oradb_db.sid }}
+      ansible.builtin.file:
+        path: "{{ oracle_base }}/etc/dbca_{{ oradb_db.sid }}.rsp"
+        state: absent
+
+- name: Flag the CDB for autostart in oratab - {{ oradb_db.sid }}
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oradb_db.sid }}:"
+    line: "{{ oradb_db.sid }}:{{ oradb_db.home }}:Y"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0664"
+  become: true
+
+- name: Point local_listener at the shared listener - {{ oradb_db.sid }}
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      /usr/local/bin/dsdemo-sql {{ oradb_db.sid }} <<'SQL'
+      whenever sqlerror exit failure
+      alter system set local_listener =
+        '(ADDRESS=(PROTOCOL=TCP)(HOST={{ oradb_net_host }})(PORT={{ oradb_listener_port }}))' scope=both;
+      alter system register;
+      SQL
+    executable: /bin/bash
+  changed_when: false
+  become: true
+
+- name: Create the remaining PDBs of {{ oradb_db.sid }}
+  ansible.builtin.command:
+    cmd: "/usr/local/bin/dsdemo-pdb --db {{ oradb_db.sid }} create {{ item }}"
+  loop: "{{ oradb_db.pdbs[1:] }}"
+  register: oradb_pdb_create
+  changed_when: "'created' in oradb_pdb_create.stdout"
+  become: true

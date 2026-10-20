@@ -4,21 +4,22 @@
 # ------------------------------------------------------------------------------
 # Name.......: meta/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.19
-# Version....: v0.1.0
-# Purpose....: Role metadata for datasafe_demo.
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Role metadata for oracle_db_native.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 
 galaxy_info:
-  role_name: datasafe_demo
+  role_name: oracle_db_native
   author: Stefan Oehrli
   description: >-
-    Oracle AI Database 26ai Free in Podman (oracle-free-labs image) with the
-    PDBs FREEPDB1, ODBSEED and ODBREPO, Data Safe service accounts, odb_datasafe
-    and the Data Safe on-premises connector as systemd service - the demo
-    environment for LRN6087.
+    Native Oracle Database 19c EE (CDB19) and Oracle AI Database 26ai EE (CDB26)
+    on one OL8 host - homes via AutoUpgrade (19c through db19_engineering), data
+    volume on /u01, OraDBA, Data Safe service accounts, odb_datasafe and the
+    Data Safe on-premises connector as systemd service registered in OraDBA.
+    The demo environment for LRN6087.
   license: Apache-2.0
   min_ansible_version: "2.14"
   platforms:
@@ -28,6 +29,6 @@ galaxy_info:
   galaxy_tags:
     - oracle
     - datasafe
-    - podman
+    - autoupgrade
 
 dependencies: []

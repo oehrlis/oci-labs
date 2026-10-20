@@ -1,0 +1,74 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/listener.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: One listener from the 26ai home for both CDBs, tnsnames.ora in
+#              both homes.
+# Notes......: A listener serves databases of the same and of lower releases,
+#              so the 26ai listener takes CDB19 as well. Both instances get an
+#              explicit local_listener with the FQDN (create_cdb.yml) - the
+#              short name resolves to IPv6 link-local first on this image (see
+#              db19_engineering tnsnames.ora.j2).
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Ensure network/admin exists in both homes
+  ansible.builtin.file:
+    path: "{{ item }}/network/admin"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+  loop:
+    - "{{ oradb26_home }}"
+    - "{{ oradb19_home }}"
+  become: true
+
+- name: Deploy listener.ora in the 26ai home
+  ansible.builtin.template:
+    src: listener.ora.j2
+    dest: "{{ oradb26_home }}/network/admin/listener.ora"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+  become: true
+
+- name: Deploy tnsnames.ora in both homes
+  ansible.builtin.template:
+    src: tnsnames.ora.j2
+    dest: "{{ item }}/network/admin/tnsnames.ora"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+  loop:
+    - "{{ oradb26_home }}"
+    - "{{ oradb19_home }}"
+  become: true
+
+- name: Check the listener status
+  ansible.builtin.command:
+    cmd: "{{ oradb26_home }}/bin/lsnrctl status {{ oradb_listener_name }}"
+  environment: &oradb_lsnr_env
+    ORACLE_HOME: "{{ oradb26_home }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    TNS_ADMIN: "{{ oradb26_home }}/network/admin"
+  register: oradb_listener_status
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ oracle_os_user }}"
+
+- name: Start the listener
+  ansible.builtin.command:
+    cmd: "{{ oradb26_home }}/bin/lsnrctl start {{ oradb_listener_name }}"
+  environment: *oradb_lsnr_env
+  register: oradb_listener_start
+  changed_when: oradb_listener_start.rc == 0
+  when: oradb_listener_status.rc != 0
+  become: true
+  become_user: "{{ oracle_os_user }}"

@@ -1,0 +1,35 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role oracle_db_native - do not edit by hand.
+# Purpose: dbca silent response file for {{ oradb_db.sid }} ({{ oradb_db.release }}).
+# Notes..: Contains passwords - mode 0600, removed right after dbca. CDB with
+#          the first PDB only; further PDBs come from dsdemo-pdb create.
+#-------------------------------------------------------------------------------
+
+responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_v{{ '19.0.0' if oradb_db.release | int == 19 else '23.0.0' }}
+gdbName={{ oradb_db.sid }}
+sid={{ oradb_db.sid }}
+databaseConfigType=SI
+createAsContainerDatabase=true
+numberOfPDBs=1
+pdbName={{ oradb_db.pdbs[0] }}
+pdbAdminPassword={{ oradb_sys_password }}
+templateName={{ oradb_dbca_template }}
+sysPassword={{ oradb_sys_password }}
+systemPassword={{ oradb_sys_password }}
+{% if oradb_db.release | int == 19 %}
+emConfiguration=NONE
+{% endif %}
+datafileDestination={{ oradb_datafile_dir }}
+recoveryAreaDestination={{ oradb_recovery_dir }}
+recoveryAreaSize={{ oradb_recovery_size_mb }}
+storageType=FS
+characterSet={{ oradb_character_set }}
+nationalCharacterSet=AL16UTF16
+initParams=sga_target={{ oradb_db.sga_mb }}M,pga_aggregate_target={{ oradb_db.pga_mb }}M,db_recovery_file_dest_size={{ oradb_recovery_size_mb }}M
+automaticMemoryManagement=false
+redoLogFileSize={{ oradb_redo_log_size_mb }}
+enableArchive=false
+sampleSchema=false
+useOMF=true

@@ -1,0 +1,208 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/home26.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Create the Oracle AI Database 26ai EE home.
+# Notes......: oradb26_install_method:
+#                autoupgrade  create_home with download=yes, target_version 23.
+#                             AutoUpgrade pulls the RU gold image from MOS with
+#                             the keystore of credentials.yml - unlike 19c no
+#                             base image is needed.
+#                zip          stage oradb26_home_zip (PAR or by hand), unzip,
+#                             runInstaller -silent. Fallback when MOS does not
+#                             deliver; the home is at the RU of the zip.
+#              Both end with root.sh and an opatch lsinventory report.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Check whether the 26ai home already exists
+  ansible.builtin.stat:
+    path: "{{ oradb26_home }}/bin/oracle"
+  register: oradb26_home_stat
+  become: true
+
+- name: Report that the 26ai home already exists
+  ansible.builtin.debug:
+    msg: "{{ oradb26_home }} already contains an oracle binary - skipping the 26ai install."
+  when: oradb26_home_stat.stat.exists
+
+- name: Create the parent directory of the 26ai home
+  ansible.builtin.file:
+    path: "{{ oradb26_home | dirname }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0775"
+  become: true
+
+# ---------------------------------------------------------------------------
+# autoupgrade - create_home with download
+# ---------------------------------------------------------------------------
+
+- name: Build the 26ai home with AutoUpgrade create_home
+  when:
+    - not oradb26_home_stat.stat.exists
+    - oradb26_install_method == 'autoupgrade'
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  block:
+    - name: Create the 26ai AutoUpgrade log directory
+      ansible.builtin.file:
+        path: "{{ oradb26_autoupgrade_log_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render the 26ai create_home config
+      ansible.builtin.template:
+        src: autoupgrade-create-home-26ai.cfg.j2
+        dest: "{{ oradb26_autoupgrade_config_dir }}/create-home-26ai.cfg"
+        mode: "0644"
+
+    - name: Download the 26ai RU gold image and create the home (30-60 minutes)
+      ansible.builtin.command:
+        cmd: >-
+          {{ oradb_autoupgrade_java }} -jar {{ oradb26_autoupgrade_jar }}
+          -config {{ oradb26_autoupgrade_config_dir }}/create-home-26ai.cfg
+          -patch -mode create_home -noconsole
+      environment:
+        ORACLE_BASE: "{{ oracle_base }}"
+      register: oradb26_create_home
+      changed_when: oradb26_create_home.rc == 0
+      async: 14400
+      poll: 60
+
+    - name: Report the create_home outcome
+      ansible.builtin.debug:
+        msg: "{{ (oradb26_create_home.stdout_lines | default([]))[-30:] }}"
+
+# ---------------------------------------------------------------------------
+# zip - staged image plus runInstaller
+# ---------------------------------------------------------------------------
+
+- name: Build the 26ai home from a staged image zip
+  when:
+    - not oradb26_home_stat.stat.exists
+    - oradb26_install_method == 'zip'
+  become: true
+  block:
+    - name: Check for the staged 26ai image zip
+      ansible.builtin.stat:
+        path: "{{ oradb26_stage_dir }}/{{ oradb26_home_zip }}"
+      register: oradb26_zip_stat
+
+    # A PAR is a bearer credential - no_log, and make dsdemo-par keeps it short-lived.
+    - name: Stage the 26ai image zip from oradb26_home_zip_url
+      ansible.builtin.get_url:
+        url: "{{ oradb26_home_zip_url }}"
+        dest: "{{ oradb26_stage_dir }}/{{ oradb26_home_zip }}"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0644"
+        timeout: 120
+      no_log: true
+      register: oradb26_zip_dl
+      retries: 3
+      delay: 10
+      until: oradb26_zip_dl is succeeded
+      when:
+        - not oradb26_zip_stat.stat.exists
+        - oradb26_home_zip_url | length > 0
+
+    - name: Re-check the staged 26ai image zip
+      ansible.builtin.stat:
+        path: "{{ oradb26_stage_dir }}/{{ oradb26_home_zip }}"
+      register: oradb26_zip_final
+
+    - name: Fail with the way out when the zip is missing
+      ansible.builtin.assert:
+        that:
+          - oradb26_zip_final.stat.exists
+        fail_msg: >-
+          {{ oradb26_home_zip }} is not in {{ oradb26_stage_dir }}. Upload it to the
+          bucket and run make dsdemo-par DB26_ZIP=1, or copy it in by hand. Source:
+          https://www.oracle.com/database/technologies/oracle26ai-linux-downloads.html
+          (OTN) or edelivery.oracle.com. Alternatively set db26_install_method = "autoupgrade".
+        quiet: true
+
+    - name: Create the 26ai home directory
+      ansible.builtin.file:
+        path: "{{ oradb26_home }}"
+        state: directory
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0775"
+
+    - name: Unpack the 26ai image into the home
+      ansible.builtin.unarchive:
+        src: "{{ oradb26_stage_dir }}/{{ oradb26_home_zip }}"
+        dest: "{{ oradb26_home }}"
+        remote_src: true
+        creates: "{{ oradb26_home }}/runInstaller"
+      become: true
+      become_user: "{{ oracle_os_user }}"
+
+    - name: Render the software-only response file
+      ansible.builtin.template:
+        src: db_install_26ai.rsp.j2
+        dest: "{{ oracle_base }}/etc/db_install_26ai.rsp"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0600"
+
+    # rc 6 = installed with warnings (prerequisite warnings on OL8) - success.
+    - name: Install the 26ai software (runInstaller -silent)
+      ansible.builtin.command:
+        cmd: >-
+          {{ oradb26_home }}/runInstaller -silent -ignorePrereqFailure -waitforcompletion
+          -responseFile {{ oracle_base }}/etc/db_install_26ai.rsp
+      register: oradb26_runinstaller
+      changed_when: oradb26_runinstaller.rc in [0, 6]
+      failed_when: oradb26_runinstaller.rc not in [0, 6]
+      async: 7200
+      poll: 30
+      become: true
+      become_user: "{{ oracle_os_user }}"
+
+# ---------------------------------------------------------------------------
+# Root scripts and report (both methods)
+# ---------------------------------------------------------------------------
+
+- name: Look for root.sh in the 26ai home
+  ansible.builtin.stat:
+    path: "{{ oradb26_home }}/root.sh"
+  register: oradb26_rootsh
+  become: true
+
+- name: Run root.sh for the new 26ai home
+  ansible.builtin.command:
+    cmd: "{{ oradb26_home }}/root.sh"
+  register: oradb26_rootsh_run
+  changed_when: oradb26_rootsh_run.rc == 0
+  when:
+    - oradb26_rootsh.stat.exists
+    - not oradb26_home_stat.stat.exists
+  become: true
+
+- name: Read the patch level of the 26ai home
+  ansible.builtin.command:
+    cmd: "{{ oradb26_home }}/OPatch/opatch lsinventory -oh {{ oradb26_home }}"
+  environment:
+    ORACLE_HOME: "{{ oradb26_home }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+  register: oradb26_inventory
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ oracle_os_user }}"
+
+- name: Report the patch level of the 26ai home
+  ansible.builtin.debug:
+    msg: >-
+      {{ oradb26_inventory.stdout_lines | default([])
+         | select('search', '(?i)(Oracle (AI )?Database|Release Update|Patch  *[0-9]+ *:)')
+         | list }}

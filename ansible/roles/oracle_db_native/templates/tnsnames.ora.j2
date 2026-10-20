@@ -1,0 +1,21 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role oracle_db_native - do not edit by hand.
+# Purpose: Service names of the demo host - identical in the 19c and 26ai home.
+# Notes..: Host is the FQDN on purpose (IPv6 link-local issue of the short
+#          name, see db19_engineering tnsnames.ora.j2).
+#-------------------------------------------------------------------------------
+{% for db in oradb_databases %}
+{% for svc in [db.sid] + db.pdbs + ([oradb_live_pdb] if db.sid == oradb_live_cdb else []) %}
+
+{{ svc | upper }} =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = {{ oradb_net_host }})(PORT = {{ oradb_listener_port }}))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = {{ svc | lower }})
+    )
+  )
+{% endfor %}
+{% endfor %}

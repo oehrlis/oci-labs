@@ -1,0 +1,115 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Entry point for the oracle_db_native role.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Tags, in run order:
+#   storage       format and mount the data volume on /u01
+#   prereq        OS prerequisites (db19_engineering os_prereq) + 26ai RPM,
+#                 Java 17, jq, python3.11 as python3
+#   oradba        OraDBA runtime layer (db19_engineering oradba)
+#   homes         AutoUpgrade, MOS keystore, 19c home, 26ai home
+#     home19      19c only (download + create_home)
+#     home26      26ai only (AutoUpgrade create_home or zip install)
+#   databases     host helpers, listener, CDB26 and CDB19 with their PDBs
+#   odb_datasafe  odb_datasafe release + .env
+#   ds_prereqs    Data Safe service account in every CDB$ROOT and open PDB
+#   connector     on-premises connector, systemd service, OraDBA registration
+#   verify        read-only checks
+# Coarse tag "install" runs all of them.
+
+- name: Assert the required inputs
+  ansible.builtin.import_tasks: assert_vars.yml
+  tags:
+    - always
+
+- name: Data volume on /u01
+  ansible.builtin.import_tasks: storage.yml
+  when: oradb_data_volume | bool
+  tags:
+    - install
+    - prereq
+    - storage
+
+- name: OS prerequisites, OraDBA, AutoUpgrade and the 19c home
+  ansible.builtin.import_tasks: homes19.yml
+
+- name: OS additions for 26ai and the connector
+  ansible.builtin.import_tasks: os.yml
+  tags:
+    - install
+    - prereq
+
+- name: Oracle AI Database 26ai home
+  ansible.builtin.import_tasks: home26.yml
+  tags:
+    - install
+    - homes
+    - home26
+
+- name: Host helpers dsdemo-sql, dsdemo-pdb, dsdemo-connector
+  ansible.builtin.import_tasks: helpers.yml
+  tags:
+    - install
+    - databases
+    - ds_prereqs
+    - connector
+
+- name: Listener and Oracle Net configuration
+  ansible.builtin.import_tasks: listener.yml
+  tags:
+    - install
+    - databases
+
+- name: Container databases and PDBs
+  ansible.builtin.include_tasks:
+    file: create_cdb.yml
+    apply:
+      tags:
+        - install
+        - databases
+  loop: "{{ oradb_databases }}"
+  loop_control:
+    loop_var: oradb_db
+    label: "{{ oradb_db.sid }}"
+  tags:
+    - install
+    - databases
+
+- name: Install odb_datasafe
+  ansible.builtin.import_tasks: odb_datasafe.yml
+  tags:
+    - install
+    - odb_datasafe
+
+- name: Data Safe service accounts
+  ansible.builtin.import_tasks: ds_prereqs.yml
+  tags:
+    - install
+    - ds_prereqs
+
+- name: Data Safe on-premises connector
+  ansible.builtin.import_tasks: connector.yml
+  tags:
+    - install
+    - connector
+
+- name: Register the connector in OraDBA
+  ansible.builtin.import_tasks: connector_oradba.yml
+  tags:
+    - install
+    - connector
+
+- name: Verify
+  ansible.builtin.import_tasks: verify.yml
+  tags:
+    - install
+    - verify

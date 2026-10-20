@@ -1,0 +1,31 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role oracle_db_native - do not edit by hand.
+# Purpose: AutoUpgrade create_home config for the Oracle AI Database 26ai home
+#          {{ oradb26_home }} (download and create in one run).
+# Notes..: target_version 23 covers 26ai (23.26.x). AutoUpgrade resolves the
+#          RU as a gold image from MOS - a full home, so no base image and no
+#          gold_image parameter (for target 23 the Oracle Update Advisor is not
+#          used, which is what breaks 19c gold images, see db19_engineering).
+#          Own global_log_dir and folder, so the job state and
+#          patches_info.json of the 19c run stay untouched. Keystore shared.
+#-------------------------------------------------------------------------------
+
+global.global_log_dir={{ oradb26_autoupgrade_log_dir }}
+global.keystore={{ oradb26_autoupgrade_keystore_dir }}
+
+install1.patch={{ oradb26_patch_list }}
+install1.folder={{ oradb26_stage_dir }}
+install1.target_home={{ oradb26_home }}
+install1.target_version={{ oradb26_target_version }}
+install1.platform=LINUX.X64
+install1.download=yes
+install1.patch_node=localhost
+
+install1.home_settings.oracle_base={{ oracle_base }}
+install1.home_settings.edition=ee
+install1.home_settings.inventory_location={{ oracle_inventory }}
+install1.home_settings.inventory_group={{ oracle_os_group_install }}
+install1.home_settings.osdba_group={{ oracle_os_group_dba }}
+install1.home_settings.osoper_group={{ oracle_os_group_oper }}

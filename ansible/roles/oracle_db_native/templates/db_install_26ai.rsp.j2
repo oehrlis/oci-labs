@@ -1,0 +1,19 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role oracle_db_native - do not edit by hand.
+# Purpose: runInstaller software-only response file for the 26ai EE home
+#          {{ oradb26_home }} (oradb26_install_method = zip). No passwords.
+#-------------------------------------------------------------------------------
+oracle.install.responseFileVersion=/oracle/install/rspfmt_dbinstall_response_schema_v23.0.0
+installOption=INSTALL_DB_SWONLY
+UNIX_GROUP_NAME={{ oracle_os_group_install }}
+INVENTORY_LOCATION={{ oracle_inventory }}
+ORACLE_BASE={{ oracle_base }}
+installEdition=EE
+OSDBA={{ oracle_os_group_dba }}
+OSOPER={{ oracle_os_group_oper }}
+OSBACKUPDBA=backupdba
+OSDGDBA=dgdba
+OSKMDBA=kmdba
+OSRACDBA=racdba

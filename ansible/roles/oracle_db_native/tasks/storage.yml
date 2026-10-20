@@ -1,0 +1,63 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/storage.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Format and mount the data block volume on {{ oracle_data }}.
+# Notes......: Runs before os_prereq creates the directories below /u01. The
+#              volume is found by its label (re-run) or as the single blank
+#              disk (first run) - never by a guessed device name, and never a
+#              disk that already carries partitions or a filesystem.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: List the block devices
+  ansible.builtin.command: lsblk -J -p -o NAME,TYPE,FSTYPE,LABEL,MOUNTPOINT
+  register: oradb_lsblk
+  changed_when: false
+  become: true
+
+- name: Classify the disks
+  vars:
+    _disks: "{{ (oradb_lsblk.stdout | from_json).blockdevices | selectattr('type', 'equalto', 'disk') | list }}"
+  ansible.builtin.set_fact:
+    oradb_data_labelled: >-
+      {{ _disks | selectattr('label', 'equalto', oradb_data_label) | map(attribute='name') | list }}
+    oradb_data_blank: >-
+      {{ _disks | rejectattr('children', 'defined') | selectattr('fstype', 'none')
+         | selectattr('mountpoint', 'none') | map(attribute='name') | list }}
+
+- name: Fail unless exactly one data volume candidate exists
+  ansible.builtin.assert:
+    that:
+      - >-
+        (oradb_data_labelled | length == 1)
+        or (oradb_data_labelled | length == 0 and oradb_data_blank | length == 1)
+    fail_msg: >-
+      Cannot pick the data volume: labelled {{ oradb_data_labelled }}, blank disks
+      {{ oradb_data_blank }}. Expected one disk labelled {{ oradb_data_label }} or one
+      blank disk. Check the volume attachment (terraform attach_data_volume) and lsblk.
+    quiet: true
+
+- name: Create the xfs filesystem on the blank data volume
+  ansible.builtin.command: "mkfs.xfs -L {{ oradb_data_label }} {{ oradb_data_blank[0] }}"
+  when: oradb_data_labelled | length == 0
+  changed_when: true
+  become: true
+
+- name: Mount the data volume on {{ oracle_data }}
+  ansible.posix.mount:
+    path: "{{ oracle_data }}"
+    src: "LABEL={{ oradb_data_label }}"
+    fstype: xfs
+    opts: "{{ oradb_data_mount_opts }}"
+    state: mounted
+  become: true
+
+- name: Report the data volume
+  ansible.builtin.debug:
+    msg: "{{ oracle_data }} on {{ (oradb_data_labelled + oradb_data_blank) | first }} (LABEL={{ oradb_data_label }})"
