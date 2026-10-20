@@ -32,11 +32,18 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **datasafe-demo**: new stack `terraform/envs/datasafe-demo` for the LRN6087 Data Safe demo (Oracle AI
-  World 2026) - own core (VCN, Bastion), one OL8 x86 host, nightly auto-stop, optional instance principal.
-  Ansible role `datasafe_demo` and playbook `lab-datasafe-demo.yml` (Podman, oracle-free-labs 26ai Free
-  image, PDBs FREEPDB1/ODBSEED/ODBREPO, Data Safe service accounts, odb_datasafe 1.2.1, on-premises
-  connector as systemd service). Demo scripts, reset, Bastion tunnel and a synthetic fleet snapshot
-  generator in `demos/datasafe-lrn6087/`, `dsdemo-*` Makefile targets, runbook `docs/datasafe-demo.md`.
+  World 2026) - own core (VCN, Bastion), one OL8 x86 host (4 OCPU, 32 GB) with a data volume on `/u01`,
+  daily START and STOP schedules from `schedule_profile` (`cest`, `cet`, `pdt`, `off`; working hours
+  07:00-22:00 local, cron in UTC) plus the IAM policy the schedules need, optional instance principal.
+  Ansible role `oracle_db_native` and playbook `lab-datasafe-demo.yml`: native Oracle Database 19c EE
+  (CDB19, PDB19A/PDB19B) and Oracle AI Database 26ai EE (CDB26, PDB26A/PDB26B), homes through AutoUpgrade
+  (19c via `db19_engineering` tasks, unchanged; 26ai via `create_home` with the MOS RU gold image, zip
+  fallback), one listener, OraDBA, Data Safe service accounts, odb_datasafe 1.2.1, on-premises connector as
+  systemd service registered in OraDBA (`oradba_homes.sh`, `ds_connector_register_oradba.sh`). Demo scripts
+  (six steps: AIPDB1 created live in CDB26, registration through `ds_target_register.sh --type` when
+  available, else OCI CLI; connector managed with OraDBA), reset, Bastion tunnel and a synthetic fleet
+  snapshot generator in `demos/datasafe-lrn6087/`. `dsdemo-*` Makefile targets incl. `dsdemo-schedule`,
+  `dsdemo-par` and `dsdemo-par-revoke`; runbook `docs/datasafe-demo.md`.
 - **oracle_db_host**: optional `egress_https_only` (NSG egress TCP 443 plus intra-VCN). Default `false`;
   a `moved` block keeps existing stacks free of a rule replacement.
 - **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks
