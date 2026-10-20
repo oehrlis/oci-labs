@@ -5,19 +5,22 @@
 # Name.......: reset.sh
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
-# Date.......: 2026-10-19
-# Version....: 0.1.0
+# Date.......: 2026-10-20
+# Version....: 0.2.0
 # Purpose....: Reset the LRN6087 demo to its start state: deregister the AI PDB
-#              target (with audit trail and assessments) and drop the PDB.
+#              target (with audit trail and assessments) and drop the PDB in
+#              CDB26.
 # Notes......: Dry-run by default - nothing changes without --apply. Names come
-#              from demo.env like in demo.sh. The base targets (CDB$ROOT,
-#              FREEPDB1, ODBSEED, ODBREPO) and the connector stay untouched.
+#              from demo.env like in demo.sh. The base targets (CDB$ROOT and
+#              PDBs of CDB19 and CDB26) and the connector stay untouched;
+#              dsdemo-pdb on the host refuses to drop a start PDB.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0, January 2004 as shown
 #              at http://www.apache.org/licenses/
 # ------------------------------------------------------------------------------
 # CHANGE LOG:
 # 2026-10-19 oes Initial release 0.1.0
+# 2026-10-20 oes 0.2.0 native CDB26 instead of the Free container
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
@@ -26,7 +29,7 @@
 set -euo pipefail
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="0.1.0"
+VERSION="0.2.0"
 DRY_RUN="TRUE"
 FORCE_YES="FALSE"
 KEEP_PDB="FALSE"
@@ -38,7 +41,7 @@ DEMO_REGION="eu-zurich-1"
 DEMO_ODB_BASE="${HOME}/demo/odb_datasafe-1.2.1"
 DEMO_COMP="lab"
 DEMO_HOST="db01"
-DEMO_SID="FREE"
+DEMO_CDB26="CDB26"
 DEMO_PDB="AIPDB1"
 DEMO_COMP_OCID=""
 DEMO_SSH_PORT="${DSDEMO_LOCAL_PORT:-2222}"
@@ -52,7 +55,7 @@ usage() {
 Usage: ${SCRIPT_NAME} [OPTIONS]
 
   Bring the Data Safe demo back to its start state: delete the target
-  <host>_<sid>_${DEMO_PDB} in Data Safe, then drop ${DEMO_PDB} in the Free container.
+  <host>_${DEMO_CDB26}_${DEMO_PDB} in Data Safe, then drop ${DEMO_PDB} in ${DEMO_CDB26}.
   Default is a dry-run.
 
 Options:
@@ -134,14 +137,14 @@ main() {
     [[ -x "${DEMO_ODB_BASE}/bin/ds_target_delete.sh" ]] || die "odb_datasafe not found in ${DEMO_ODB_BASE}"
     [[ ! -f "${DEMO_ODB_BASE}/etc/datasafe.conf" ]] || die "${DEMO_ODB_BASE}/etc/datasafe.conf exists - refusing"
 
-    local target="${DEMO_HOST}_${DEMO_SID}_${DEMO_PDB^^}"
+    local target="${DEMO_HOST}_${DEMO_CDB26^^}_${DEMO_PDB^^}"
     log_info "Reset target ${target} in ${DEMO_COMP}$([[ "${KEEP_PDB}" == "TRUE" ]] || echo ", drop PDB ${DEMO_PDB}")"
 
     if [[ "${DRY_RUN}" == "TRUE" ]]; then
         log_info "DRY-RUN - nothing changes. Re-run with --apply."
         ds_target_delete.sh -T "${target}" -c "${DEMO_COMP}" -s ACTIVE,NEEDS_ATTENTION,INACTIVE --dry-run
         if [[ "${KEEP_PDB}" == "FALSE" ]]; then
-            host_ssh sudo /usr/local/bin/dsdemo-pdb --dry-run drop "${DEMO_PDB}" \
+            host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" --dry-run drop "${DEMO_PDB}" \
                 || log_info "DRY-RUN: would drop ${DEMO_PDB} on the host (tunnel down, not checked)"
         fi
         return 0
@@ -156,9 +159,9 @@ main() {
     ds_target_delete.sh -T "${target}" -c "${DEMO_COMP}" -s ACTIVE,NEEDS_ATTENTION,INACTIVE \
         --force --wait-state SUCCEEDED
     if [[ "${KEEP_PDB}" == "FALSE" ]]; then
-        host_ssh sudo /usr/local/bin/dsdemo-pdb drop "${DEMO_PDB}"
+        host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" drop "${DEMO_PDB}"
     fi
-    log_info "Start state restored. Next: demo.sh prepare"
+    log_info "Start state restored. Next: demo.sh run (step 2 creates ${DEMO_PDB} again)"
 }
 
 main "$@"

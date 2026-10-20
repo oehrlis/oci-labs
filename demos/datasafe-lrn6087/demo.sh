@@ -5,25 +5,32 @@
 # Name.......: demo.sh
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
-# Date.......: 2026-10-19
-# Version....: 0.1.0
-# Purpose....: LRN6087 (Oracle AI World 2026) Data Safe demo - the five steps
-#              of slide 20 with pauses, plus the preparation of the demo state.
+# Date.......: 2026-10-20
+# Version....: 0.2.0
+# Purpose....: LRN6087 (Oracle AI World 2026) Data Safe demo - the demo steps
+#              with pauses, plus the preparation of the start state.
 # Notes......: Actions:
-#                check          isolation and prerequisites (no changes)
-#                register-base  register CDB$ROOT + start PDBs, tag, start trails
-#                prepare        create AIPDB1 + DS_ADMIN on the host (off-screen)
-#                run            the five demo steps (default)
-#                step N         one demo step (1-5)
+#                check          isolation, tools, registration path (no changes)
+#                register-base  register CDB$ROOT + PDBs of CDB19 and CDB26,
+#                               tag, start trails (once)
+#                prepare        create AIPDB1 + DS_ADMIN off-screen (fallback,
+#                               step 2 does the same live)
+#                run            the six demo steps (default)
+#                step N         one demo step (1-6)
 #              Real names come from demo.env (see demo.env.example). The Data
 #              Safe secret is read with op read and handed over as a 0600
 #              base64 file - never typed, never on an argv.
+#              Registration: odb_datasafe ds_target_register.sh --type
+#              compute|onprem when the installed copy supports it (detected
+#              via --help), else plain OCI CLI (INSTALLED_DATABASE).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0, January 2004 as shown
 #              at http://www.apache.org/licenses/
 # ------------------------------------------------------------------------------
 # CHANGE LOG:
 # 2026-10-19 oes Initial release 0.1.0
+# 2026-10-20 oes 0.2.0 native CDB19/CDB26, AIPDB1 live in step 2, odb --type
+#                registration, step 6 connector managed with OraDBA
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
@@ -32,11 +39,12 @@
 set -euo pipefail
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="0.1.0"
+VERSION="0.2.0"
 DRY_RUN="FALSE"
 PAUSE="TRUE"
 ACTION="run"
 STEP=""
+LAST_STEP=6
 
 # Demo names - overridden by demo.env. Slide placeholders in brackets.
 DEMO_ENV_FILE="${DEMO_ENV_FILE:-${SCRIPT_DIR}/demo.env}"
@@ -46,13 +54,15 @@ DEMO_REGION="eu-zurich-1"
 DEMO_ODB_BASE="${HOME}/demo/odb_datasafe-1.2.1"
 DEMO_COMP="lab" # [lab]
 DEMO_HOST="db01" # [db01]
-DEMO_SID="FREE" # [CDB01] - Oracle AI Database Free only runs as FREE
+DEMO_CDB19="CDB19"
+DEMO_CDB19_PDBS="PDB19A,PDB19B"
+DEMO_CDB26="CDB26" # [CDB01] - the live PDB goes here
+DEMO_CDB26_PDBS="PDB26A,PDB26B"
 DEMO_PDB="AIPDB1" # [AIPDB1]
-DEMO_BASE_PDBS="FREEPDB1,ODBSEED,ODBREPO"
 DEMO_CONNECTOR="dsc-zrh-lab-dsdemo-01"
 DEMO_DS_USER="DS_ADMIN"
 DEMO_OP_DS_SECRET=""
-DEMO_REGISTER_MODE="oci"
+DEMO_REGISTER_MODE="auto"
 DEMO_INFRA_TYPE="ORACLE_CLOUD"
 DEMO_LISTENER_PORT="1521"
 DEMO_COMP_OCID=""
@@ -62,10 +72,12 @@ DEMO_SA=""
 DEMO_UA=""
 DEMO_FLEET_SOURCE="snapshot"
 DEMO_SNAPSHOT="${SCRIPT_DIR}/fleet-snapshot/fleet-snapshot-sample.json"
+DEMO_CONNECTOR_RESTART="FALSE"
 DEMO_SSH_PORT="${DSDEMO_LOCAL_PORT:-2222}"
 DEMO_SSH_KEY=""
 
 WORK_DIR=""
+REGISTER_PATH=""
 
 # ------------------------------------------------------------------------------
 # usage: show script usage
@@ -74,15 +86,17 @@ usage() {
     cat << EOF
 Usage: ${SCRIPT_NAME} [OPTIONS] [ACTION]
 
-  LRN6087 Data Safe demo: fleet state, register the AI PDB, tags, audit trail,
-  assessments. Names and 1Password references come from demo.env.
+  LRN6087 Data Safe demo: fleet state, create and register the AI PDB, tags,
+  audit trail, assessments, connector managed with OraDBA. Fleet mix on the
+  host: ${DEMO_CDB19} (19c) and ${DEMO_CDB26} (26ai). Names and 1Password
+  references come from demo.env.
 
 Actions:
-  check              Verify isolation, tools and names (no changes)
-  register-base      Register CDB\$ROOT and ${DEMO_BASE_PDBS}, tag, start trails (once)
-  prepare            Create ${DEMO_PDB} and its Data Safe user on the host (before the session)
-  run                Run the five demo steps with pauses (default)
-  step N             Run one demo step (1-5)
+  check              Verify isolation, tools, names and the registration path (no changes)
+  register-base      Register CDB\$ROOT and the PDBs of ${DEMO_CDB19} and ${DEMO_CDB26}, tag, start trails (once)
+  prepare            Create ${DEMO_PDB} and its Data Safe user off-screen (fallback for step 2)
+  run                Run the six demo steps with pauses (default)
+  step N             Run one demo step (1-${LAST_STEP})
 
 Options:
   -n, --dry-run      Print every command, execute none (rehearsal without OCI)
@@ -94,8 +108,8 @@ Options:
 Examples:
   ${SCRIPT_NAME} --dry-run run
   ${SCRIPT_NAME} check
-  ${SCRIPT_NAME} prepare && ${SCRIPT_NAME} run
-  ${SCRIPT_NAME} step 3
+  ${SCRIPT_NAME} run
+  ${SCRIPT_NAME} step 6
 
 EOF
 }
@@ -211,6 +225,30 @@ check_isolation() {
 }
 
 # ------------------------------------------------------------------------------
+# Function: resolve_register_path
+# Purpose.: Decide between odb_datasafe --type and the OCI CLI fallback
+# Notes...: auto = odb when ds_target_register.sh --help lists --type (the
+#           feat/register-onprem interface), otherwise oci. odb/oci force it.
+# ------------------------------------------------------------------------------
+resolve_register_path() {
+    case "${DEMO_REGISTER_MODE}" in
+        odb | oci) REGISTER_PATH="${DEMO_REGISTER_MODE}" ;;
+        auto)
+            # Captured first: grep -q in a pipe can SIGPIPE the producer, and
+            # with pipefail that would read as "not supported".
+            local help_text
+            help_text="$(ds_target_register.sh --help 2>&1 || true)"
+            if [[ "${help_text}" == *"--type TYPE"* ]]; then
+                REGISTER_PATH="odb"
+            else
+                REGISTER_PATH="oci"
+            fi
+            ;;
+        *) die "DEMO_REGISTER_MODE must be auto, odb or oci (got ${DEMO_REGISTER_MODE})" ;;
+    esac
+}
+
+# ------------------------------------------------------------------------------
 # Function: ds_secret_file
 # Purpose.: Read the Data Safe secret from 1Password into a 0600 base64 file
 # Output..: path of the file on stdout
@@ -242,31 +280,72 @@ host_ssh() {
 # ------------------------------------------------------------------------------
 # Function: target_name
 # Purpose.: Display name in the odb_datasafe convention <host>_<sid>_<pdb|CDBROOT>
-# Args....: $1 PDB name or CDBROOT
+# Args....: $1 CDB name, $2 PDB name or CDBROOT
 # ------------------------------------------------------------------------------
 target_name() {
-    printf '%s_%s_%s' "${DEMO_HOST}" "${DEMO_SID}" "${1^^}"
+    printf '%s_%s_%s' "${DEMO_HOST}" "${1^^}" "${2^^}"
+}
+
+# ------------------------------------------------------------------------------
+# Function: release_of
+# Purpose.: Release label of a CDB for descriptions (fleet mix on screen)
+# Args....: $1 CDB name
+# ------------------------------------------------------------------------------
+release_of() {
+    if [[ "${1^^}" == "${DEMO_CDB19^^}" ]]; then printf '19c'; else printf '26ai'; fi
+}
+
+# ------------------------------------------------------------------------------
+# Function: service_of
+# Purpose.: Service name of a scope - CDB name for the root, PDB name otherwise
+# Args....: $1 CDB name, $2 PDB name or CDBROOT
+# ------------------------------------------------------------------------------
+service_of() {
+    if [[ "${2^^}" == "CDBROOT" ]]; then printf '%s' "${1,,}"; else printf '%s' "${2,,}"; fi
+}
+
+# ------------------------------------------------------------------------------
+# Function: register_odb
+# Purpose.: Register with odb_datasafe ds_target_register.sh --type compute|onprem
+# Args....: $1 CDB name, $2 PDB name or CDBROOT, $3 plan|apply
+# ------------------------------------------------------------------------------
+register_odb() {
+    local cdb="$1" scope="${2^^}" mode="$3"
+    local -a args=()
+    if [[ "${DEMO_INFRA_TYPE}" == "ORACLE_CLOUD" ]]; then
+        args+=(--type compute --instance-id "${DEMO_INSTANCE_ID:-<instance-ocid>}")
+    else
+        args+=(--type onprem)
+    fi
+    args+=(--host-ip "${DEMO_DB_IP:-<db-ip>}" -H "${DEMO_HOST}" --sid "${cdb}")
+    if [[ "${scope}" == "CDBROOT" ]]; then args+=(--root); else args+=(--pdb "${scope}"); fi
+    args+=(--port "${DEMO_LISTENER_PORT}" --service "$(service_of "${cdb}" "${scope}")"
+        --connector "${DEMO_CONNECTOR}" -c "${DEMO_COMP}" -N "$(target_name "${cdb}" "${scope}")"
+        --description "LRN6087 demo - ${scope} on ${cdb} ($(release_of "${cdb}")) at ${DEMO_HOST}")
+    if [[ "${mode}" == "plan" ]]; then
+        args+=(-n)
+    else
+        local secret_file
+        secret_file="$(ds_secret_file)"
+        args+=(--secret-file "${secret_file}")
+    fi
+    ds_target_register.sh "${args[@]}"
 }
 
 # ------------------------------------------------------------------------------
 # Function: register_oci
 # Purpose.: Register a target with plain OCI CLI (INSTALLED_DATABASE + connector)
-# Args....: $1 PDB name or CDBROOT, $2 plan|apply
-# Notes...: ds_target_register.sh v1.2.1 builds an ExaCC payload only
-#           (DATABASE_CLOUD_SERVICE / CLOUD_AT_CUSTOMER) - see the runbook.
+# Args....: $1 CDB name, $2 PDB name or CDBROOT, $3 plan|apply
+# Notes...: Fallback for odb_datasafe without --type (1.2.1 builds an ExaCC
+#           payload only - see the runbook).
 # Depends.: oci, jq
 # ------------------------------------------------------------------------------
 register_oci() {
-    local scope="${1^^}" mode="$2"
+    local cdb="$1" scope="${2^^}" mode="$3"
     local name service user
-    name="$(target_name "${scope}")"
-    if [[ "${scope}" == "CDBROOT" ]]; then
-        service="${DEMO_SID}"
-        user="C##${DEMO_DS_USER}"
-    else
-        service="${scope,,}"
-        user="${DEMO_DS_USER}"
-    fi
+    name="$(target_name "${cdb}" "${scope}")"
+    service="$(service_of "${cdb}" "${scope}")"
+    if [[ "${scope}" == "CDBROOT" ]]; then user="C##${DEMO_DS_USER}"; else user="${DEMO_DS_USER}"; fi
 
     local conn_ocid
     conn_ocid="$(oci data-safe on-prem-connector list --compartment-id "${DEMO_COMP_OCID}" \
@@ -288,6 +367,7 @@ register_oci() {
         echo "Registration plan (dry-run) for ${name}:"
         echo "  compartment: ${DEMO_COMP}"
         echo "  connector..: ${DEMO_CONNECTOR}"
+        echo "  release....: $(release_of "${cdb}")"
         echo "  user.......: ${user} (secret from vault)"
         jq -c . "${WORK_DIR}/db.json" | sed 's/^/  details....: /'
         return 0
@@ -299,7 +379,7 @@ register_oci() {
         '{userName: $u, password: $p}' > "${WORK_DIR}/cred.json")
     oci data-safe target-database create --profile "${DEMO_OCI_PROFILE}" \
         --compartment-id "${DEMO_COMP_OCID}" --display-name "${name}" \
-        --description "LRN6087 demo - ${scope} on ${DEMO_SID} at ${DEMO_HOST}" \
+        --description "LRN6087 demo - ${scope} on ${cdb} ($(release_of "${cdb}")) at ${DEMO_HOST}" \
         --database-details "file://${WORK_DIR}/db.json" \
         --connection-option "file://${WORK_DIR}/conn.json" \
         --credentials "file://${WORK_DIR}/cred.json" \
@@ -310,22 +390,28 @@ register_oci() {
 
 # ------------------------------------------------------------------------------
 # Function: register_target
-# Purpose.: Register one target, plan first or apply, in the chosen mode
-# Args....: $1 PDB name or CDBROOT, $2 plan|apply
+# Purpose.: Register one target, plan first or apply, on the resolved path
+# Args....: $1 CDB name, $2 PDB name or CDBROOT, $3 plan|apply
 # ------------------------------------------------------------------------------
 register_target() {
-    local scope="$1" mode="$2"
-    local -a scope_args=(--pdb "${scope}")
-    [[ "${scope^^}" == "CDBROOT" ]] && scope_args=(--root)
-
-    if [[ "${DEMO_REGISTER_MODE}" == "odb" ]]; then
-        local -a args=(-H "${DEMO_HOST}" --sid "${DEMO_SID}" "${scope_args[@]}" -c "${DEMO_COMP}"
-            --connector "${DEMO_CONNECTOR}" --secret-file "$(ds_secret_file)")
-        [[ "${mode}" == "plan" ]] && args+=(-n)
-        ds_target_register.sh "${args[@]}"
+    if [[ "${REGISTER_PATH}" == "odb" ]]; then
+        register_odb "$@"
     else
-        register_oci "${scope}" "${mode}"
+        register_oci "$@"
     fi
+}
+
+# ------------------------------------------------------------------------------
+# Function: register_display
+# Purpose.: The command line the audience sees for a registration
+# Args....: $1 CDB name, $2 PDB name or CDBROOT
+# ------------------------------------------------------------------------------
+register_display() {
+    local scope_opt="--pdb ${2^^}"
+    [[ "${2^^}" == "CDBROOT" ]] && scope_opt="--root"
+    local type_opt="--type compute"
+    [[ "${DEMO_INFRA_TYPE}" == "ORACLE_CLOUD" ]] || type_opt="--type onprem"
+    printf 'ds_target_register.sh %s -H %s --sid %s %s' "${type_opt}" "${DEMO_HOST}" "${1}" "${scope_opt}"
 }
 
 # ------------------------------------------------------------------------------
@@ -338,6 +424,31 @@ target_ocid() {
     oci data-safe target-database list --compartment-id "${DEMO_COMP_OCID}" --all \
         --profile "${DEMO_OCI_PROFILE}" --lifecycle-state ACTIVE \
         --query "data[?\"display-name\"=='$1'].id | [0]" --raw-output 2> /dev/null || true
+}
+
+# ------------------------------------------------------------------------------
+# Function: prereqs_remote
+# Purpose.: Create the Data Safe user in a PDB of CDB26 on the host, secret via stdin
+# Args....: $1 PDB name
+# Depends.: op, ssh
+# ------------------------------------------------------------------------------
+prereqs_remote() {
+    local secret_file
+    secret_file="$(ds_secret_file)"
+    base64 -d < "${secret_file}" | host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" prereqs --pdb "$1"
+}
+
+# ------------------------------------------------------------------------------
+# Function: create_live_pdb
+# Purpose.: Create the AI PDB in CDB26 and its Data Safe user (idempotent)
+# ------------------------------------------------------------------------------
+create_live_pdb() {
+    show_and_run "sudo dsdemo-pdb --db ${DEMO_CDB26} create ${DEMO_PDB}" \
+        host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" create "${DEMO_PDB}"
+    show_and_run "sudo dsdemo-pdb --db ${DEMO_CDB26} prereqs --pdb ${DEMO_PDB} < secret" \
+        prereqs_remote "${DEMO_PDB}"
+    show_and_run "sudo dsdemo-pdb --db ${DEMO_CDB26} check --pdb ${DEMO_PDB}" \
+        host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" check --pdb "${DEMO_PDB}"
 }
 
 # ------------------------------------------------------------------------------
@@ -359,10 +470,12 @@ step_1() {
 }
 
 step_2() {
-    banner "2 - Register the new AI PDB (plan first)"
-    local slide="ds_target_register.sh -H ${DEMO_HOST} --sid ${DEMO_SID} --pdb ${DEMO_PDB}"
-    show_and_run "${slide} -n" register_target "${DEMO_PDB}" plan
-    show_and_run "${slide}" register_target "${DEMO_PDB}" apply
+    banner "2 - New AI PDB in ${DEMO_CDB26} (26ai): create, then register (plan first)"
+    create_live_pdb
+    local slide
+    slide="$(register_display "${DEMO_CDB26}" "${DEMO_PDB}")"
+    show_and_run "${slide} -n" register_target "${DEMO_CDB26}" "${DEMO_PDB}" plan
+    show_and_run "${slide}" register_target "${DEMO_CDB26}" "${DEMO_PDB}" apply
 }
 
 step_3() {
@@ -377,10 +490,11 @@ step_3() {
 
 step_4() {
     banner "4 - Audit trail: collecting, not just configured"
+    local target
+    target="$(target_name "${DEMO_CDB26}" "${DEMO_PDB}")"
     show_and_run "ds_audit_trail_state.sh -c ${DEMO_COMP} --state NOT_STARTED,NEEDS_ATTENTION" \
         ds_audit_trail_state.sh -c "${DEMO_COMP}" --state NOT_STARTED,NEEDS_ATTENTION
-    show_and_run "ds_target_audit_trail.sh -T $(target_name "${DEMO_PDB}")" \
-        ds_target_audit_trail.sh -T "$(target_name "${DEMO_PDB}")"
+    show_and_run "ds_target_audit_trail.sh -T ${target}" ds_target_audit_trail.sh -T "${target}"
     show_and_run "ds_audit_trail_state.sh -c ${DEMO_COMP} -r ${DEMO_PDB}" \
         ds_audit_trail_state.sh -c "${DEMO_COMP}" -r "${DEMO_PDB}"
 }
@@ -389,9 +503,10 @@ step_5() {
     banner "5 - Assessments with the OCI CLI"
     local sa="${DEMO_SA}"
     if [[ -z "${sa}" && "${DRY_RUN}" == "FALSE" ]]; then
-        local tid
-        tid="$(target_ocid "$(target_name "${DEMO_PDB}")")"
-        [[ -n "${tid}" && "${tid}" != "null" ]] || die "Target $(target_name "${DEMO_PDB}") not ACTIVE yet"
+        local target tid
+        target="$(target_name "${DEMO_CDB26}" "${DEMO_PDB}")"
+        tid="$(target_ocid "${target}")"
+        [[ -n "${tid}" && "${tid}" != "null" ]] || die "Target ${target} not ACTIVE yet"
         sa="$(oci data-safe security-assessment list --compartment-id "${DEMO_COMP_OCID}" \
             --target-id "${tid}" --type LATEST --all --profile "${DEMO_OCI_PROFILE}" \
             --query 'data[0].id' --raw-output)"
@@ -411,6 +526,16 @@ step_5() {
     fi
 }
 
+step_6() {
+    banner "6 - The connector is managed with OraDBA"
+    show_and_run "oradba_dsctl.sh services" host_ssh sudo /usr/local/bin/dsdemo-connector services
+    show_and_run "oradba_dsctl.sh status" host_ssh sudo /usr/local/bin/dsdemo-connector status
+    if [[ "${DEMO_CONNECTOR_RESTART}" == "TRUE" ]]; then
+        show_and_run "oradba_dsctl.sh restart" host_ssh sudo /usr/local/bin/dsdemo-connector restart
+        show_and_run "oradba_dsctl.sh status" host_ssh sudo /usr/local/bin/dsdemo-connector status
+    fi
+}
+
 # ------------------------------------------------------------------------------
 # Actions
 # ------------------------------------------------------------------------------
@@ -420,15 +545,20 @@ do_check() {
         command -v "${tool}" > /dev/null || die "Missing tool: ${tool}"
     done
     check_isolation
+    resolve_register_path
     echo "Profile: ${DEMO_OCI_PROFILE} (${DEMO_REGION})"
     echo "Compartment: ${DEMO_COMP} ${DEMO_COMP_OCID:+(OCID from terraform)}"
-    echo "Target: $(target_name "${DEMO_PDB}") via ${DEMO_CONNECTOR}, mode ${DEMO_REGISTER_MODE}/${DEMO_INFRA_TYPE}"
+    echo "Fleet on the host: ${DEMO_CDB19} (19c: ${DEMO_CDB19_PDBS}), ${DEMO_CDB26} (26ai: ${DEMO_CDB26_PDBS})"
+    echo "Live target: $(target_name "${DEMO_CDB26}" "${DEMO_PDB}") via ${DEMO_CONNECTOR}"
+    echo "Registration: ${REGISTER_PATH} (mode ${DEMO_REGISTER_MODE}, ${DEMO_INFRA_TYPE})"
     echo "Snapshot: ${DEMO_SNAPSHOT}"
     if [[ "${DRY_RUN}" == "FALSE" ]]; then
         ds_target_list.sh --input-json "${DEMO_SNAPSHOT}" --count > /dev/null \
             && echo "Snapshot readable by ds_target_list.sh: ok"
         if host_ssh true; then
             echo "Tunnel to the demo host: ok"
+            host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" list || log_warn "${DEMO_CDB26} not reachable"
+            host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB19}" list || log_warn "${DEMO_CDB19} not reachable"
         else
             log_warn "Tunnel down - run make dsdemo-tunnel"
         fi
@@ -436,13 +566,15 @@ do_check() {
 }
 
 do_register_base() {
-    banner "Register CDB\$ROOT and ${DEMO_BASE_PDBS} (start state)"
-    local scope
-    local -a scopes=(CDBROOT)
-    IFS=',' read -ra pdbs <<< "${DEMO_BASE_PDBS}"
-    scopes+=("${pdbs[@]}")
-    for scope in "${scopes[@]}"; do
-        show_and_run "register $(target_name "${scope}")" register_target "${scope}" apply
+    banner "Register CDB\$ROOT and the PDBs of ${DEMO_CDB19} and ${DEMO_CDB26} (start state)"
+    local cdb pdbs scope
+    local -a scopes
+    for cdb in "${DEMO_CDB19}" "${DEMO_CDB26}"; do
+        if [[ "${cdb}" == "${DEMO_CDB19}" ]]; then pdbs="${DEMO_CDB19_PDBS}"; else pdbs="${DEMO_CDB26_PDBS}"; fi
+        IFS=',' read -ra scopes <<< "CDBROOT,${pdbs}"
+        for scope in "${scopes[@]}"; do
+            show_and_run "$(register_display "${cdb}" "${scope}")" register_target "${cdb}" "${scope}" apply
+        done
     done
     show_and_run "ds_target_update_tags.sh -c ${DEMO_COMP} --apply" \
         ds_target_update_tags.sh -c "${DEMO_COMP}" --apply
@@ -450,23 +582,9 @@ do_register_base() {
         ds_target_audit_trail.sh -c "${DEMO_COMP}" -L ACTIVE
 }
 
-# ------------------------------------------------------------------------------
-# Function: prereqs_remote
-# Purpose.: Create the Data Safe user in a PDB on the host, secret via stdin
-# Args....: $1 PDB name
-# Depends.: op, ssh
-# ------------------------------------------------------------------------------
-prereqs_remote() {
-    local secret_file
-    secret_file="$(ds_secret_file)"
-    base64 -d < "${secret_file}" | host_ssh sudo /usr/local/bin/dsdemo-pdb prereqs --pdb "$1"
-}
-
 do_prepare() {
-    banner "Prepare ${DEMO_PDB} on the demo host (off-screen)"
-    show_and_run "sudo dsdemo-pdb create ${DEMO_PDB}" host_ssh sudo /usr/local/bin/dsdemo-pdb create "${DEMO_PDB}"
-    show_and_run "sudo dsdemo-pdb prereqs --pdb ${DEMO_PDB} < secret" prereqs_remote "${DEMO_PDB}"
-    show_and_run "sudo dsdemo-pdb check --pdb ${DEMO_PDB}" host_ssh sudo /usr/local/bin/dsdemo-pdb check --pdb "${DEMO_PDB}"
+    banner "Prepare ${DEMO_PDB} in ${DEMO_CDB26} (off-screen fallback for step 2)"
+    create_live_pdb
 }
 
 # ------------------------------------------------------------------------------
@@ -480,7 +598,7 @@ while [[ $# -gt 0 ]]; do
         -h | --help) usage; exit 0 ;;
         -V | --version) echo "${SCRIPT_NAME} ${VERSION}"; exit 0 ;;
         check | register-base | prepare | run) ACTION="$1"; shift ;;
-        step) ACTION="step"; STEP="${2:-}"; shift 2 || die "step needs a number 1-5" ;;
+        step) ACTION="step"; STEP="${2:-}"; shift 2 || die "step needs a number 1-${LAST_STEP}" ;;
         *) log_error "Unknown option $1"; usage; exit 1 ;;
     esac
 done
@@ -491,23 +609,23 @@ done
 main() {
     load_config
     WORK_DIR="$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/dsdemo.XXXXXX")"
-    [[ "${ACTION}" == "check" ]] || check_isolation
-    [[ "${DRY_RUN}" == "TRUE" ]] && log_info "DRY-RUN - commands are printed, not executed"
+    if [[ "${ACTION}" != "check" ]]; then
+        check_isolation
+        resolve_register_path
+    fi
+    [[ "${DRY_RUN}" == "TRUE" ]] && log_info "DRY-RUN - commands are printed, not executed (registration: ${REGISTER_PATH:-n/a})"
 
     case "${ACTION}" in
         check) do_check ;;
         register-base) do_register_base ;;
         prepare) do_prepare ;;
         run)
-            step_1
-            step_2
-            step_3
-            step_4
-            step_5
-            banner "Done - console contrast: same target in the Data Safe UI"
+            local n
+            for n in $(seq 1 "${LAST_STEP}"); do "step_${n}"; done
+            banner "Done - console contrast: same targets in the Data Safe UI, 19c next to 26ai"
             ;;
         step)
-            [[ "${STEP}" =~ ^[1-5]$ ]] || die "step needs a number 1-5"
+            [[ "${STEP}" =~ ^[1-6]$ ]] || die "step needs a number 1-${LAST_STEP}"
             "step_${STEP}"
             ;;
     esac
