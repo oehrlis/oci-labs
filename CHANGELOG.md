@@ -8,6 +8,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **datasafe-demo**: odb_datasafe default 1.3.1 (first release with `ds_target_register.sh --type onprem`),
+  sha256 from the release asset.
 - **lint-shell** also checks `demos/`.
 - **RA-oci-labs-014**: `enable_auto_stop` default changed from `false` to `true`
   in `terraform/envs/cpu-patch-test`. Idle labs stop nightly at 18:00 UTC.

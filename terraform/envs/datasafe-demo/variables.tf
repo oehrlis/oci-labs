@@ -410,8 +410,8 @@ variable "db26_ru" {
 
 variable "odb_datasafe_version" {
   type        = string
-  description = "odb_datasafe release installed on the host. 1.3.0 brings ds_target_register.sh --type; set together with odb_datasafe_sha256."
-  default     = "1.2.1"
+  description = "odb_datasafe release installed on the host. 1.3.1 is the first release with ds_target_register.sh --type; set together with odb_datasafe_sha256."
+  default     = "1.3.1"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.odb_datasafe_version))
@@ -422,7 +422,7 @@ variable "odb_datasafe_version" {
 variable "odb_datasafe_sha256" {
   type        = string
   description = "SHA-256 of odb_datasafe-<odb_datasafe_version>.tar.gz from the GitHub release (.sha256 asset). Never guessed."
-  default     = "fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401"
+  default     = "389f101977e8f09e5bd4f7fc1711d2b25bfef41c6965b1f121e87b03d9571be0"
 
   validation {
     condition     = can(regex("^[0-9a-f]{64}$", var.odb_datasafe_sha256))

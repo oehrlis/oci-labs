@@ -23,7 +23,7 @@ ACE-Tenancy, eu-zurich-1, bestehendes Compartment (wird nie angelegt oder geloes
     26ai EE Home (neuestes RU) -> CDB26: CDB$ROOT, PDB26A, PDB26B  -> 3 Targets (ON_PREMISES)
       AIPDB1 -> wird in Schritt 2 live in CDB26 angelegt und registriert, reset.sh entfernt sie
     LISTENER (26ai Home, Port 1521) fuer beide CDBs
-    OraDBA (oradba-services.service), odb_datasafe 1.2.1
+    OraDBA (oradba-services.service), odb_datasafe 1.3.1
     Connector dsc-zrh-lab-dsdemo-01 (systemd, CMAN-Port 1561), in OraDBA als dscon1 registriert
   Resource Scheduler: Start 07:00 / Stopp 22:00 Lokalzeit (schedule_profile)
 Laptop: Bastion-Tunnel 127.0.0.1:2222, eigene odb_datasafe-Kopie, OCI CLI Profil ACE
@@ -131,7 +131,7 @@ Der Lauf (rund 1.5-2.5 Stunden) formatiert und mountet das Data Volume auf `/u01
 (`db19_engineering` os_prereq: Preinstall-RPM, Benutzer, SELinux permissive, THP aus, Root-FS vergroessern), das
 26ai-Preinstall-RPM (falls im Repository vorhanden, sonst eine Meldung), Java 17, python3.11 als `python3`, OraDBA mit
 `oradba-services.service`, AutoUpgrade mit MOS-Keystore, das 19c-Home und das 26ai-Home, den Listener im 26ai-Home,
-CDB26 und CDB19 per dbca (erste PDB) plus die weiteren PDBs per `dsdemo-pdb create`, odb_datasafe 1.2.1, C##DS_ADMIN
+CDB26 und CDB19 per dbca (erste PDB) plus die weiteren PDBs per `dsdemo-pdb create`, odb_datasafe 1.3.1, C##DS_ADMIN
 und DS_ADMIN per `ds_database_prereqs.sh --all` in beiden CDBs, den Connector samt systemd-Unit und registriert ihn
 in OraDBA (`oradba_homes.sh add --type datasafe`, danach `ds_connector_register_oradba.sh`).
 
@@ -181,46 +181,35 @@ Fuer die Demo eine **eigene** odb_datasafe-Kopie, nie die Alltags-Installation: 
 Tenancy-Konfiguration auf dem Bildschirm landen.
 
 ```bash
-mkdir -p ~/demo/odb_datasafe-1.2.1
-gh release download v1.2.1 -R oehrlis/odb_datasafe -p 'odb_datasafe-1.2.1.tar.gz*' -D ~/demo
-(cd ~/demo && shasum -a 256 odb_datasafe-1.2.1.tar.gz)
-tar xzf ~/demo/odb_datasafe-1.2.1.tar.gz -C ~/demo/odb_datasafe-1.2.1
-cp demos/datasafe-lrn6087/odb_datasafe.env.example ~/demo/odb_datasafe-1.2.1/.env
-chmod 600 ~/demo/odb_datasafe-1.2.1/.env
-$EDITOR ~/demo/odb_datasafe-1.2.1/.env
+mkdir -p ~/demo/odb_datasafe-1.3.1
+gh release download v1.3.1 -R oehrlis/odb_datasafe -p 'odb_datasafe-1.3.1.tar.gz*' -D ~/demo
+(cd ~/demo && shasum -a 256 odb_datasafe-1.3.1.tar.gz)
+tar xzf ~/demo/odb_datasafe-1.3.1.tar.gz -C ~/demo/odb_datasafe-1.3.1
+cp demos/datasafe-lrn6087/odb_datasafe.env.example ~/demo/odb_datasafe-1.3.1/.env
+chmod 600 ~/demo/odb_datasafe-1.3.1/.env
+$EDITOR ~/demo/odb_datasafe-1.3.1/.env
 cp demos/datasafe-lrn6087/demo.env.example demos/datasafe-lrn6087/demo.env
 $EDITOR demos/datasafe-lrn6087/demo.env
 ```
 
-Die Pruefsumme muss `fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401` lauten. Die `.env` muss
+Die Pruefsumme muss `389f101977e8f09e5bd4f7fc1711d2b25bfef41c6965b1f121e87b03d9571be0` lauten. Die `.env` muss
 `0600` sein: odb_datasafe ignoriert eine group- oder world-schreibbare `.env` und meldet das als ERROR.
 
-### Umstieg auf odb_datasafe 1.3.0
+### odb_datasafe-Version
 
-1.3.0 bringt `ds_target_register.sh --type onprem` (Branch `feat/register-onprem`). Bis das Release-Asset existiert,
-bleibt 1.2.1 der Default (Host und Laptop). Nach dem Release die Pruefsumme aus dem Asset ermitteln - nie raten:
-
-```bash
-gh release download v1.3.0 -R oehrlis/odb_datasafe -p 'odb_datasafe-1.3.0.tar.gz*' -D ~/demo
-(cd ~/demo && shasum -a 256 odb_datasafe-1.3.0.tar.gz && cat odb_datasafe-1.3.0.tar.gz.sha256)
-```
-
-Beide Werte muessen gleich sein. Dann:
-
-- Host: in `terraform/envs/datasafe-demo/terraform.tfvars` `odb_datasafe_version = "1.3.0"` und
-  `odb_datasafe_sha256 = "<wert>"` setzen, `make dsdemo-plan && make dsdemo-apply` (aendert nur das Inventory),
-  danach `make dsdemo-step TAG=odb_datasafe` - die Rolle packt bei abweichender Version ueber den Bestand aus, die
-  `.env` bleibt.
-- Laptop: neue Kopie `~/demo/odb_datasafe-1.3.0` wie oben anlegen, `.env` uebernehmen (`0600`) und in `demo.env`
-  `DEMO_ODB_BASE` darauf zeigen. `demo.sh` erkennt `--type` ueber `--help` (`DEMO_REGISTER_MODE=auto`) und
-  registriert dann mit odb_datasafe statt mit der OCI CLI; `demo.sh check` zeigt den gewaehlten Weg.
+Default ist 1.3.1 (Release 2026-10-20, erste Version mit `ds_target_register.sh --type onprem`; v1.3.0 wurde
+getaggt, der Release-Build scheiterte, es gibt kein Asset). Host und Laptop nutzen dieselbe Version. Fuer eine
+andere Version die Pruefsumme aus dem Asset ermitteln - nie raten - und `odb_datasafe_version` plus
+`odb_datasafe_sha256` in `terraform.tfvars` setzen, `make dsdemo-plan && make dsdemo-apply` (aendert nur das
+Inventory), danach `make dsdemo-step TAG=odb_datasafe` - die Rolle packt bei abweichender Version ueber den Bestand
+aus, die `.env` bleibt. `demo.sh check` zeigt, ob der odb_datasafe- oder der OCI-CLI-Weg gewaehlt ist.
 
 ### Tag-Namespace und Start-Targets
 
 Einmalig, danach ist der Startzustand erreicht (6 Targets, getaggt, Audit Trails laufen):
 
 ```bash
-export ODB_DATASAFE_BASE=~/demo/odb_datasafe-1.2.1
+export ODB_DATASAFE_BASE=~/demo/odb_datasafe-1.3.1
 $ODB_DATASAFE_BASE/bin/ds_tag_namespace.sh -f demos/datasafe-lrn6087/dbsec-tag-namespace.json --oci-profile ACE
 $ODB_DATASAFE_BASE/bin/ds_tag_namespace.sh -f demos/datasafe-lrn6087/dbsec-tag-namespace.json --oci-profile ACE --apply
 demos/datasafe-lrn6087/demo.sh check
@@ -341,7 +330,7 @@ Damit die Schedules die Instanz ueberhaupt starten und stoppen duerfen, legt Ter
 Zuerst Data Safe aufraeumen, dann die Infrastruktur:
 
 ```bash
-export ODB_DATASAFE_BASE=~/demo/odb_datasafe-1.2.1
+export ODB_DATASAFE_BASE=~/demo/odb_datasafe-1.3.1
 $ODB_DATASAFE_BASE/bin/ds_target_delete.sh -c "<demo-compartment-name>" -s ACTIVE,NEEDS_ATTENTION,INACTIVE --dry-run
 $ODB_DATASAFE_BASE/bin/ds_target_delete.sh -c "<demo-compartment-name>" -s ACTIVE,NEEDS_ATTENTION,INACTIVE --force
 CONN=$(oci --profile ACE data-safe on-prem-connector list --compartment-id "$(terraform -chdir=terraform/envs/datasafe-demo output -raw compartment_ocid)" --all --query "data[?\"display-name\"=='dsc-zrh-lab-dsdemo-01'].id | [0]" --raw-output)
@@ -369,10 +358,9 @@ Gegen odb_datasafe 1.2.1 offline geprueft (OCI CLI durch einen Stub ersetzt, nul
 
 ## Bekannte Grenzen
 
-- **`ds_target_register.sh` (1.2.1) kennt nur ExaCC/Cloud Service.** Der Payload ist fest
-  `DATABASE_CLOUD_SERVICE` / `CLOUD_AT_CUSTOMER`. Mit 1.2.1 registriert `demo.sh` deshalb per OCI CLI
-  (`INSTALLED_DATABASE`, `ON_PREMISES`, `ipAddresses`, `listenerPort`, `serviceName`, `ONPREM_CONNECTOR`) und zeigt
-  auf dem Bildschirm die Folienzeile. Ab 1.3.0 (`--type onprem`) nimmt `demo.sh` den odb_datasafe-Weg automatisch.
+- **`ds_target_register.sh` vor 1.3.1 kennt nur ExaCC/Cloud Service.** Mit einer aelteren Kopie registriert
+  `demo.sh` per OCI CLI (`INSTALLED_DATABASE`, `ON_PREMISES`, `ONPREM_CONNECTOR`) und zeigt die Folienzeile; ab
+  1.3.1 (`--type onprem`) nimmt `demo.sh` den odb_datasafe-Weg automatisch.
 - **Kein Instance Principal in odb_datasafe.** Die Skripte uebergeben immer `--config-file` und `--profile`; der
   Host bekommt deshalb ein schluesselloses `~/.oci/config` (nur Region) und `OCI_CLI_AUTH=instance_principal`.
 - **`--input-json` mit `-A`** schreibt eine WARN-Zeile ("ignoring OCI selection flags"). `demo.sh` zeigt deshalb
@@ -385,10 +373,10 @@ Gegen odb_datasafe 1.2.1 offline geprueft (OCI CLI durch einen Stub ersetzt, nul
 
 ## Offen
 
-- **Folien 20/21:** Platzhalter `CDB01` -> real `CDB26` (Live-PDB) bzw. `CDB19`, `lab` -> echter Compartment-Name;
-  die Demo hat jetzt einen sechsten Schritt (Connector mit OraDBA) - Folie 20 ergaenzen oder Schritt 6 nur zeigen?
-- **odb_datasafe 1.3.0:** Release-Asset und Tag stehen aus; danach SHA256 ermitteln und Host plus Laptop umstellen
-  ([Umstieg auf odb_datasafe 1.3.0](#umstieg-auf-odb_datasafe-130)).
+- **Folien:** erledigt 2026-10-20 in 70_talks - `CDB26`, `--type onprem`, sechster Schritt mit eigener Folie
+  (Connector mit OraDBA, inkl. Restart). Offen nur noch `lab`/`db01` -> echter Compartment- und Hostname.
+- **odb_datasafe 1.3.1:** erledigt 2026-10-20 - Release mit `--type onprem`, Default auf Host und Laptop,
+  SHA256 aus dem Release-Asset ([odb_datasafe-Version](#odb_datasafe-version)).
 - **Entschieden 2026-10-20 - Infrastructure-Type `ON_PREMISES`:** alle Targets werden als `ON_PREMISES` ohne
   `instanceId` registriert (`--type onprem` bzw. OCI-CLI-Payload). Kosten fuer On-Premises-Targets in Data Safe
   gegenpruefen (die Compute-Promotion gilt dafuer nicht automatisch).
