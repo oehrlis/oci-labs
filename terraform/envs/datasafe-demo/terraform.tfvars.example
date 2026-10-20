@@ -40,25 +40,39 @@ allowed_ssh_cidrs   = []
 egress_https_only   = true
 enable_bastion      = true
 
-# Host
+# Host - 19c EE and 26ai EE side by side, datafiles on a block volume (/u01)
 db_host_shape                = "VM.Standard.E4.Flex"
-db_host_ocpus                = 2
-db_host_memory_gbs           = 16
-db_host_boot_volume_size_gbs = 100
+db_host_ocpus                = 4
+db_host_memory_gbs           = 32
+db_host_boot_volume_size_gbs = 150
+attach_data_volume           = true
+data_volume_size_gbs         = 100
+data_volume_vpus_per_gb      = 10
 
-# Cost: nightly stop at 21:00 UTC. Start the host before every use.
-enable_auto_stop = true
-auto_stop_cron   = "0 21 * * *"
+# Cost: daily start 07:00 and stop 22:00 local time, cron in UTC.
+#   cest - until 2026-10-24 (Switzerland, summer time)
+#   cet  - from 2026-10-25 (Switzerland, winter time)
+#   pdt  - travel week, Las Vegas (stop 22:00 PDT = 05:00 UTC next day)
+#   off  - no schedules, make dsdemo-start / dsdemo-stop only
+schedule_profile        = "cest"
+create_scheduler_policy = true
+# schedule_start_cron   = "0 5 * * *"
+# schedule_stop_cron    = "0 20 * * *"
 
 # Instance principal for ds_connector_create.sh on the host. Needs tenancy_ocid
 # and tenancy-level IAM rights (dynamic group). false = laptop fallback.
 enable_instance_principal = false
 # tenancy_ocid            = "ocid1.tenancy.oc1..xxx"
 
-# Database / Data Safe
-oracle_sid        = "FREE"
-demo_pdbs         = ["FREEPDB1", "ODBSEED", "ODBREPO"]
-demo_new_pdb      = "AIPDB1"
+# Database / Data Safe - CDB$ROOT + PDBs of both CDBs are the start targets
+cdb19_name          = "CDB19"
+cdb19_pdbs          = ["PDB19A", "PDB19B"]
+cdb26_name          = "CDB26"
+cdb26_pdbs          = ["PDB26A", "PDB26B"]
+demo_new_pdb        = "AIPDB1"
+db19_ru             = "19.32"
+db26_ru             = ""
+db26_install_method = "autoupgrade"
 ds_connector_name = "dsc-zrh-lab-dsdemo-01"
 ds_connector_port = 1561
 

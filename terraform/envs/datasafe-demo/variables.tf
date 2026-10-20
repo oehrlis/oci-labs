@@ -204,20 +204,41 @@ variable "db_host_shape" {
 
 variable "db_host_ocpus" {
   type        = number
-  description = "OCPUs of the demo host. Oracle AI Database Free uses at most 2 CPU threads."
-  default     = 2
+  description = "OCPUs of the demo host. Two CDBs (19c and 26ai EE) plus connector and AutoUpgrade runs."
+  default     = 4
 }
 
 variable "db_host_memory_gbs" {
   type        = number
-  description = "Memory in GB. Free caps the database at 2 GB RAM; the rest is podman, connector, page cache."
-  default     = 16
+  description = "Memory in GB. Both SGAs plus PGAs take about 9 GB, the rest is connector, OS and page cache."
+  default     = 32
 }
 
 variable "db_host_boot_volume_size_gbs" {
   type        = number
-  description = "Boot volume size in GB. Holds the container image, oradata and the connector."
+  description = <<-EOT
+    Boot volume size in GB. Holds /u00 (two ORACLE_HOMEs), /u02 (FRA) and the
+    staged media in /opt/stage. Ansible grows the root filesystem to fill it.
+  EOT
+  default     = 150
+}
+
+variable "attach_data_volume" {
+  type        = bool
+  description = "Attach a block volume for the datafiles. Ansible formats it (xfs) and mounts it on /u01."
+  default     = true
+}
+
+variable "data_volume_size_gbs" {
+  type        = number
+  description = "Size in GB of the data volume (/u01) - datafiles of CDB19 and CDB26 with all PDBs."
   default     = 100
+}
+
+variable "data_volume_vpus_per_gb" {
+  type        = number
+  description = "Data volume performance in VPUs/GB (0 = lower cost, 10 = balanced, 20 = high)."
+  default     = 10
 }
 
 variable "ssh_public_key_files" {
@@ -247,24 +268,51 @@ variable "lab_keypair_name" {
   default     = "dsdemo-lab"
 }
 
-variable "enable_auto_stop" {
-  type        = bool
-  description = <<-EOT
-    Create a daily auto-stop schedule for the host. Safe default: true. A
-    stopped host costs block storage only; start it before rehearsal,
-    recording and the session.
-  EOT
-  default     = true
-}
+# -----------------------------------------------------------------------------
+# Resource Scheduler - daily start and stop (cost)
+# -----------------------------------------------------------------------------
 
-variable "auto_stop_cron" {
+variable "schedule_profile" {
   type        = string
   description = <<-EOT
-    Cron expression (UTC) for the auto-stop. 21:00 UTC is 23:00 CEST / 22:00
-    CET and 14:00 PDT - after evening recordings in Switzerland and after the
-    session on 2026-10-27 (08:00 PDT = 15:00 UTC).
+    Working-hours profile for the daily START and STOP schedules: start 07:00,
+    stop 22:00 local time, translated to UTC in locals (OCI cron is UTC).
+      cest - Switzerland until 2026-10-24 (UTC+2): start 05:00, stop 20:00 UTC
+      cet  - Switzerland from 2026-10-25 (UTC+1): start 06:00, stop 21:00 UTC
+      pdt  - Las Vegas until 2026-11-01 (UTC-7): start 14:00, stop 05:00 UTC
+             (the 22:00 PDT stop falls on the next UTC day)
+      off  - no schedules, start and stop by hand only
+    Switching the profile is a terraform apply (make dsdemo-plan / dsdemo-apply).
   EOT
-  default     = "0 21 * * *"
+  default     = "cest"
+
+  validation {
+    condition     = contains(["cest", "cet", "pdt", "off"], var.schedule_profile)
+    error_message = "schedule_profile must be one of: cest, cet, pdt, off."
+  }
+}
+
+variable "schedule_start_cron" {
+  type        = string
+  description = "Optional cron override (UTC) for the daily START. null = derived from schedule_profile."
+  default     = null
+}
+
+variable "schedule_stop_cron" {
+  type        = string
+  description = "Optional cron override (UTC) for the daily STOP. null = derived from schedule_profile."
+  default     = null
+}
+
+variable "create_scheduler_policy" {
+  type        = bool
+  description = <<-EOT
+    Create the IAM policy that lets the two schedules start and stop the demo
+    instance. Without such a policy a Resource Scheduler schedule runs but its
+    work requests fail. Needs the right to manage policies in the compartment;
+    set false when an existing policy already covers resourceschedule.
+  EOT
+  default     = true
 }
 
 # -----------------------------------------------------------------------------
@@ -299,27 +347,78 @@ variable "ansible_python_interpreter" {
   default     = "/usr/bin/python3.11"
 }
 
-variable "oracle_sid" {
+variable "cdb19_name" {
   type        = string
-  description = "ORACLE_SID of the container database. Oracle AI Database Free only allows FREE."
-  default     = "FREE"
+  description = "ORACLE_SID / DB_NAME of the 19c EE container database."
+  default     = "CDB19"
 
   validation {
-    condition     = var.oracle_sid == "FREE"
-    error_message = "Oracle AI Database Free runs with ORACLE_SID FREE only."
+    condition     = can(regex("^[A-Za-z][A-Za-z0-9]{0,7}$", var.cdb19_name))
+    error_message = "cdb19_name must be 1-8 alphanumeric characters starting with a letter (DB_NAME limit)."
   }
 }
 
-variable "demo_pdbs" {
+variable "cdb19_pdbs" {
   type        = list(string)
-  description = "PDBs present at the start state (registered as targets together with CDB$ROOT)."
-  default     = ["FREEPDB1", "ODBSEED", "ODBREPO"]
+  description = "PDBs of CDB19 at the start state (registered as targets together with its CDB$ROOT)."
+  default     = ["PDB19A", "PDB19B"]
+}
+
+variable "cdb26_name" {
+  type        = string
+  description = "ORACLE_SID / DB_NAME of the 26ai EE container database. The live PDB is created here."
+  default     = "CDB26"
+
+  validation {
+    condition     = can(regex("^[A-Za-z][A-Za-z0-9]{0,7}$", var.cdb26_name))
+    error_message = "cdb26_name must be 1-8 alphanumeric characters starting with a letter (DB_NAME limit)."
+  }
+}
+
+variable "cdb26_pdbs" {
+  type        = list(string)
+  description = "PDBs of CDB26 at the start state (registered as targets together with its CDB$ROOT)."
+  default     = ["PDB26A", "PDB26B"]
 }
 
 variable "demo_new_pdb" {
   type        = string
-  description = "PDB created and registered live in demo step 2 (dropped again by reset.sh)."
+  description = "PDB created in CDB26 and registered live in demo step 2 (dropped again by reset.sh)."
   default     = "AIPDB1"
+}
+
+variable "db19_ru" {
+  type        = string
+  description = <<-EOT
+    Release Update of the 19c home. AutoUpgrade only downloads the current and
+    the previous RU - raise it once a quarter. The 19c base image is never
+    downloadable and has to be staged (make dsdemo-par).
+  EOT
+  default     = "19.32"
+}
+
+variable "db26_ru" {
+  type        = string
+  description = <<-EOT
+    Release Update of the 26ai home, e.g. "23.26.2". Empty = the latest RU that
+    AutoUpgrade resolves (patch=RU,OPATCH). Pin it after the first download.
+  EOT
+  default     = ""
+}
+
+variable "db26_install_method" {
+  type        = string
+  description = <<-EOT
+    How the 26ai home is built:
+      autoupgrade - AutoUpgrade create_home downloads the RU gold image from MOS
+      zip         - install a staged OTN/eDelivery image zip (make dsdemo-par DB26_ZIP=1)
+  EOT
+  default     = "autoupgrade"
+
+  validation {
+    condition     = contains(["autoupgrade", "zip"], var.db26_install_method)
+    error_message = "db26_install_method must be autoupgrade or zip."
+  }
 }
 
 variable "ds_connector_name" {
@@ -330,7 +429,7 @@ variable "ds_connector_name" {
 
 variable "ds_connector_port" {
   type        = number
-  description = "Local port of the connector CMAN. Not 1521 - podman publishes the database listener there."
+  description = "Local port of the connector CMAN. Not 1521 - the database listener listens there."
   default     = 1561
 }
 

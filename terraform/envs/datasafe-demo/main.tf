@@ -7,19 +7,22 @@
 # Date.......: 2026.10.19
 # Version....: v0.1.0
 # Purpose....: Assemble the datasafe-demo stack for LRN6087: naming, own core
-#              (network + Bastion), one OL8 x86 host for the Oracle AI
-#              Database 26ai Free container and the Data Safe connector.
+#              (network + Bastion), one OL8 x86 host with a data volume for
+#              Oracle Database 19c EE and Oracle AI Database 26ai EE (native,
+#              no container) and the Data Safe on-premises connector.
 # Notes......: Stack-code "dsdemo". Pattern follows envs/cpu-patch-test. The
 #              core module is instantiated here with core_owner = "dsdemo",
 #              so a destroy of this stack removes its own VCN and Bastion and
 #              never touches a shared core. No compartment is created.
-#              Podman, the container, the PDBs, odb_datasafe and the connector
-#              are installed by Ansible (playbooks/lab-datasafe-demo.yml).
+#              Homes, CDBs, PDBs, OraDBA, odb_datasafe and the connector are
+#              installed by Ansible (playbooks/lab-datasafe-demo.yml, role
+#              oracle_db_native).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.10.19 oehrli - initial version
+# 2026.10.20 oehrli - native 19c + 26ai EE, data volume, start/stop schedules
 # ------------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -214,11 +217,11 @@ resource "terraform_data" "ssh_key_guard" {
 }
 
 # ---------------------------------------------------------------------------
-# Database SYS / SYSTEM / PDBADMIN password (ORACLE_PWD of the container)
+# Database SYS / SYSTEM / PDBADMIN password and AutoUpgrade keystore password
 # ---------------------------------------------------------------------------
 # Generated so no secret has to be managed for a throw-away lab. Lives in the
 # local, git-ignored state. Oracle rules: start with a letter, then letters,
-# digits and # _ only.
+# digits and # _ only. Same pattern as envs/cpu-patch-test.
 
 resource "random_password" "db_sys" {
   length           = 24
@@ -229,8 +232,20 @@ resource "random_password" "db_sys" {
   override_special = "#_"
 }
 
+# Protects the AutoUpgrade keystore holding the MOS credentials. Only needed
+# once: with auto-login enabled (cwallet.sso) later runs are unattended.
+resource "random_password" "autoupgrade_keystore" {
+  length           = 20
+  min_upper        = 2
+  min_lower        = 2
+  min_numeric      = 2
+  min_special      = 2
+  override_special = "#_"
+}
+
 locals {
-  db_sys_password = "Ora${random_password.db_sys.result}"
+  db_sys_password               = "Ora${random_password.db_sys.result}"
+  autoupgrade_keystore_password = "Aup${random_password.autoupgrade_keystore.result}"
 }
 
 # ---------------------------------------------------------------------------
@@ -258,6 +273,10 @@ module "oracle_db_host" {
   boot_volume_size_gbs = var.db_host_boot_volume_size_gbs
   assign_public_ip     = false
 
+  attach_data_volume      = var.attach_data_volume
+  data_volume_size_gbs    = var.data_volume_size_gbs
+  data_volume_vpus_per_gb = var.data_volume_vpus_per_gb
+
   ssh_public_keys   = local.ssh_public_keys
   allowed_ssh_cidrs = var.allowed_ssh_cidrs
   egress_https_only = var.egress_https_only
@@ -270,23 +289,79 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Resource Scheduler - daily auto-stop (cost)
+# Resource Scheduler - daily start and stop (cost)
 # ---------------------------------------------------------------------------
+# Working hours 07:00-22:00 local, expressed in UTC because OCI evaluates the
+# cron in UTC. Europe leaves CEST on 2026-10-25, Las Vegas stays on PDT until
+# 2026-11-01 - the profile is switched by hand with a terraform apply. For pdt
+# the 22:00 stop is 05:00 UTC of the next day; as a daily cron that is simply
+# "0 5 * * *", the first stop after the switch falls on the following morning.
 
-resource "oci_resource_scheduler_schedule" "db_host_stop" {
-  count = var.enable_auto_stop ? 1 : 0
+locals {
+  schedule_profiles = {
+    cest = { start = "0 5 * * *", stop = "0 20 * * *" }
+    cet  = { start = "0 6 * * *", stop = "0 21 * * *" }
+    pdt  = { start = "0 14 * * *", stop = "0 5 * * *" }
+  }
+
+  schedule_enabled = var.schedule_profile != "off"
+  schedule_start_cron = local.schedule_enabled ? coalesce(
+    var.schedule_start_cron, local.schedule_profiles[var.schedule_profile].start
+  ) : null
+  schedule_stop_cron = local.schedule_enabled ? coalesce(
+    var.schedule_stop_cron, local.schedule_profiles[var.schedule_profile].stop
+  ) : null
+}
+
+resource "oci_resource_scheduler_schedule" "db_host_start" {
+  count = local.schedule_enabled ? 1 : 0
 
   compartment_id = local.compartment_ocid
-  display_name   = "sched-${local.lab_name_core}-db-stop-01"
-  description    = "Daily stop of the LRN6087 Data Safe demo host. Start manually before rehearsal or session."
-  action         = "STOP_RESOURCE"
+  display_name   = "sched-${local.lab_name_core}-db-start-01"
+  description    = "Daily start of the LRN6087 Data Safe demo host (profile ${var.schedule_profile}, 07:00 local)."
+  action         = "START_RESOURCE"
 
   recurrence_type    = "CRON"
-  recurrence_details = var.auto_stop_cron
+  recurrence_details = local.schedule_start_cron
 
   resources {
     id = local.db_host_id
   }
+
+  freeform_tags = local.base_freeform_tags
+}
+
+resource "oci_resource_scheduler_schedule" "db_host_stop" {
+  count = local.schedule_enabled ? 1 : 0
+
+  compartment_id = local.compartment_ocid
+  display_name   = "sched-${local.lab_name_core}-db-stop-01"
+  description    = "Daily stop of the LRN6087 Data Safe demo host (profile ${var.schedule_profile}, 22:00 local)."
+  action         = "STOP_RESOURCE"
+
+  recurrence_type    = "CRON"
+  recurrence_details = local.schedule_stop_cron
+
+  resources {
+    id = local.db_host_id
+  }
+
+  freeform_tags = local.base_freeform_tags
+}
+
+# A schedule acts as its own principal (request.principal.type =
+# resourceschedule) and needs a policy to touch the instance. Scoped to the two
+# schedules of this stack and the demo compartment.
+resource "oci_identity_policy" "scheduler" {
+  count = local.schedule_enabled && var.create_scheduler_policy ? 1 : 0
+
+  compartment_id = local.compartment_ocid
+  name           = "pol-${local.lab_name_core}-sched-01"
+  description    = "LRN6087 demo start/stop schedules may start and stop the demo host"
+  statements = [
+    for id in [oci_resource_scheduler_schedule.db_host_start[0].id, oci_resource_scheduler_schedule.db_host_stop[0].id] :
+    "Allow any-user to manage instance in compartment id ${local.compartment_ocid} where all {request.principal.type = 'resourceschedule', request.principal.id = '${id}'}"
+  ]
 
   freeform_tags = local.base_freeform_tags
 }
@@ -336,15 +411,21 @@ locals {
       vars = merge({
         ansible_user               = "opc"
         ansible_python_interpreter = var.ansible_python_interpreter
-        oracle_sid                 = var.oracle_sid
-        dsdemo_pdbs                = var.demo_pdbs
-        dsdemo_new_pdb             = var.demo_new_pdb
-        dsdemo_connector_name      = var.ds_connector_name
-        dsdemo_connector_port      = var.ds_connector_port
-        dsdemo_compartment_ocid    = local.compartment_ocid
-        dsdemo_region              = var.region
-        dsdemo_host_private_ip     = local.db_host_private_ip
-        dsdemo_instance_principal  = var.enable_instance_principal
+        oradb_cdb19_name           = var.cdb19_name
+        oradb_cdb19_pdbs           = var.cdb19_pdbs
+        oradb_cdb26_name           = var.cdb26_name
+        oradb_cdb26_pdbs           = var.cdb26_pdbs
+        oradb_live_pdb             = var.demo_new_pdb
+        oradb19_ru                 = var.db19_ru
+        oradb26_ru                 = var.db26_ru
+        oradb26_install_method     = var.db26_install_method
+        oradb_data_volume          = var.attach_data_volume
+        oradb_connector_name       = var.ds_connector_name
+        oradb_connector_port       = var.ds_connector_port
+        oradb_compartment_ocid     = local.compartment_ocid
+        oradb_region               = var.region
+        oradb_host_private_ip      = local.db_host_private_ip
+        oradb_instance_principal   = var.enable_instance_principal
         },
         var.generate_lab_keypair ? {
           ansible_ssh_private_key_file = local_sensitive_file.lab_private_key[0].filename

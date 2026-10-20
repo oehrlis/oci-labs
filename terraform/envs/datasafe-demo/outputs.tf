@@ -32,8 +32,14 @@ output "region" {
 }
 
 output "db_sys_password" {
-  description = "Generated ORACLE_PWD (SYS, SYSTEM, PDBADMIN) of the Free container. Used by make/Ansible only."
+  description = "Generated SYS, SYSTEM and PDBADMIN password of CDB19 and CDB26. Used by make/Ansible only."
   value       = local.db_sys_password
+  sensitive   = true
+}
+
+output "autoupgrade_keystore_password" {
+  description = "Generated password of the AutoUpgrade keystore (MOS credentials). Used by make/Ansible only."
+  value       = local.autoupgrade_keystore_password
   sensitive   = true
 }
 
@@ -73,7 +79,7 @@ output "db_private_ips" {
 }
 
 output "db_private_ip" {
-  description = "Private IP of the demo host - listener address the connector uses."
+  description = "Private IP of the demo host - listener address the connector uses (both CDBs, port 1521)."
   value       = local.db_host_private_ip
 }
 
@@ -97,9 +103,20 @@ output "bastion_id" {
   value       = module.core.bastion_id
 }
 
-output "auto_stop_schedule_id" {
-  description = "OCID of the auto-stop schedule (null when enable_auto_stop = false)."
-  value       = one(oci_resource_scheduler_schedule.db_host_stop[*].id)
+output "data_volume_id" {
+  description = "OCID of the data volume mounted on /u01 (null when attach_data_volume = false)."
+  value       = try(module.oracle_db_host.data_volume_ids["01"], null)
+}
+
+output "schedule" {
+  description = "Active start/stop profile and its UTC cron expressions (null crons when schedule_profile = off)."
+  value = {
+    profile    = var.schedule_profile
+    start_cron = local.schedule_start_cron
+    stop_cron  = local.schedule_stop_cron
+    start_id   = one(oci_resource_scheduler_schedule.db_host_start[*].id)
+    stop_id    = one(oci_resource_scheduler_schedule.db_host_stop[*].id)
+  }
 }
 
 output "instance_principal_dynamic_group" {
