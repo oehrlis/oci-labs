@@ -757,11 +757,13 @@ cpu-lab-logs: guard-terraform ## Print the log locations on the lab host
 # ==============================================================================
 # LRN6087 Data Safe demo (terraform/envs/datasafe-demo)
 # ==============================================================================
-# One OL8 host: Oracle AI Database 26ai Free in Podman, Data Safe connector,
+# One OL8 host: Oracle Database 19c EE (CDB19) and Oracle AI Database 26ai EE
+# (CDB26) installed natively, Data Safe connector managed with OraDBA,
 # odb_datasafe. The host has no public IP - every Ansible run and every demo
 # script goes through the Bastion tunnel opened by dsdemo-tunnel. Runbook:
-# docs/datasafe-demo.md. Secrets: SYS password from terraform output, Data
-# Safe secret via op read of $DSDEMO_OP_DS_SECRET (set in the env .env).
+# docs/datasafe-demo.md. Secrets: SYS and keystore password from terraform
+# output, MOS credentials via op read of $(OP_MOS_USER) / $(OP_MOS_PASS), Data
+# Safe secret via op read of $DSDEMO_OP_DS_SECRET, media PARs from the env .env.
 
 DSDEMO_ENV_DIR := $(TF_DIR)/envs/datasafe-demo
 DSDEMO_ENV_FILE := $(DSDEMO_ENV_DIR)/.env
@@ -778,17 +780,22 @@ guard-dsdemo-env:
 	  { echo "❌ $(DSDEMO_ENV_FILE) missing - copy it from .env.example"; exit 1; }
 
 # Same pattern as cpu_lab_ansible_secrets: 0600 JSON file, values via the
-# environment, never on an argv.
+# environment, never on an argv. The PAR URLs are bearer credentials as well.
 define dsdemo_ansible_secrets
 umask 077; \
 set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
 [[ -n "$${DSDEMO_OP_DS_SECRET:-}" ]] || { echo "❌ DSDEMO_OP_DS_SECRET not set in $(DSDEMO_ENV_FILE)"; exit 1; }; \
 ds_secret="$$("$(OP)" read "$$DSDEMO_OP_DS_SECRET")" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
 sys_pass="$$(cd "$(DSDEMO_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password)" || { echo "❌ no db_sys_password - run make dsdemo-apply"; exit 1; }; \
+ks_pass="$$(cd "$(DSDEMO_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password)" || { echo "❌ no autoupgrade_keystore_password - run make dsdemo-apply"; exit 1; }; \
+[[ -n "$${DSDEMO_DB19_BASE_IMAGE_URL:-}" ]] || echo "⚠️  DSDEMO_DB19_BASE_IMAGE_URL not set - the 19c base image must already be in /opt/stage (make dsdemo-par)"; \
 vars_file="$$(mktemp "$${TMPDIR:-/tmp}/dsdemo-vars.XXXXXX")"; \
 trap 'rm -f "$$vars_file"' EXIT INT TERM; \
-DS_SECRET="$$ds_secret" SYS_PASS="$$sys_pass" \
-  python3 -c 'import json, os, sys; json.dump({"dsdemo_ds_secret": os.environ["DS_SECRET"], "dsdemo_sys_password": os.environ["SYS_PASS"]}, open(sys.argv[1], "w"))' "$$vars_file"
+DS_SECRET="$$ds_secret" SYS_PASS="$$sys_pass" MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" KS_PASS="$$ks_pass" \
+  DB19_URL="$${DSDEMO_DB19_BASE_IMAGE_URL:-}" DB26_URL="$${DSDEMO_DB26_HOME_ZIP_URL:-}" \
+  python3 -c 'import json, os, sys; json.dump({"oradb_ds_secret": os.environ["DS_SECRET"], "oradb_sys_password": os.environ["SYS_PASS"], "mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"], "oradb19_base_image_url": os.environ["DB19_URL"], "oradb26_home_zip_url": os.environ["DB26_URL"]}, open(sys.argv[1], "w"))' "$$vars_file"
 endef
 
 .PHONY: dsdemo-plan
@@ -809,14 +816,14 @@ dsdemo-tunnel: guard-oci guard-terraform guard-dsdemo-env ## Open the Bastion tu
 	$(Q)"$(DSDEMO_DEMO_DIR)/tunnel.sh" --port "$(DSDEMO_LOCAL_PORT)"
 
 .PHONY: dsdemo-install
-dsdemo-install: guard-ansible guard-op guard-terraform guard-dsdemo-env ## Install podman, Free container, PDBs, DS accounts, connector
+dsdemo-install: guard-ansible guard-op guard-terraform guard-dsdemo-env ## Install 19c + 26ai EE, CDBs/PDBs, OraDBA, DS accounts, connector
 	$(Q)$(dsdemo_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(DSDEMO_INVENTORY)" "$(DSDEMO_PLAYBOOK)" \
 	    --tags install -e @"$$vars_file" $(DSDEMO_ANSIBLE_TUNNEL) $(ANSIBLE_EXTRA)
 
 .PHONY: dsdemo-step
-dsdemo-step: guard-ansible guard-op guard-terraform guard-dsdemo-env ## Run one tag: make dsdemo-step TAG=connector
-	@[[ -n "$(TAG)" ]] || { echo "❌ TAG is required, e.g. make dsdemo-step TAG=verify"; exit 1; }
+dsdemo-step: guard-ansible guard-op guard-terraform guard-dsdemo-env ## Run one tag: make dsdemo-step TAG=home26
+	@[[ -n "$(TAG)" ]] || { echo "❌ TAG is required, e.g. make dsdemo-step TAG=verify (storage prereq oradba homes home19 home26 databases odb_datasafe ds_prereqs connector verify)"; exit 1; }
 	$(Q)$(dsdemo_ansible_secrets); \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(DSDEMO_INVENTORY)" "$(DSDEMO_PLAYBOOK)" \
 	    --tags "$(TAG)" -e @"$$vars_file" $(DSDEMO_ANSIBLE_TUNNEL) $(ANSIBLE_EXTRA)
@@ -826,8 +833,77 @@ dsdemo-verify: guard-ansible guard-dsdemo-env ## Read-only check of the demo hos
 	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(DSDEMO_INVENTORY)" "$(DSDEMO_PLAYBOOK)" \
 	  --tags verify $(DSDEMO_ANSIBLE_TUNNEL) $(ANSIBLE_EXTRA)
 
-# Stop is not destroy: boot volume, container, PDBs and connector survive and
-# only block storage is billed. The Bastion session does not survive a stop.
+# ------------------------------------------------------------------------------
+# Start/stop schedule profile
+# ------------------------------------------------------------------------------
+# Rewrites schedule_profile in terraform.tfvars and plans; dsdemo-apply then
+# switches the two Resource Scheduler schedules. cest until 2026-10-24, cet from
+# 2026-10-25, pdt for the Las Vegas week (see docs/datasafe-demo.md).
+.PHONY: dsdemo-schedule
+dsdemo-schedule: guard-terraform guard-dsdemo-env ## Set the start/stop profile and plan: make dsdemo-schedule PROFILE=pdt
+	@[[ "$(PROFILE)" =~ ^(cest|cet|pdt|off)$$ ]] || { echo "❌ PROFILE must be cest, cet, pdt or off"; exit 1; }
+	$(Q)cd "$(DSDEMO_ENV_DIR)" && touch terraform.tfvars && \
+	  grep -v '^schedule_profile' terraform.tfvars > terraform.tfvars.new; \
+	  printf 'schedule_profile = "%s"\n' "$(PROFILE)" >> terraform.tfvars.new; \
+	  mv -f terraform.tfvars.new terraform.tfvars; \
+	  echo "schedule_profile = $(PROFILE) written to terraform.tfvars"
+	@$(MAKE) --no-print-directory dsdemo-plan
+	@echo "Review the plan, then: make dsdemo-apply"
+
+# ------------------------------------------------------------------------------
+# Media pre-authenticated requests
+# ------------------------------------------------------------------------------
+# The 19c base image cannot come from MOS (see the cpu-lab PAR section). The
+# demo reads it from the same kind of bucket through a short-lived ObjectRead
+# PAR on one object. DB26_ZIP=1 adds a PAR for the 26ai image zip, needed only
+# for db26_install_method = "zip". The profile is DSDEMO_PAR_PROFILE - the
+# tenancy that owns the bucket, not necessarily the demo tenancy. The URL lands
+# in the git-ignored .env and from there in the 0600 Ansible vars file.
+DSDEMO_PAR_NAME := dsdemo-media
+DSDEMO_PAR_DAYS ?= 3
+
+define dsdemo_mint_par
+obj="$(1)"; var="$(2)"; \
+expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(DSDEMO_PAR_DAYS)")"; \
+echo "Minting ObjectRead PAR for $$obj in $$bucket (profile $$profile, expires $$expires)"; \
+uri="$$("$(OCI)" --profile "$$profile" os preauth-request create --bucket-name "$$bucket" --name "$(DSDEMO_PAR_NAME)" --object-name "$$obj" --access-type ObjectRead --time-expires "$$expires" --query 'data."full-path"' --raw-output)"; \
+[[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
+code="$$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "$$uri")"; \
+[[ "$$code" == "200" ]] || { echo "❌ PAR does not serve $$obj (HTTP $$code)"; exit 1; }; \
+grep -v "^export $$var=" "$(DSDEMO_ENV_FILE)" > "$(DSDEMO_ENV_FILE).new" || true; \
+printf 'export %s="%s"\n' "$$var" "$$uri" >> "$(DSDEMO_ENV_FILE).new"; \
+mv -f "$(DSDEMO_ENV_FILE).new" "$(DSDEMO_ENV_FILE)"; chmod 600 "$(DSDEMO_ENV_FILE)"; \
+echo "  verified HTTP $$code, written $$var to $(DSDEMO_ENV_FILE) (token not echoed)"
+endef
+
+.PHONY: dsdemo-par
+dsdemo-par: guard-oci guard-dsdemo-env ## Mint media PARs into .env (19c base image; DB26_ZIP=1 adds the 26ai zip)
+	$(Q)set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
+	  profile="$${DSDEMO_PAR_PROFILE:-DEFAULT}"; bucket="$${DSDEMO_PAR_BUCKET:-$(PAR_BUCKET)}"; \
+	  $(call dsdemo_mint_par,$(PAR_OBJECT),DSDEMO_DB19_BASE_IMAGE_URL); \
+	  if [[ "$(DB26_ZIP)" == "1" ]]; then \
+	    $(call dsdemo_mint_par,$${DSDEMO_DB26_ZIP_OBJECT:-LINUX.X64_2326100_db_home.zip},DSDEMO_DB26_HOME_ZIP_URL); \
+	  fi
+	@echo "✅ PAR(s) ready - revoke after the install with: make dsdemo-par-revoke"
+
+.PHONY: dsdemo-par-revoke
+dsdemo-par-revoke: guard-oci guard-dsdemo-env ## Revoke the media PARs and remove them from .env
+	$(Q)set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
+	  profile="$${DSDEMO_PAR_PROFILE:-DEFAULT}"; bucket="$${DSDEMO_PAR_BUCKET:-$(PAR_BUCKET)}"; \
+	  ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$$bucket" \
+	      --query 'data[?name==`$(DSDEMO_PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
+	  [[ -n "$$ids" ]] || echo "No PAR named $(DSDEMO_PAR_NAME) in $$bucket."; \
+	  for id in $$ids; do \
+	    echo "Revoking $$id"; \
+	    "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$$bucket" --par-id "$$id" --force; \
+	  done; \
+	  grep -vE '^export DSDEMO_DB(19_BASE_IMAGE|26_HOME_ZIP)_URL=' "$(DSDEMO_ENV_FILE)" > "$(DSDEMO_ENV_FILE).new" || true; \
+	  mv -f "$(DSDEMO_ENV_FILE).new" "$(DSDEMO_ENV_FILE)"; chmod 600 "$(DSDEMO_ENV_FILE)"
+	@echo "✅ Media PARs revoked and removed from $(DSDEMO_ENV_FILE)"
+
+# Stop is not destroy: boot volume, data volume, homes, CDBs and connector
+# survive and only block storage is billed. oradba-services and the connector
+# unit start everything again on boot. The Bastion session does not survive.
 .PHONY: dsdemo-stop
 dsdemo-stop: guard-oci guard-terraform guard-dsdemo-env ## Stop the demo host (cost), nothing is deleted
 	$(Q)set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
@@ -837,7 +913,7 @@ dsdemo-stop: guard-oci guard-terraform guard-dsdemo-env ## Stop the demo host (c
 	@echo "✅ Demo host stopped - start again with: make dsdemo-start"
 
 .PHONY: dsdemo-start
-dsdemo-start: guard-oci guard-terraform guard-dsdemo-env ## Start the demo host (database and connector start via systemd)
+dsdemo-start: guard-oci guard-terraform guard-dsdemo-env ## Start the demo host (CDBs via oradba-services, connector via systemd)
 	$(Q)set -a; . "$(DSDEMO_ENV_FILE)"; set +a; \
 	  id="$$(cd "$(DSDEMO_ENV_DIR)" && "$(TERRAFORM)" output -raw db_instance_id)"; \
 	  "$(OCI)" --profile "$${TF_VAR_oci_config_profile:-DEFAULT}" compute instance action --action START \
