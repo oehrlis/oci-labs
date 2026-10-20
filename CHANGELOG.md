@@ -43,7 +43,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (six steps: AIPDB1 created live in CDB26, registration through `ds_target_register.sh --type` when
   available, else OCI CLI; connector managed with OraDBA), reset, Bastion tunnel and a synthetic fleet
   snapshot generator in `demos/datasafe-lrn6087/`. `dsdemo-*` Makefile targets incl. `dsdemo-schedule`,
-  `dsdemo-par` and `dsdemo-par-revoke`; runbook `docs/datasafe-demo.md`.
+  `dsdemo-par` and `dsdemo-par-revoke`; runbook `docs/datasafe-demo.md`. Decisions 2026-10-20: targets
+  are registered as `ON_PREMISES` (`--type onprem`, OCI CLI payload without `instanceId`); step 6 restarts
+  the connector and waits until Data Safe reports it ACTIVE (timeout); 19c and 26ai RUs are not pinned by
+  default (latest at install time, optional `db19_ru` / `db26_ru`, resolved releases reported by verify);
+  odb_datasafe version and SHA-256 overridable from Terraform for the 1.3.0 bump (default stays 1.2.1).
 - **oracle_db_host**: optional `egress_https_only` (NSG egress TCP 443 plus intra-VCN). Default `false`;
   a `moved` block keeps existing stacks free of a rule replacement.
 - **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks

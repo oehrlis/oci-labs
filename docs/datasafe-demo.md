@@ -19,8 +19,8 @@ ACE-Tenancy, eu-zurich-1, bestehendes Compartment (wird nie angelegt oder geloes
   ci-zrh-lab-dsdemo-01-db-01 (VM.Standard.E4.Flex, 4 OCPU, 32 GB, OL8)
     Boot Volume 150 GB: /u00 (ORACLE_BASE, beide Homes), /u02 (FRA), /opt/stage (Medien)
     Data Volume 100 GB: /u01 (Datafiles, xfs, LABEL=u01data)
-    19c EE Home (RU 19.32)  -> CDB19: CDB$ROOT, PDB19A, PDB19B   -> 3 Targets
-    26ai EE Home (RU latest) -> CDB26: CDB$ROOT, PDB26A, PDB26B  -> 3 Targets
+    19c EE Home (neuestes RU)  -> CDB19: CDB$ROOT, PDB19A, PDB19B   -> 3 Targets (ON_PREMISES)
+    26ai EE Home (neuestes RU) -> CDB26: CDB$ROOT, PDB26A, PDB26B  -> 3 Targets (ON_PREMISES)
       AIPDB1 -> wird in Schritt 2 live in CDB26 angelegt und registriert, reset.sh entfernt sie
     LISTENER (26ai Home, Port 1521) fuer beide CDBs
     OraDBA (oradba-services.service), odb_datasafe 1.2.1
@@ -53,12 +53,20 @@ Laptop: Bastion-Tunnel 127.0.0.1:2222, eigene odb_datasafe-Kopie, OCI CLI Profil
 
 ## Herkunft der Oracle-Software
 
-- **19c EE:** AutoUpgrade laedt RU 19.32 und OPatch von MOS (`db19_engineering` download/create_home). Das
+- **RU ohne Pin (Default):** `db19_ru = ""` und `db26_ru = ""` heissen `patch=RU,OPATCH` - AutoUpgrade nimmt das
+  neueste RU, das MOS zum Installationszeitpunkt anbietet (19c am 2026-10-20: 19.32, bei einem Neuaufbau nach dem
+  Oktober-RU 19.33). `RECOMMENDED` wuerde OJVM, Data-Pump-Bundle und ein MRP dazunehmen - mehr Download ohne Nutzen
+  fuer Data Safe; bei Bedarf die Rollenvariable `oradb19_patch_list` setzen
+  (`ANSIBLE_EXTRA="-e oradb19_patch_list=RECOMMENDED,OPATCH"`). Ein Pin (`db19_ru = "19.32"`) gibt `RU:19.32,OPATCH` und
+  einen versionierten Home-Pfad, ohne Pin heissen die Homes `product/19c/dbhome_1` und `product/26ai/dbhome_1`.
+- **Was die Lab-Umgebung tatsaechlich faehrt:** `make dsdemo-verify` meldet pro CDB `version_full` aus `v$instance`
+  und schreibt es nach `/u00/app/oracle/etc/dsdemo-releases.txt` auf dem Host. Den aufgeloesten 19c-Patch-Satz legt
+  `db19_engineering` als `/opt/stage/patchset-latest.txt` ab, das 26ai-Home meldet der Lauf per `opatch lsinventory`.
+- **19c EE:** AutoUpgrade laedt RU und OPatch von MOS (`db19_engineering` download/create_home, unveraendert). Das
   Basis-Image 19.3 liefert AutoUpgrade fuer 19c nie - es kommt per kurzlebigem PAR aus dem Bucket
-  (`make dsdemo-par`). AutoUpgrade bietet nur das aktuelle und das vorherige RU an; `db19_ru` jedes Quartal anheben.
+  (`make dsdemo-par`). AutoUpgrade bietet nur das aktuelle und das vorherige RU an - ein alter Pin laeuft ins Leere.
 - **26ai EE:** AutoUpgrade `create_home` mit `download=yes` und `target_version=23` laedt das RU als Gold Image von
-  MOS - ein vollstaendiges Home, kein Basis-Image noetig. `db26_ru = ""` heisst "neuestes RU" (`patch=RU,OPATCH`);
-  nach dem ersten Lauf das aufgeloeste RU (Report von `opatch lsinventory`) in `db26_ru` festschreiben.
+  MOS - ein vollstaendiges Home, kein Basis-Image noetig.
   Quellen: [oracle-base, AutoUpgrade download and install](https://oracle-base.com/articles/misc/autoupgrade-download-and-install-oracle-database-software),
   [dbi services, 26ai mit AutoUpgrade](https://www.dbi-services.com/blog/autoupgrade-powered-easy-download-and-installation-of-oracle-ai-database-26ai-on-linux/),
   [AutoUpgrade Parameter](https://docs.oracle.com/en/database/oracle/oracle-database/26/upgrd/autoupgrade-command-line-parameters.html).
@@ -187,10 +195,25 @@ $EDITOR demos/datasafe-lrn6087/demo.env
 Die Pruefsumme muss `fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401` lauten. Die `.env` muss
 `0600` sein: odb_datasafe ignoriert eine group- oder world-schreibbare `.env` und meldet das als ERROR.
 
-Sobald ein odb_datasafe-Release `ds_target_register.sh --type compute|onprem` enthaelt (Branch
-`feat/register-onprem`), dafuer eine neue Kopie anlegen und `DEMO_ODB_BASE` darauf zeigen. `demo.sh` erkennt die
-Option ueber `--help` (`DEMO_REGISTER_MODE=auto`) und registriert dann mit odb_datasafe statt mit der OCI CLI;
-`demo.sh check` zeigt den gewaehlten Weg.
+### Umstieg auf odb_datasafe 1.3.0
+
+1.3.0 bringt `ds_target_register.sh --type onprem` (Branch `feat/register-onprem`). Bis das Release-Asset existiert,
+bleibt 1.2.1 der Default (Host und Laptop). Nach dem Release die Pruefsumme aus dem Asset ermitteln - nie raten:
+
+```bash
+gh release download v1.3.0 -R oehrlis/odb_datasafe -p 'odb_datasafe-1.3.0.tar.gz*' -D ~/demo
+(cd ~/demo && shasum -a 256 odb_datasafe-1.3.0.tar.gz && cat odb_datasafe-1.3.0.tar.gz.sha256)
+```
+
+Beide Werte muessen gleich sein. Dann:
+
+- Host: in `terraform/envs/datasafe-demo/terraform.tfvars` `odb_datasafe_version = "1.3.0"` und
+  `odb_datasafe_sha256 = "<wert>"` setzen, `make dsdemo-plan && make dsdemo-apply` (aendert nur das Inventory),
+  danach `make dsdemo-step TAG=odb_datasafe` - die Rolle packt bei abweichender Version ueber den Bestand aus, die
+  `.env` bleibt.
+- Laptop: neue Kopie `~/demo/odb_datasafe-1.3.0` wie oben anlegen, `.env` uebernehmen (`0600`) und in `demo.env`
+  `DEMO_ODB_BASE` darauf zeigen. `demo.sh` erkennt `--type` ueber `--help` (`DEMO_REGISTER_MODE=auto`) und
+  registriert dann mit odb_datasafe statt mit der OCI CLI; `demo.sh check` zeigt den gewaehlten Weg.
 
 ### Tag-Namespace und Start-Targets
 
@@ -213,10 +236,10 @@ demos/datasafe-lrn6087/demo.sh check
 demos/datasafe-lrn6087/demo.sh step 1
 ```
 
-Erwartet: Listener up mit den Services beider CDBs, PDB19A/PDB19B und PDB26A/PDB26B READ WRITE (PDB$SEED READ
-ONLY), `ds_database_prereqs.sh --check` pro CDB mit rc 0, Connector-Service running und `oradba_dsctl.sh status` fuer
-`dscon1`, in der Konsole die sechs Targets ACTIVE. Schritt 1 zeigt 55 Sample-Targets: 45 ACTIVE, 7 NEEDS_ATTENTION,
-3 INACTIVE.
+Erwartet: `Releases` mit dem RU beider CDBs (z. B. `CDB19 19.32.0.0.0`), Listener up mit den Services beider CDBs,
+PDB19A/PDB19B und PDB26A/PDB26B READ WRITE (PDB$SEED READ ONLY), `ds_database_prereqs.sh --check` pro CDB mit rc 0,
+Connector-Service running und `oradba_dsctl.sh status` fuer `dscon1`, in der Konsole die sechs Targets ACTIVE.
+Schritt 1 zeigt 55 Sample-Targets: 45 ACTIVE, 7 NEEDS_ATTENTION, 3 INACTIVE.
 
 ## Demo fahren
 
@@ -242,7 +265,11 @@ demos/datasafe-lrn6087/demo.sh run
 | 3 | Tags: ungetaggte Targets finden, `ds_target_update_tags.sh` ohne und mit `--apply` |
 | 4 | Audit Trail: Zustand, Start fuer AIPDB1, Kontrolle |
 | 5 | Security Assessment refresh und HIGH-Findings mit der OCI CLI |
-| 6 | Connector mit OraDBA verwaltet: `oradba_dsctl.sh services` und `status` (`DEMO_CONNECTOR_RESTART=TRUE` zeigt zusaetzlich `restart`) |
+| 6 | Connector mit OraDBA verwaltet: `oradba_dsctl.sh services`, `status`, `restart`, `status`, dann warten bis Data Safe ihn wieder ACTIVE meldet |
+
+Schritt 6 wartet nach dem Restart `DEMO_CONNECTOR_GRACE` (20 s) und pollt dann alle `DEMO_CONNECTOR_POLL` (10 s) den
+Connector-Zustand in Data Safe, bis er ACTIVE ist; nach `DEMO_CONNECTOR_TIMEOUT` (300 s) bricht er mit einer klaren
+Meldung ab. `DEMO_CONNECTOR_RESTART=FALSE` zeigt nur `services` und `status`.
 
 Fuer das Recording ohne Pausen `--no-pause`, einzelne Schritte mit `demo.sh step <1-6>`. Dauert das Anlegen von
 AIPDB1 live zu lange, vor der Session `demo.sh prepare` - Schritt 2 erkennt die vorhandene PDB und macht weiter.
@@ -304,8 +331,9 @@ Damit die Schedules die Instanz ueberhaupt starten und stoppen duerfen, legt Ter
 - VM.Standard.E4.Flex mit 4 OCPU und 32 GB statt 2 OCPU und 16 GB - etwa doppelte Compute-Kosten pro Laufstunde,
   durch das 15-Stunden-Fenster (Start/Stopp) begrenzt.
 - Boot Volume 150 statt 100 GB, neu ein Data Volume 100 GB mit 10 VPU/GB - Block Storage laeuft auch im Stop weiter.
-- Data Safe fuer Compute-Datenbanken ist bis 2027-02-28 ohne Gebuehren (Promotion); Audit ueber dem inkludierten
-  Volumen kostet.
+- Die Targets sind als `ON_PREMISES` registriert (Entscheid 2026-10-20). Die Promotion fuer Compute-Datenbanken
+  (ohne Gebuehren bis 2027-02-28) gilt dafuer nicht automatisch - Preis fuer On-Premises-Targets und das
+  Audit-Volumen ueber dem inkludierten Umfang pruefen.
 - Lizenz: OTN Developer License (siehe oben), keine Lizenzkosten fuer die Demo.
 
 ## Teardown
@@ -343,9 +371,8 @@ Gegen odb_datasafe 1.2.1 offline geprueft (OCI CLI durch einen Stub ersetzt, nul
 
 - **`ds_target_register.sh` (1.2.1) kennt nur ExaCC/Cloud Service.** Der Payload ist fest
   `DATABASE_CLOUD_SERVICE` / `CLOUD_AT_CUSTOMER`. Mit 1.2.1 registriert `demo.sh` deshalb per OCI CLI
-  (`INSTALLED_DATABASE`, `instanceId`, `ipAddresses`, `listenerPort`, `serviceName`, `ONPREM_CONNECTOR`) und zeigt
-  auf dem Bildschirm die Folienzeile. Mit einem Release, das `--type compute|onprem` kennt, nimmt `demo.sh` den
-  odb_datasafe-Weg automatisch.
+  (`INSTALLED_DATABASE`, `ON_PREMISES`, `ipAddresses`, `listenerPort`, `serviceName`, `ONPREM_CONNECTOR`) und zeigt
+  auf dem Bildschirm die Folienzeile. Ab 1.3.0 (`--type onprem`) nimmt `demo.sh` den odb_datasafe-Weg automatisch.
 - **Kein Instance Principal in odb_datasafe.** Die Skripte uebergeben immer `--config-file` und `--profile`; der
   Host bekommt deshalb ein schluesselloses `~/.oci/config` (nur Region) und `OCI_CLI_AUTH=instance_principal`.
 - **`--input-json` mit `-A`** schreibt eine WARN-Zeile ("ignoring OCI selection flags"). `demo.sh` zeigt deshalb
@@ -360,22 +387,24 @@ Gegen odb_datasafe 1.2.1 offline geprueft (OCI CLI durch einen Stub ersetzt, nul
 
 - **Folien 20/21:** Platzhalter `CDB01` -> real `CDB26` (Live-PDB) bzw. `CDB19`, `lab` -> echter Compartment-Name;
   die Demo hat jetzt einen sechsten Schritt (Connector mit OraDBA) - Folie 20 ergaenzen oder Schritt 6 nur zeigen?
-- **odb_datasafe mit `--type`:** Release vor dem 27.10. (dann Laptop-Kopie und Host-Version `oradb_odb_datasafe_version`
-  plus SHA256 nachziehen) oder OCI-CLI-Weg mit Folienzeile auf dem Bildschirm?
-- **Infrastructure-Type:** `ORACLE_CLOUD` + `instanceId` (`--type compute`, faellt unter die Promotion) mit
-  On-Premises Connector - in der Data Safe Doku verifizieren; sonst `DEMO_INFRA_TYPE=ON_PREMISES` (Kosten pruefen).
+- **odb_datasafe 1.3.0:** Release-Asset und Tag stehen aus; danach SHA256 ermitteln und Host plus Laptop umstellen
+  ([Umstieg auf odb_datasafe 1.3.0](#umstieg-auf-odb_datasafe-130)).
+- **Entschieden 2026-10-20 - Infrastructure-Type `ON_PREMISES`:** alle Targets werden als `ON_PREMISES` ohne
+  `instanceId` registriert (`--type onprem` bzw. OCI-CLI-Payload). Kosten fuer On-Premises-Targets in Data Safe
+  gegenpruefen (die Compute-Promotion gilt dafuer nicht automatisch).
 - **Connector-Weg:** Instance Principal (Dynamic Group in der ACE-Tenancy) oder Laptop-Fallback?
 - **Connector-Voraussetzungen:** Java 17 und python3.11 auf OL8 fuer den Connector verifizieren (Connector-Doku);
   `JAVA_HOME` ist `/usr/lib/jvm/jre-17-openjdk`. AutoUpgrade laeuft bewusst auf `/usr/lib/jvm/jre-11-openjdk` (verify:
   Pfad auf dem OL8-Image).
-- **OraDBA und der Connector:** `oradba_dsctl.sh start/stop` neben der systemd-Unit `oracle_datasafe_<name>` - live
-  nur `status` und `services` zeigen oder auch `restart` (`DEMO_CONNECTOR_RESTART`)? Einmal vorab proben.
+- **Entschieden 2026-10-20 - Connector-Restart live:** Schritt 6 zeigt `restart` (`DEMO_CONNECTOR_RESTART=TRUE`).
+  Offen bleibt nur das Zusammenspiel von `oradba_dsctl.sh restart` mit der systemd-Unit `oracle_datasafe_<name>` -
+  einmal vorab proben und die Wartezeit bis ACTIVE messen.
 - **Listener nach Reboot:** OraDBA startet den Default-Listener aus dem ersten Home in `/etc/oratab` (CDB26 steht
   deshalb zuerst). Nach dem ersten `dsdemo-stop`/`dsdemo-start` pruefen, dass `lsnrctl status` aus dem 26ai-Home
   beide CDBs zeigt.
-- **26ai-RU festschreiben:** nach dem ersten Lauf `db26_ru` auf das aufgeloeste RU setzen (sonst zieht ein Neuaufbau
-  ein neueres RU und einen anderen Home-Pfad).
-- **19c-RU:** das Oktober-2026-RU (19.33) erscheint um den 2026-10-20 - bei 19.32 bleiben (getestet) oder anheben?
+- **Entschieden 2026-10-20 - RU ohne Pin:** 19c und 26ai nehmen das neueste RU zum Installationszeitpunkt,
+  `db19_ru` / `db26_ru` bleiben als optionaler Pin. Ob `patch=RU` ohne Version fuer `target_version=19` beim ersten
+  Lauf so aufloest wie erwartet, im AutoUpgrade-Log pruefen (verify).
 - **26ai-Preinstall-RPM:** Name `oracle-ai-database-preinstall-26ai` auf OL8 verifizieren; fehlt es, meldet der Lauf
   das und arbeitet mit dem 19c-RPM weiter.
 - **Zip-Fallback:** die Response-File-Keys von `db_install_26ai.rsp.j2` (Schema v23.0.0) beim ersten Einsatz pruefen.
