@@ -390,20 +390,44 @@ variable "demo_new_pdb" {
 variable "db19_ru" {
   type        = string
   description = <<-EOT
-    Release Update of the 19c home. AutoUpgrade only downloads the current and
-    the previous RU - raise it once a quarter. The 19c base image is never
-    downloadable and has to be staged (make dsdemo-par).
+    Optional pin for the 19c Release Update, e.g. "19.32". Empty = the latest RU
+    that AutoUpgrade resolves at install time (patch=RU,OPATCH) - 19.32 on
+    2026-10-20, 19.33 once the October 2026 RU is out. AutoUpgrade only offers
+    the current and the previous RU. make dsdemo-verify reports what was built.
+    The 19c base image is never downloadable and has to be staged (make dsdemo-par).
   EOT
-  default     = "19.32"
+  default     = ""
 }
 
 variable "db26_ru" {
   type        = string
   description = <<-EOT
-    Release Update of the 26ai home, e.g. "23.26.2". Empty = the latest RU that
-    AutoUpgrade resolves (patch=RU,OPATCH). Pin it after the first download.
+    Optional pin for the 26ai Release Update, e.g. "23.26.2". Empty = the latest
+    RU that AutoUpgrade resolves at install time (patch=RU,OPATCH).
   EOT
   default     = ""
+}
+
+variable "odb_datasafe_version" {
+  type        = string
+  description = "odb_datasafe release installed on the host. 1.3.0 brings ds_target_register.sh --type; set together with odb_datasafe_sha256."
+  default     = "1.2.1"
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.odb_datasafe_version))
+    error_message = "odb_datasafe_version must be a release version like 1.2.1."
+  }
+}
+
+variable "odb_datasafe_sha256" {
+  type        = string
+  description = "SHA-256 of odb_datasafe-<odb_datasafe_version>.tar.gz from the GitHub release (.sha256 asset). Never guessed."
+  default     = "fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401"
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.odb_datasafe_sha256))
+    error_message = "odb_datasafe_sha256 must be 64 lowercase hex characters."
+  }
 }
 
 variable "db26_install_method" {

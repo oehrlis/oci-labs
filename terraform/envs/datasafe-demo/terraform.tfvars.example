@@ -70,9 +70,14 @@ cdb19_pdbs          = ["PDB19A", "PDB19B"]
 cdb26_name          = "CDB26"
 cdb26_pdbs          = ["PDB26A", "PDB26B"]
 demo_new_pdb        = "AIPDB1"
-db19_ru             = "19.32"
+# RUs: empty = latest at install time (make dsdemo-verify reports it); set to pin
+db19_ru             = ""
 db26_ru             = ""
 db26_install_method = "autoupgrade"
+
+# odb_datasafe on the host - bump version and sha256 together (runbook)
+odb_datasafe_version = "1.2.1"
+odb_datasafe_sha256  = "fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401"
 ds_connector_name = "dsc-zrh-lab-dsdemo-01"
 ds_connector_port = 1561
 

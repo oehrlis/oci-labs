@@ -419,6 +419,8 @@ locals {
         oradb19_ru                 = var.db19_ru
         oradb26_ru                 = var.db26_ru
         oradb26_install_method     = var.db26_install_method
+        oradb_odb_datasafe_version = var.odb_datasafe_version
+        oradb_odb_datasafe_sha256  = var.odb_datasafe_sha256
         oradb_data_volume          = var.attach_data_volume
         oradb_connector_name       = var.ds_connector_name
         oradb_connector_port       = var.ds_connector_port
