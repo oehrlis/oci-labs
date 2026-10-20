@@ -6,7 +6,7 @@
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
 # Date.......: 2026-10-20
-# Version....: 0.2.0
+# Version....: 0.3.0
 # Purpose....: LRN6087 (Oracle AI World 2026) Data Safe demo - the demo steps
 #              with pauses, plus the preparation of the start state.
 # Notes......: Actions:
@@ -20,9 +20,10 @@
 #              Real names come from demo.env (see demo.env.example). The Data
 #              Safe secret is read with op read and handed over as a 0600
 #              base64 file - never typed, never on an argv.
-#              Registration: odb_datasafe ds_target_register.sh --type
-#              compute|onprem when the installed copy supports it (detected
-#              via --help), else plain OCI CLI (INSTALLED_DATABASE).
+#              Registration: infrastructure type ON_PREMISES (decided
+#              2026-10-20) - odb_datasafe ds_target_register.sh --type onprem
+#              when the installed copy supports it (detected via --help), else
+#              plain OCI CLI (INSTALLED_DATABASE, ON_PREMISES, no instanceId).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0, January 2004 as shown
 #              at http://www.apache.org/licenses/
@@ -31,6 +32,8 @@
 # 2026-10-19 oes Initial release 0.1.0
 # 2026-10-20 oes 0.2.0 native CDB19/CDB26, AIPDB1 live in step 2, odb --type
 #                registration, step 6 connector managed with OraDBA
+# 2026-10-20 oes 0.3.0 ON_PREMISES only, step 6 restarts the connector and
+#                waits until Data Safe reports it ACTIVE again
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
@@ -39,7 +42,7 @@
 set -euo pipefail
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="0.2.0"
+VERSION="0.3.0"
 DRY_RUN="FALSE"
 PAUSE="TRUE"
 ACTION="run"
@@ -63,16 +66,17 @@ DEMO_CONNECTOR="dsc-zrh-lab-dsdemo-01"
 DEMO_DS_USER="DS_ADMIN"
 DEMO_OP_DS_SECRET=""
 DEMO_REGISTER_MODE="auto"
-DEMO_INFRA_TYPE="ORACLE_CLOUD"
 DEMO_LISTENER_PORT="1521"
 DEMO_COMP_OCID=""
-DEMO_INSTANCE_ID=""
 DEMO_DB_IP=""
 DEMO_SA=""
 DEMO_UA=""
 DEMO_FLEET_SOURCE="snapshot"
 DEMO_SNAPSHOT="${SCRIPT_DIR}/fleet-snapshot/fleet-snapshot-sample.json"
-DEMO_CONNECTOR_RESTART="FALSE"
+DEMO_CONNECTOR_RESTART="TRUE"
+DEMO_CONNECTOR_GRACE="20"
+DEMO_CONNECTOR_TIMEOUT="300"
+DEMO_CONNECTOR_POLL="10"
 DEMO_SSH_PORT="${DSDEMO_LOCAL_PORT:-2222}"
 DEMO_SSH_KEY=""
 
@@ -193,7 +197,6 @@ load_config() {
     fi
 
     [[ -n "${DEMO_COMP_OCID}" ]] || DEMO_COMP_OCID="$(tf_out compartment_ocid)"
-    [[ -n "${DEMO_INSTANCE_ID}" ]] || DEMO_INSTANCE_ID="$(tf_out db_instance_id)"
     [[ -n "${DEMO_DB_IP}" ]] || DEMO_DB_IP="$(tf_out db_private_ip)"
     [[ -n "${DEMO_SSH_KEY}" ]] || DEMO_SSH_KEY="$(tf_out lab_private_key_path)"
 
@@ -306,18 +309,12 @@ service_of() {
 
 # ------------------------------------------------------------------------------
 # Function: register_odb
-# Purpose.: Register with odb_datasafe ds_target_register.sh --type compute|onprem
+# Purpose.: Register with odb_datasafe ds_target_register.sh --type onprem
 # Args....: $1 CDB name, $2 PDB name or CDBROOT, $3 plan|apply
 # ------------------------------------------------------------------------------
 register_odb() {
     local cdb="$1" scope="${2^^}" mode="$3"
-    local -a args=()
-    if [[ "${DEMO_INFRA_TYPE}" == "ORACLE_CLOUD" ]]; then
-        args+=(--type compute --instance-id "${DEMO_INSTANCE_ID:-<instance-ocid>}")
-    else
-        args+=(--type onprem)
-    fi
-    args+=(--host-ip "${DEMO_DB_IP:-<db-ip>}" -H "${DEMO_HOST}" --sid "${cdb}")
+    local -a args=(--type onprem --host-ip "${DEMO_DB_IP:-<db-ip>}" -H "${DEMO_HOST}" --sid "${cdb}")
     if [[ "${scope}" == "CDBROOT" ]]; then args+=(--root); else args+=(--pdb "${scope}"); fi
     args+=(--port "${DEMO_LISTENER_PORT}" --service "$(service_of "${cdb}" "${scope}")"
         --connector "${DEMO_CONNECTOR}" -c "${DEMO_COMP}" -N "$(target_name "${cdb}" "${scope}")"
@@ -334,7 +331,7 @@ register_odb() {
 
 # ------------------------------------------------------------------------------
 # Function: register_oci
-# Purpose.: Register a target with plain OCI CLI (INSTALLED_DATABASE + connector)
+# Purpose.: Register a target with plain OCI CLI (INSTALLED_DATABASE, ON_PREMISES)
 # Args....: $1 CDB name, $2 PDB name or CDBROOT, $3 plan|apply
 # Notes...: Fallback for odb_datasafe without --type (1.2.1 builds an ExaCC
 #           payload only - see the runbook).
@@ -354,11 +351,9 @@ register_oci() {
     [[ "${DRY_RUN}" == "TRUE" ]] && conn_ocid="${conn_ocid:-<connector-ocid>}"
     [[ -n "${conn_ocid}" && "${conn_ocid}" != "null" ]] || die "Connector ${DEMO_CONNECTOR} not found"
 
-    jq -n --arg infra "${DEMO_INFRA_TYPE}" --arg inst "${DEMO_INSTANCE_ID}" --arg ip "${DEMO_DB_IP}" \
-        --argjson port "${DEMO_LISTENER_PORT}" --arg svc "${service}" '
-        {databaseType: "INSTALLED_DATABASE", infrastructureType: $infra,
-         ipAddresses: [$ip], listenerPort: $port, serviceName: $svc}
-        | if $infra == "ORACLE_CLOUD" then . + {instanceId: $inst} else . end' \
+    jq -n --arg ip "${DEMO_DB_IP}" --argjson port "${DEMO_LISTENER_PORT}" --arg svc "${service}" '
+        {databaseType: "INSTALLED_DATABASE", infrastructureType: "ON_PREMISES",
+         ipAddresses: [$ip], listenerPort: $port, serviceName: $svc}' \
         > "${WORK_DIR}/db.json"
     jq -n --arg c "${conn_ocid}" '{connectionType: "ONPREM_CONNECTOR", onPremConnectorId: $c}' \
         > "${WORK_DIR}/conn.json"
@@ -409,9 +404,7 @@ register_target() {
 register_display() {
     local scope_opt="--pdb ${2^^}"
     [[ "${2^^}" == "CDBROOT" ]] && scope_opt="--root"
-    local type_opt="--type compute"
-    [[ "${DEMO_INFRA_TYPE}" == "ORACLE_CLOUD" ]] || type_opt="--type onprem"
-    printf 'ds_target_register.sh %s -H %s --sid %s %s' "${type_opt}" "${DEMO_HOST}" "${1}" "${scope_opt}"
+    printf 'ds_target_register.sh --type onprem -H %s --sid %s %s' "${DEMO_HOST}" "${1}" "${scope_opt}"
 }
 
 # ------------------------------------------------------------------------------
@@ -449,6 +442,43 @@ create_live_pdb() {
         prereqs_remote "${DEMO_PDB}"
     show_and_run "sudo dsdemo-pdb --db ${DEMO_CDB26} check --pdb ${DEMO_PDB}" \
         host_ssh sudo /usr/local/bin/dsdemo-pdb --db "${DEMO_CDB26}" check --pdb "${DEMO_PDB}"
+}
+
+# ------------------------------------------------------------------------------
+# Function: connector_state
+# Purpose.: Lifecycle state of the demo connector as Data Safe reports it
+# Output..: ACTIVE, INACTIVE, NEEDS_ATTENTION, ... or empty
+# Depends.: oci
+# ------------------------------------------------------------------------------
+connector_state() {
+    oci data-safe on-prem-connector list --compartment-id "${DEMO_COMP_OCID}" \
+        --compartment-id-in-subtree true --all --profile "${DEMO_OCI_PROFILE}" \
+        --query "data[?\"display-name\"=='${DEMO_CONNECTOR}'].\"lifecycle-state\" | [0]" \
+        --raw-output 2> /dev/null || true
+}
+
+# ------------------------------------------------------------------------------
+# Function: wait_connector_active
+# Purpose.: After a restart, wait until Data Safe reports the connector ACTIVE
+# Notes...: A grace period first - right after the restart Data Safe may still
+#           show the stale ACTIVE from before. Then poll until ACTIVE or the
+#           timeout; on timeout a clear error with the way to check by hand.
+# ------------------------------------------------------------------------------
+wait_connector_active() {
+    local waited=0 state=""
+    log_info "Waiting ${DEMO_CONNECTOR_GRACE}s, then until ${DEMO_CONNECTOR} is ACTIVE in Data Safe (timeout ${DEMO_CONNECTOR_TIMEOUT}s)"
+    sleep "${DEMO_CONNECTOR_GRACE}"
+    while ((waited < DEMO_CONNECTOR_TIMEOUT)); do
+        state="$(connector_state)"
+        if [[ "${state}" == "ACTIVE" ]]; then
+            echo "  Data Safe: ${DEMO_CONNECTOR} ACTIVE after $((DEMO_CONNECTOR_GRACE + waited))s"
+            return 0
+        fi
+        echo "  Data Safe: ${DEMO_CONNECTOR} ${state:-unknown} - next check in ${DEMO_CONNECTOR_POLL}s"
+        sleep "${DEMO_CONNECTOR_POLL}"
+        waited=$((waited + DEMO_CONNECTOR_POLL))
+    done
+    die "TIMEOUT: ${DEMO_CONNECTOR} not ACTIVE in Data Safe after $((DEMO_CONNECTOR_GRACE + DEMO_CONNECTOR_TIMEOUT))s (last state: ${state:-unknown}). Check: sudo dsdemo-connector status on the host, the connector in the Data Safe console; targets stay unreachable until it is ACTIVE."
 }
 
 # ------------------------------------------------------------------------------
@@ -533,6 +563,7 @@ step_6() {
     if [[ "${DEMO_CONNECTOR_RESTART}" == "TRUE" ]]; then
         show_and_run "oradba_dsctl.sh restart" host_ssh sudo /usr/local/bin/dsdemo-connector restart
         show_and_run "oradba_dsctl.sh status" host_ssh sudo /usr/local/bin/dsdemo-connector status
+        show_and_run "oci data-safe on-prem-connector list ... (wait for ACTIVE)" wait_connector_active
     fi
 }
 
@@ -550,7 +581,7 @@ do_check() {
     echo "Compartment: ${DEMO_COMP} ${DEMO_COMP_OCID:+(OCID from terraform)}"
     echo "Fleet on the host: ${DEMO_CDB19} (19c: ${DEMO_CDB19_PDBS}), ${DEMO_CDB26} (26ai: ${DEMO_CDB26_PDBS})"
     echo "Live target: $(target_name "${DEMO_CDB26}" "${DEMO_PDB}") via ${DEMO_CONNECTOR}"
-    echo "Registration: ${REGISTER_PATH} (mode ${DEMO_REGISTER_MODE}, ${DEMO_INFRA_TYPE})"
+    echo "Registration: ${REGISTER_PATH} (mode ${DEMO_REGISTER_MODE}, ON_PREMISES)"
     echo "Snapshot: ${DEMO_SNAPSHOT}"
     if [[ "${DRY_RUN}" == "FALSE" ]]; then
         ds_target_list.sh --input-json "${DEMO_SNAPSHOT}" --count > /dev/null \
