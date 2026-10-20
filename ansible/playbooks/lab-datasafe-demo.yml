@@ -70,11 +70,14 @@
       ansible.builtin.debug:
         msg:
           - "Host: {{ inventory_hostname }} ({{ oradb_host_private_ip | default('n/a') }})"
-          - "19c EE: {{ oradb_cdb19_name }} with {{ oradb_cdb19_pdbs | join(', ') }} at RU {{ oradb19_ru }}"
+          - >-
+            19c EE: {{ oradb_cdb19_name }} with {{ oradb_cdb19_pdbs | join(', ') }}
+            (RU {{ oradb19_ru | default('', true) or 'latest' }})
           - >-
             26ai EE: {{ oradb_cdb26_name }} with {{ oradb_cdb26_pdbs | join(', ') }}
             ({{ oradb26_install_method }}, RU {{ oradb26_ru | default('', true) or 'latest' }})
           - "Live PDB: {{ oradb_live_pdb }} in {{ oradb_cdb26_name }} (created by demo.sh step 2)"
+          - "odb_datasafe: {{ oradb_odb_datasafe_version | default('1.2.1') }}"
           - "Connector: {{ oradb_connector_name }} (instance principal: {{ oradb_instance_principal }})"
       tags:
         - always

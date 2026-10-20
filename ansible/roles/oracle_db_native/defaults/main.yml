@@ -87,12 +87,20 @@ oradb_java_home: /usr/lib/jvm/jre-17-openjdk
 # ------------------------------------------------------------------------------
 # Oracle Database 19c EE home - built by db19_engineering download/create_home
 # ------------------------------------------------------------------------------
-# AutoUpgrade only downloads the current and the previous RU. The 19c base
-# image is never downloadable: oradb19_base_image_url (a PAR, make dsdemo-par)
-# stages it, or it is copied into /opt/stage by hand.
-oradb19_ru: "19.32"
-oradb19_home: "{{ oracle_base }}/product/{{ oradb19_ru }}/dbhome_1"
-oradb19_patch_list: "RU:{{ oradb19_ru }},OPATCH"
+# No pin by default: patch=RU without a version is the latest Release Update
+# that AutoUpgrade resolves at install time (19.32 on 2026-10-20, 19.33 once
+# the October 2026 RU is out). RECOMMENDED would add OJVM, Data Pump bundle
+# patch and an MRP - more downloads and time without value for Data Safe; set
+# oradb19_patch_list to "RECOMMENDED,OPATCH" to get it anyway. A pin
+# (oradb19_ru = "19.32") gives "RU:19.32,OPATCH" and a versioned home path.
+# The resolved RU is recorded by db19_engineering (patchset-<label>.txt in
+# /opt/stage) and reported by the verify step from v$instance.
+# The 19c base image is never downloadable: oradb19_base_image_url (a PAR,
+# make dsdemo-par) stages it, or it is copied into /opt/stage by hand.
+oradb19_ru: ""
+oradb19_label: "{{ oradb19_ru if oradb19_ru | length > 0 else 'latest' }}"
+oradb19_home: "{{ oracle_base }}/product/{{ oradb19_ru if oradb19_ru | length > 0 else '19c' }}/dbhome_1"
+oradb19_patch_list: "{{ ('RU:' ~ oradb19_ru) if oradb19_ru | length > 0 else 'RU' }},OPATCH"
 oradb19_base_image_url: ""
 
 # ------------------------------------------------------------------------------
@@ -106,8 +114,8 @@ oradb19_base_image_url: ""
 #               into the home and run runInstaller -silent.
 oradb26_install_method: autoupgrade
 
-# Empty = latest RU that AutoUpgrade resolves. Pin it (e.g. "23.26.2") once the
-# first download has shown what "latest" is.
+# Empty = latest RU that AutoUpgrade resolves at install time, same rule as
+# 19c. A pin (e.g. "23.26.2") gives "RU:23.26.2,OPATCH" and a versioned home.
 oradb26_ru: ""
 oradb26_patch_list: "{{ ('RU:' ~ oradb26_ru) if oradb26_ru | length > 0 else 'RU' }},OPATCH"
 oradb26_home: "{{ oracle_base }}/product/{{ oradb26_ru if oradb26_ru | length > 0 else '26ai' }}/dbhome_1"
@@ -165,6 +173,9 @@ oradb_redo_log_size_mb: 200
 oradb_character_set: AL32UTF8
 oradb_dbca_template: General_Purpose.dbc
 
+# Release record written by the verify step: what the lab actually runs.
+oradb_release_file: "{{ oracle_base }}/etc/dsdemo-releases.txt"
+
 # Oracle 19c prerequisite checks reject OL8 (same as db19_engineering).
 oradb19_cv_assume_distid: OEL7.9
 
@@ -184,11 +195,15 @@ oradb_oradba_dir: "{{ oracle_base }}/local/oradba"
 # ------------------------------------------------------------------------------
 # odb_datasafe
 # ------------------------------------------------------------------------------
+# Overridable from Terraform (odb_datasafe_version / odb_datasafe_sha256). 1.2.1
+# stays the default until the 1.3.0 release asset (ds_target_register.sh --type)
+# exists - set both together, see the runbook.
 oradb_odb_datasafe_version: 1.2.1
 oradb_odb_datasafe_repo: https://github.com/oehrlis/odb_datasafe
 oradb_odb_datasafe_release: "{{ oradb_odb_datasafe_repo }}/releases/download/v{{ oradb_odb_datasafe_version }}"
 oradb_odb_datasafe_url: "{{ oradb_odb_datasafe_release }}/odb_datasafe-{{ oradb_odb_datasafe_version }}.tar.gz"
-# Pinned from odb_datasafe-1.2.1.tar.gz.sha256 of the GitHub release.
+# Pinned from odb_datasafe-1.2.1.tar.gz.sha256 of the GitHub release - it must
+# match oradb_odb_datasafe_version, get_url verifies it.
 oradb_odb_datasafe_sha256: fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401
 oradb_odb_datasafe_base: "{{ oracle_base }}/local/odb_datasafe"
 

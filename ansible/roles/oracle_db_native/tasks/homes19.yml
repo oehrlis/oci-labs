@@ -30,8 +30,10 @@
     db19_oradba_dir: "{{ oradb_oradba_dir }}"
     db19_datafile_dir: "{{ oradb_datafile_dir }}"
     db19_recovery_dir: "{{ oradb_recovery_dir }}"
-    db_base_ru: "{{ oradb19_ru }}"
-    db19_home_ru: "{{ oradb19_ru }}"
+    # A label, not necessarily a version: "latest" when unpinned. db19_engineering
+    # uses it only in file names (download stamp, config, patch-set record).
+    db_base_ru: "{{ oradb19_label }}"
+    db19_home_ru: "{{ oradb19_label }}"
     db19_home_path: "{{ oradb19_home }}"
     db19_patch_list: "{{ oradb19_patch_list }}"
     db19_base_image_url: "{{ oradb19_base_image_url }}"
