@@ -1,7 +1,53 @@
 # Plan: Lab fuer CPU 2026-10 und oradba.automation v0.2.0
 
-> Stand 2026-10-15. Bis `terraform plan` vorbereitet, **nichts gestartet, nichts
-> angewendet**. Jeder Schritt unten, der Geld kostet, wartet auf Stefan.
+> Stand 2026-10-22. Lauf A gefahren bis zum Deploy-Preflight, dort blockiert
+> (Befunde unten). Lauf B nicht gestartet. Instanz STOPPED. Kein apply.
+
+## Stand 2026-10-22
+
+- `origin/main` nach `feat/cpu-lab` gemergt (Konflikt nur CHANGELOG). `terraform plan`
+  vorher und nachher: **0 to add, 0 to change, 0 to destroy** - nachher nur der
+  `moved`-Block von `egress_https_only` und der bekannte Output
+- Patch-Quelle entschieden: **MOS auf dem Host bleibt primaer**, RECOMMENDED bleibt.
+  PAR-Fallback gebaut (`make cpu-lab-patch-par PATCH_PREFIX=...`, Runbook "Fallback -
+  target RU from the bucket"). Live geprueft: Listing nur im Praefix, Download vom
+  Host, Objekt ausserhalb HTTP 401. Nicht geprueft: AU mit `download=no` + RECOMMENDED
+- `cpu-lab-bastion-tunnel` scheiterte 3x ("Permission denied (publickey)" auf einer
+  frischen Session) - behoben, erster Versuch klappt jetzt. Wichtig fuer remote
+- `cpu-lab-par-revoke` hat zwei noch gueltige Base-Image-PARs vom August widerrufen
+- Baseline-Abweichungen auf CPUDB: **GRP `AU_PATCHING_9212_CPUDB1931000` vom
+  2026-08-21** (2.6 GB, FRA 7.5/20 GB) - belegt den offenen August-Deploy-Job, Lauf B
+  daher zwingend mit eigenem Log-Pfad. **PDB1 war MOUNTED ohne Saved State** - geoeffnet
+  und `save state` gesetzt
+- Neu: AU 26.6 laedt ein **19c Gold Image** von MOS (`db_goldimage_19_32_*.zip`, 5 GB).
+  Der Update-Advisor-500 vom August ist damit vermutlich weg -
+  `db19_try_gold_image` in der Lab-Rolle neu bewerten
+- Auf dem Host liegt: Collection-Engine 0.6.1 + Keystore, neues Home
+  `/u00/app/oracle/product/19.32.0.0` (RU 19.32 + OJVM + DPBP + JDK + OCW + MRP-Fixes,
+  OPatch 54, im Inventory), `lib/au_env.sh.orig-0.6.1` (identische Sicherung, kann weg).
+  DB unveraendert auf 19.31
+
+### Lauf A - Befunde an oradba.automation 0.2.0 / odb_autoupgrade 0.6.1
+
+Alle mit Verbindungsuser `opc` + sudo, so wie beim Kunden ueblich. Molecule laeuft als
+root mit dry-run und sieht keinen davon.
+
+<!-- markdownlint-disable MD013 MD060 -->
+| # | Wo | Befund | Workaround im Lab |
+| --- | --- | --- | --- |
+| 1 | Collection | 24 stat/slurp/find-Tasks ohne `become` - scheitern an `keystore/` (0700), `patches/`, `logs/` (0750) | `-e ansible_become=true` |
+| 2 | Engine | `au_render_cfg` wirft `global.keystore` weg, wenn nicht `-mode download` - `au_keystore.sh --create` (`-load_password`) kann nie gehen | Keystore direkt mit AU angelegt |
+| 3 | Engine | Expect-Dialog sendet `exit` statt `save` - AU scheitert in `getAutoLoginOption` mit EIO (auch mit 26.5). Die Lab-Rolle macht `save` zuerst, das geht | wie Lab-Rolle |
+| 4 | Engine | `au_patch_verify.sh` verlangt `bug-map.json` - AU 26.5/26.6 schreibt keine (auf dem ganzen Host keine) | `patch_download_verify=false`, `autoupgrade_preflight_verify_folder=false` |
+| 5 | Collection | `target_home.yml` erwartet `releaseUpdate` 4-stellig, AU 26.6 schreibt `19.32`. Dazu: `oracle_home_create_target_home` erbt `oradba_patch_target_home` nicht | beide Variablen explizit |
+| 6 | Engine | `au_home_verify.sh` zaehlt OPatch (6880880) zur Patch-Liste - immer FAIL | `oracle_home_create_verify=false`, `autoupgrade_preflight_verify_home=false` |
+| 7 | Engine | analyze/deploy ohne `global.keystore` (siehe 2) und ohne `patch1.download` - mit `gold_image=YES` aus dem Profil oder `MRP`/`OPATCH` in der Liste: "Download query failed". **Blockiert den Deploy** | `AU_GOLD_IMAGE=NO` per `*_environment` reicht nicht; Hotfix an der Engine auf dem Host nicht gemacht |
+<!-- markdownlint-restore -->
+
+Weiter erst mit Engine-Fix (0.6.2: Keystore fuer alle Modi ausser `create_home`, `save`
+vor `exit`, bug-map optional, OPatch aus der Home-Pruefung) und Collection 0.2.1
+(`become` auf den lesenden Tasks, RU-Format). Danach Lauf A ab `STEP=apply` - setup,
+download und home sind durch.
 
 ## Zweck
 
@@ -171,7 +217,10 @@ Zyklus baut neu (Base-Image aus `orarepo`, ca. 1.5 h) - dann mit
 
 ## Offen fuer Stefan
 
-- [ ] Tenant bestaetigen (Empfehlung: Accenture, siehe oben)
-- [ ] Lauf A freigeben: `make cpu-lab-start` kostet ab dann ca. 0.25 pro Stunde
-- [ ] Ab 2026-10-20: `db_target_ru = "19.33"`, `make cpu-lab-apply` (nur Inventory)
+- [ ] Tenant bestaetigen (Empfehlung: Accenture; Lauf A lief dort, ausdruecklich bestaetigt ist es nicht)
+- [x] Lauf A freigeben - gefahren 2026-10-22, blockiert an Befund 7
+- [ ] Befunde 1-7 an oradba-ansible / odb_autoupgrade geben; Engine-Hotfix auf dem
+  Lab-Host erlauben oder auf 0.6.2 warten (USZ-Fenster 2026-10-27!) [P1]
+- [ ] Ab 2026-10-20: `db_target_ru = "19.33"`, `make cpu-lab-apply` (nur Inventory) -
+  dann Lauf B wie oben, MOS auf dem Host [P1]
 - [ ] Nach Lauf B: Destroy oder bis zum naechsten Zyklus parken
