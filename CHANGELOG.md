@@ -113,6 +113,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`make cpu-lab-bastion-tunnel` failed three times in a row** on a fresh
+  session: the Bastion refuses the key for a few seconds after the session is
+  ACTIVE, ssh exits at once, and the loop kept probing a dead tunnel. The loop now
+  restarts a dead ssh within the same session; the first attempt succeeds.
 - **`terraform plan` replaced the lab instance** when the workstation key in
   `ssh_public_key_files` changed - the database would have been destroyed for a
   value cloud-init reads on first boot only. `modules/oracle_db_host` now ignores

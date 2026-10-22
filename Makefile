@@ -727,6 +727,10 @@ cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forw
 # on 2026-08-22 - and ssh keeps the local listener while the far end is gone, so
 # nc succeeds and the next Ansible run dies with UNREACHABLE. Every check here
 # therefore runs a real command on the host.
+# A fresh session can be ACTIVE and still refuse the key for a few seconds
+# ("Permission denied (publickey)", 2026-10-22), and ssh then exits at once. The
+# tunnel loop therefore restarts a dead ssh within the same session instead of
+# probing a tunnel that is already gone.
 BASTION_SSH_OPTS := -o StrictHostKeyChecking=no -o IdentitiesOnly=yes \
   -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
 
@@ -750,9 +754,15 @@ cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the
 	      echo "Creating a Bastion session (attempt $$attempt)..."; \
 	      $(MAKE) --no-print-directory -C "$(CURDIR)" cpu-lab-bastion-session >/dev/null 2>&1 || true; \
 	    fi; \
-	    nohup bash -c "$$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS)" \
-	      >.bastion-tunnel.log 2>&1 & \
-	    for i in $$(seq 1 15); do probe && break; sleep 4; done; \
+	    pid=""; \
+	    for i in $$(seq 1 15); do \
+	      if [[ -z "$$pid" ]] || ! kill -0 "$$pid" 2>/dev/null; then \
+	        nohup bash -c "$$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS)" \
+	          >.bastion-tunnel.log 2>&1 & \
+	        pid=$$!; \
+	      fi; \
+	      sleep 4; probe && break; \
+	    done; \
 	    if probe; then echo "✅ Tunnel up on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
 	    echo "   attempt $$attempt failed: $$(tail -1 .bastion-tunnel.log 2>/dev/null)"; \
 	    pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
