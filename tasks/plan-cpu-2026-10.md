@@ -1,7 +1,7 @@
 # Plan: Lab fuer CPU 2026-10 und oradba.automation v0.2.0
 
-> Stand 2026-10-22. Lauf A gefahren bis zum Deploy-Preflight, dort blockiert
-> (Befunde unten). Lauf B nicht gestartet. Instanz STOPPED. Kein apply.
+> Stand 2026-10-22 abends. Lauf A durch bis `rollback home` - mit Engine-Hotfix und
+> Workarounds, 10 Befunde unten. Lauf B nicht gestartet. Instanz STOPPED. Kein apply.
 
 ## Stand 2026-10-22
 
@@ -24,8 +24,9 @@
   `db19_try_gold_image` in der Lab-Rolle neu bewerten
 - Auf dem Host liegt: Collection-Engine 0.6.1 + Keystore, neues Home
   `/u00/app/oracle/product/19.32.0.0` (RU 19.32 + OJVM + DPBP + JDK + OCW + MRP-Fixes,
-  OPatch 54, im Inventory), `lib/au_env.sh.orig-0.6.1` (identische Sicherung, kann weg).
-  DB unveraendert auf 19.31
+  OPatch 54, im Inventory, mit `uniaud_on` nachgelinkt), Engine mit Lab-Hotfix
+  (`lib/au_env.sh`, Original `lib/au_env.sh.orig-0.6.1`). Der August-GRP ist gedroppt
+  (Stefan, 2026-10-22). DB nach `rollback home` auf 19.31, kein GRP
 
 ### Lauf A - Befunde an oradba.automation 0.2.0 / odb_autoupgrade 0.6.1
 
@@ -41,13 +42,30 @@ root mit dry-run und sieht keinen davon.
 | 4 | Engine | `au_patch_verify.sh` verlangt `bug-map.json` - AU 26.5/26.6 schreibt keine (auf dem ganzen Host keine) | `patch_download_verify=false`, `autoupgrade_preflight_verify_folder=false` |
 | 5 | Collection | `target_home.yml` erwartet `releaseUpdate` 4-stellig, AU 26.6 schreibt `19.32`. Dazu: `oracle_home_create_target_home` erbt `oradba_patch_target_home` nicht | beide Variablen explizit |
 | 6 | Engine | `au_home_verify.sh` zaehlt OPatch (6880880) zur Patch-Liste - immer FAIL | `oracle_home_create_verify=false`, `autoupgrade_preflight_verify_home=false` |
-| 7 | Engine | analyze/deploy ohne `global.keystore` (siehe 2) und ohne `patch1.download` - mit `gold_image=YES` aus dem Profil oder `MRP`/`OPATCH` in der Liste: "Download query failed". **Blockiert den Deploy** | `AU_GOLD_IMAGE=NO` per `*_environment` reicht nicht; Hotfix an der Engine auf dem Host nicht gemacht |
+| 7 | Engine | analyze/deploy ohne `global.keystore` (siehe 2) und ohne `patch1.download` - mit `gold_image=YES` aus dem Profil oder `MRP`/`OPATCH` in der Liste: "Download query failed". **Blockiert den Deploy** | Lab-Hotfix in `lib/au_env.sh` (Stefan freigegeben): Keystore fuer alle Modi ausser `create_home`. `AU_GOLD_IMAGE=NO` ist falsch - ohne Base Image im Ordner braucht es das Gold Image |
+| 8 | Collection | `oracle_home_create` gibt kein Source-Home mit - die Binary Options werden nicht uebernommen. 19.31 mit `uniaud_on`, Gold-Image-Home ohne: analyze lehnt ab | `make -f ins_rdbms.mk uniaud_on ioracle` im neuen Home |
+| 9 | Collection | Ein explizites `source_home` in `oradba_patch_databases` wird fuer **jedes** State-Lesen genommen, auch nach dem Switch - die DB wirkt DOWN. Folge: Primary-Play nach erfolgreichem Switch rot, zweites `apply` rot mit irrefuehrender Meldung | `source_home` weglassen - der Switch Record reicht fuer den Rollback |
+| 10 | Collection | Der Deploy behaelt keinen GRP (AU-Default `drop_grp_after_patching`). `restore` nimmt den neuesten GRP **irgendeiner** Herkunft - hier waere es der vom August gewesen. Datenverlust-Risiko | August-GRP gedroppt, `restore` bricht dann sauber ab (`changed=0`) |
 <!-- markdownlint-restore -->
 
-Weiter erst mit Engine-Fix (0.6.2: Keystore fuer alle Modi ausser `create_home`, `save`
-vor `exit`, bug-map optional, OPatch aus der Home-Pruefung) und Collection 0.2.1
-(`become` auf den lesenden Tasks, RU-Format). Danach Lauf A ab `STEP=apply` - setup,
-download und home sind durch.
+Ergebnis gegen die Pass-Kriterien (Runbook):
+
+<!-- markdownlint-disable MD013 MD060 -->
+| Schritt | Ergebnis |
+| --- | --- |
+| `setup` | gruen ab dem zweiten Lauf, idempotent (`changed=0`) - nur mit Befund 1-3 |
+| `download` | gruen mit `patch_download_verify=false` (Befund 4), MOS inkl. 19c Gold Image |
+| `home` | Home korrekt, Verify rot (Befund 5, 6), Binary Options falsch (Befund 8) |
+| `apply` | **Switch korrekt**: oratab 19.32, Listener aus dem neuen Home, datapatch CDB + PDB1, 0 invalid, Switch Record. Play danach rot (Befund 9). PDB$SEED stand danach READ WRITE |
+| `rollback restore` | nicht testbar - kein GRP (Befund 10) |
+| zweites `apply` | ohne `source_home` gruen, klar: "already runs from ... - switch skips it" |
+| `rollback home` | **gruen**: oratab `19.31/dbhome_1:Y`, 19.31, RU 19.32 ROLLBACK in CDB und PDB1, 0 invalid, Listener alt, PDB$SEED READ ONLY |
+<!-- markdownlint-restore -->
+
+Fuer die USZ heisst das: Switch und `rollback home` funktionieren, aber nur mit dem
+Engine-Hotfix (7) und mehreren Variablen-Workarounds. `restore` ist mit 0.2.0 nicht
+nutzbar. Fixe gehoeren in odb_autoupgrade 0.6.2 (2, 3, 4, 6, 7) und oradba.automation 0.2.1
+(1, 5, 8, 9, 10).
 
 ## Zweck
 
@@ -218,9 +236,9 @@ Zyklus baut neu (Base-Image aus `orarepo`, ca. 1.5 h) - dann mit
 ## Offen fuer Stefan
 
 - [ ] Tenant bestaetigen (Empfehlung: Accenture; Lauf A lief dort, ausdruecklich bestaetigt ist es nicht)
-- [x] Lauf A freigeben - gefahren 2026-10-22, blockiert an Befund 7
-- [ ] Befunde 1-7 an oradba-ansible / odb_autoupgrade geben; Engine-Hotfix auf dem
-  Lab-Host erlauben oder auf 0.6.2 warten (USZ-Fenster 2026-10-27!) [P1]
+- [x] Lauf A freigeben - gefahren 2026-10-22 bis `rollback home`
+- [ ] Befunde 1-10 an oradba-ansible / odb_autoupgrade geben, vor dem USZ-Fenster
+  2026-10-27 entscheiden: Fix-Release oder USZ mit Workarounds [P1]
 - [ ] Ab 2026-10-20: `db_target_ru = "19.33"`, `make cpu-lab-apply` (nur Inventory) -
   dann Lauf B wie oben, MOS auf dem Host [P1]
 - [ ] Nach Lauf B: Destroy oder bis zum naechsten Zyklus parken
