@@ -1,0 +1,175 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/connector.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Data Safe on-premises connector and its systemd service.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Two paths, decided by oradb_instance_principal (Terraform enable_instance_principal):
+#   true  - ds_connector_create.sh on the host: OCI create, bundle download,
+#           setup.py install. Needs the dynamic group + policy.
+#   false - bundle created on the laptop and copied to oradb_connector_bundle_dir
+#           as <name>.zip and <name>_pwd.b64 (docs/datasafe-demo.md, fallback).
+# Both end in install_datasafe_service.sh --prepare / --install.
+
+- name: Check whether the connector is already installed
+  ansible.builtin.stat:
+    path: "{{ oradb_connector_home }}/setup.py"
+  register: oradb_connector_installed
+  # become: the connector home is 0750 oracle - as opc stat reports "missing".
+  become: true
+
+- name: Create and install the connector with ds_connector_create.sh (instance principal)
+  ansible.builtin.command:
+    argv:
+      - "{{ oradb_odb_datasafe_base }}/bin/ds_connector_create.sh"
+      - -c
+      - "{{ oradb_compartment_ocid }}"
+      - -N
+      - "{{ oradb_connector_name }}"
+      - --connector-home
+      - "{{ oradb_connector_home }}"
+      - --connector-port
+      - "{{ oradb_connector_port | string }}"
+      - --description
+      - "LRN6087 Data Safe demo connector (oci-labs datasafe-demo)"
+  environment:
+    ODB_DATASAFE_BASE: "{{ oradb_odb_datasafe_base }}"
+    OCI_CLI_AUTH: instance_principal
+    PATH: "{{ oradb_oci_cli_venv }}/bin:/usr/local/bin:/usr/bin:/bin"
+    LANG: en_US.UTF-8
+  when:
+    - oradb_instance_principal | bool
+    - not oradb_connector_installed.stat.exists
+  changed_when: true
+  become: true
+  become_user: "{{ oracle_os_user }}"
+
+- name: Look for a copied connector bundle (fallback path)
+  ansible.builtin.stat:
+    path: "{{ oradb_connector_bundle_dir }}/{{ oradb_connector_name }}.zip"
+  register: oradb_connector_bundle
+  become: true
+  when: not (oradb_instance_principal | bool)
+
+- name: Report the missing bundle instead of skipping silently
+  ansible.builtin.debug:
+    msg:
+      - "SKIPPED connector install: no bundle at {{ oradb_connector_bundle_dir }}/{{ oradb_connector_name }}.zip"
+      - "Create it on the laptop (docs/datasafe-demo.md, 'Connector ohne Instance Principal'),"
+      - "copy it plus {{ oradb_connector_name }}_pwd.b64, then run: make dsdemo-step TAG=connector"
+  when:
+    - not (oradb_instance_principal | bool)
+    - not oradb_connector_installed.stat.exists
+    - not oradb_connector_bundle.stat.exists
+
+- name: Install from the copied bundle (fallback path)
+  when:
+    - not (oradb_instance_principal | bool)
+    - not oradb_connector_installed.stat.exists
+    - oradb_connector_bundle.stat.exists
+  become: true
+  block:
+    - name: Create the connector home
+      ansible.builtin.file:
+        path: "{{ oradb_connector_home }}"
+        state: directory
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0750"
+
+    - name: Unpack the connector bundle
+      ansible.builtin.unarchive:
+        src: "{{ oradb_connector_bundle_dir }}/{{ oradb_connector_name }}.zip"
+        dest: "{{ oradb_connector_home }}"
+        remote_src: true
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+
+    - name: Install the non-interactive setup wrapper
+      ansible.builtin.copy:
+        src: connector_setup.py
+        dest: "{{ oradb_connector_home }}/dsdemo_connector_setup.py"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0750"
+
+    - name: Run setup.py install with the bundle key
+      ansible.builtin.command:
+        argv:
+          - "{{ oradb_python3 }}"
+          - "{{ oradb_connector_home }}/dsdemo_connector_setup.py"
+          - "{{ oradb_connector_home }}/setup.py"
+          - "{{ oradb_connector_bundle_dir }}/{{ oradb_connector_name }}_pwd.b64"
+          - "{{ oradb_connector_port | string }}"
+        chdir: "{{ oradb_connector_home }}"
+      changed_when: true
+      become: true
+      become_user: "{{ oracle_os_user }}"
+
+- name: Re-check the connector installation
+  ansible.builtin.stat:
+    path: "{{ oradb_connector_home }}/setup.py"
+  register: oradb_connector_ready
+  become: true
+
+- name: Prepare the systemd service (install_datasafe_service.sh --prepare)
+  ansible.builtin.command:
+    argv:
+      - "{{ oradb_odb_datasafe_base }}/bin/install_datasafe_service.sh"
+      - --prepare
+      - -n
+      - "{{ oradb_connector_name }}"
+      - -b
+      - "{{ oradb_connector_base }}"
+      - -u
+      - "{{ oracle_os_user }}"
+      - -g
+      - "{{ oracle_os_group_dba }}"
+      - -j
+      - "{{ oradb_java_home }}"
+      - -y
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  when: oradb_connector_ready.stat.exists
+  changed_when: true
+  become: true
+  become_user: "{{ oracle_os_user }}"
+
+- name: Install the systemd service (install_datasafe_service.sh --install)
+  ansible.builtin.command:
+    argv:
+      - "{{ oradb_odb_datasafe_base }}/bin/install_datasafe_service.sh"
+      - --install
+      - -n
+      - "{{ oradb_connector_name }}"
+      - -b
+      - "{{ oradb_connector_base }}"
+      - -u
+      - "{{ oracle_os_user }}"
+      - -g
+      - "{{ oracle_os_group_dba }}"
+      - -j
+      - "{{ oradb_java_home }}"
+      - -y
+  environment:
+    ORACLE_BASE: "{{ oracle_base }}"
+  args:
+    creates: "/etc/systemd/system/oracle_datasafe_{{ oradb_connector_name }}.service"
+  when: oradb_connector_ready.stat.exists
+  become: true
+
+- name: Enable and start the connector service
+  ansible.builtin.systemd_service:
+    name: "oracle_datasafe_{{ oradb_connector_name }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: oradb_connector_ready.stat.exists
+  become: true

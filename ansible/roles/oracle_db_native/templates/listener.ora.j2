@@ -1,0 +1,17 @@
+#-------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+#-------------------------------------------------------------------------------
+# Managed by Ansible role oracle_db_native - do not edit by hand.
+# Purpose: Listener of the demo host, 26ai home. Serves CDB26 and CDB19
+#          (dynamic registration, local_listener set per instance).
+#-------------------------------------------------------------------------------
+
+{{ oradb_listener_name }} =
+  (DESCRIPTION_LIST =
+    (DESCRIPTION =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = {{ oradb_net_host }})(PORT = {{ oradb_listener_port }}))
+      (ADDRESS = (PROTOCOL = IPC)(KEY = EXTPROC{{ oradb_listener_port }}))
+    )
+  )
+
+ADR_BASE_{{ oradb_listener_name }} = {{ oracle_base }}

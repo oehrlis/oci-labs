@@ -1,0 +1,5 @@
+# local demo configuration and run artefacts - never commit
+demo.env
+*.log
+fleet-snapshot/*.json
+!fleet-snapshot/fleet-snapshot-sample.json

@@ -1,0 +1,107 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/verify.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Read-only checks of the demo host.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Collect the service states
+  ansible.builtin.service_facts:
+
+- name: List the PDBs per CDB
+  ansible.builtin.command: "/usr/local/bin/dsdemo-pdb --db {{ item.sid }} list"
+  loop: "{{ oradb_databases }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  register: oradb_pdb_list
+  changed_when: false
+  become: true
+
+- name: Verify the Data Safe service accounts per CDB
+  ansible.builtin.command: "/usr/local/bin/dsdemo-pdb --db {{ item.sid }} check --all"
+  loop: "{{ oradb_databases }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  register: oradb_ds_check
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Read the listener services
+  ansible.builtin.command:
+    cmd: "{{ oradb26_home }}/bin/lsnrctl status {{ oradb_listener_name }}"
+  environment:
+    ORACLE_HOME: "{{ oradb26_home }}"
+    TNS_ADMIN: "{{ oradb26_home }}/network/admin"
+  register: oradb_lsnr
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ oracle_os_user }}"
+
+# The RUs are not pinned by default - this is where the lab says what it runs.
+- name: Read the release of each CDB
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      /usr/local/bin/dsdemo-sql {{ item.sid }} <<'SQL' | tr -d '[:space:]'
+      set heading off feedback off pagesize 0
+      select version_full from v$instance;
+      SQL
+    executable: /bin/bash
+  loop: "{{ oradb_databases }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  register: oradb_release
+  changed_when: false
+  become: true
+
+- name: Record the releases on the host
+  ansible.builtin.copy:
+    dest: "{{ oradb_release_file }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+    content: |
+      # Releases of the LRN6087 demo host - written by make dsdemo-verify
+      {% for r in oradb_release.results %}
+      {{ r.item.sid }} {{ r.stdout }} {{ r.item.home }}
+      {% endfor %}
+  become: true
+
+- name: Connector status via OraDBA
+  ansible.builtin.command: /usr/local/bin/dsdemo-connector status
+  register: oradb_dsctl_status
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Report the demo host state
+  vars:
+    oradb_connector_unit: "oracle_datasafe_{{ oradb_connector_name }}.service"
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Releases: {{ oradb_release.results | map(attribute='item.sid')
+        | zip(oradb_release.results | map(attribute='stdout')) | map('join', ' ') | list }}
+        ({{ oradb_release_file }})
+      - "Listener {{ oradb_net_host }}:{{ oradb_listener_port }}: {{ 'up' if oradb_lsnr.rc == 0 else 'DOWN' }}"
+      - "Listener services: {{ oradb_lsnr.stdout_lines | default([]) | select('search', '^Service \"') | list }}"
+      - "PDBs: {{ oradb_pdb_list.results | map(attribute='stdout_lines') | flatten | select('search', 'READ') | list }}"
+      - "DS user check: {{ oradb_ds_check.results | map(attribute='rc') | list }} (0 = ok, per CDB)"
+      - "Connector service: {{ ansible_facts['services'][oradb_connector_unit]['state'] | default('not installed') }}"
+      - "Connector via OraDBA: {{ oradb_dsctl_status.stdout_lines | default([]) | last | default('n/a') }}"
+
+- name: Fail when the listener is down or a Data Safe user check failed
+  ansible.builtin.assert:
+    that:
+      - oradb_lsnr.rc == 0
+      - oradb_ds_check.results | map(attribute='rc') | select('ne', 0) | list | length == 0
+    fail_msg: "Listener down or ds_database_prereqs.sh --check failed - see the report above."
+    quiet: true

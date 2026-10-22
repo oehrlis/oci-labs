@@ -1,0 +1,27 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/helpers.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Host helpers used by Ansible, demo.sh and reset.sh:
+#              dsdemo-sql (SYSDBA from stdin), dsdemo-pdb (PDB + Data Safe
+#              user), dsdemo-connector (oradba_dsctl.sh wrapper).
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Install the host helpers
+  ansible.builtin.template:
+    src: "{{ item }}.sh.j2"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - dsdemo-sql
+    - dsdemo-pdb
+    - dsdemo-connector
+  become: true

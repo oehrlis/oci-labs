@@ -1,0 +1,37 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/ds_prereqs.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Data Safe service account in CDB$ROOT and every open PDB of each
+#              CDB (ds_database_prereqs.sh --all).
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# --all = C##DS_ADMIN in CDB$ROOT plus DS_ADMIN in every OPEN READ WRITE PDB.
+# The secret travels on stdin into dsdemo-pdb, never as an argument.
+- name: Create the Data Safe service accounts (C##DS_ADMIN / DS_ADMIN)
+  ansible.builtin.command: "/usr/local/bin/dsdemo-pdb --db {{ item.sid }} prereqs --all"
+  args:
+    stdin: "{{ oradb_ds_secret }}"
+    stdin_add_newline: false
+  loop: "{{ oradb_databases }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  register: oradb_prereqs
+  # ds_database_prereqs.sh is idempotent (create if missing, align profile and
+  # grants otherwise) and does not report what it changed.
+  changed_when: true
+  no_log: true
+  become: true
+
+- name: Show the prereqs result without the secret
+  ansible.builtin.debug:
+    msg: "{{ item.stdout_lines | default([]) | select('search', 'INFO|WARN|ERROR|OK|PDB') | list }}"
+  loop: "{{ oradb_prereqs.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"

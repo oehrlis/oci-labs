@@ -1,0 +1,85 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Purpose....: Variable values template for the datasafe-demo stack (LRN6087).
+#              Copy to terraform.tfvars and fill in your values.
+#              terraform.tfvars is git-ignored - never commit it.
+# Notes......: Placeholders only. No real OCID belongs in this file.
+# ------------------------------------------------------------------------------
+
+# Provider / tenancy - ACE tenancy, profile name as in ~/.oci/config
+oci_config_profile = "ACE"
+region             = "eu-zurich-1"
+
+# Existing compartment - never created or deleted by Terraform.
+# Alternative: comment this out and set compartment_name + tenancy_ocid.
+compartment_ocid = "ocid1.compartment.oc1..xxx"
+# compartment_name = "<compartment_name>"
+# tenancy_ocid     = "ocid1.tenancy.oc1..xxx"
+
+# Naming -> zrh-lab-dsdemo-01, host ci-zrh-lab-dsdemo-01-db-01
+region_key       = "zrh"
+environment_code = "lab"
+stack_code       = "dsdemo"
+lab_instance     = 1
+
+common_freeform_tags = {
+  project = "oradba-labs"
+  owner   = "<your-github-handle>"
+  purpose = "lrn6087-demo"
+}
+
+# Network - own VCN, host without public IP, access via Bastion only
+vcn_cidr            = "10.31.0.0/16"
+public_subnet_cidr  = "10.31.10.0/24"
+private_subnet_cidr = "10.31.20.0/24"
+db_subnet_cidr      = "10.31.30.0/24"
+allowed_ssh_cidrs   = []
+egress_https_only   = true
+enable_bastion      = true
+
+# Host - 19c EE and 26ai EE side by side, datafiles on a block volume (/u01)
+db_host_shape                = "VM.Standard.E4.Flex"
+db_host_ocpus                = 4
+db_host_memory_gbs           = 32
+db_host_boot_volume_size_gbs = 150
+attach_data_volume           = true
+data_volume_size_gbs         = 100
+data_volume_vpus_per_gb      = 10
+
+# Cost: daily start 07:00 and stop 22:00 local time, cron in UTC.
+#   cest - until 2026-10-24 (Switzerland, summer time)
+#   cet  - from 2026-10-25 (Switzerland, winter time)
+#   pdt  - travel week, Las Vegas (stop 22:00 PDT = 05:00 UTC next day)
+#   off  - no schedules, make dsdemo-start / dsdemo-stop only
+schedule_profile        = "cest"
+create_scheduler_policy = true
+# schedule_start_cron   = "0 5 * * *"
+# schedule_stop_cron    = "0 20 * * *"
+
+# Instance principal for ds_connector_create.sh on the host. Needs tenancy_ocid
+# and tenancy-level IAM rights (dynamic group). false = laptop fallback.
+enable_instance_principal = false
+# tenancy_ocid            = "ocid1.tenancy.oc1..xxx"
+
+# Database / Data Safe - CDB$ROOT + PDBs of both CDBs are the start targets
+cdb19_name          = "CDB19"
+cdb19_pdbs          = ["PDB19A", "PDB19B"]
+cdb26_name          = "CDB26"
+cdb26_pdbs          = ["PDB26A", "PDB26B"]
+demo_new_pdb        = "AIPDB1"
+# RUs: empty = latest at install time (make dsdemo-verify reports it); set to pin
+db19_ru             = ""
+db26_ru             = ""
+db26_install_method = "autoupgrade"
+
+# odb_datasafe on the host - bump version and sha256 together (runbook)
+odb_datasafe_version = "1.2.1"
+odb_datasafe_sha256  = "fba0cd8dfc49e0ab42037c590799c3cbf86855f67d48c1d17ba2db4638ad7401"
+ds_connector_name = "dsc-zrh-lab-dsdemo-01"
+ds_connector_port = 1561
+
+# ssh_public_key is NOT set here - use TF_VAR_ssh_public_key (see .env.example)
+# --- EOF ----------------------------------------------------------------------

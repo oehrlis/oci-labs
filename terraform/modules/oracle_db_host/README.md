@@ -47,6 +47,7 @@ Subnet flow logging is provided by the `network` module.
 | `allowed_ssh_cidrs` | list(string) | `[]` | External CIDRs allowed to reach SSH. |
 | `ssh_port` | number | `22` | SSH port. |
 | `listener_port` | number | `1521` | Oracle Net listener port (intra-VCN). |
+| `egress_https_only` | bool | `false` | NSG egress limited to TCP 443 plus intra-VCN. |
 | `oradba_repo_url` | string | `https://github.com/oehrlis/oradba.git` | oradba git URL. |
 | `oradba_install_dir` | string | `/opt/oradba` | oradba clone target on the host. |
 

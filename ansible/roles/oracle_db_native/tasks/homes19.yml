@@ -1,0 +1,95 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/homes19.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Reuse db19_engineering for the OS layer, OraDBA, AutoUpgrade,
+#              the MOS keystore and the 19c EE home.
+# Notes......: import_role with tasks_from - db19_engineering is not modified,
+#              its main.yml (CPU patch flow) never runs here. Every import gets
+#              the same overrides (YAML anchor), so the 19c home is built at
+#              oradb19_ru with oradb19_patch_list, the free-space floor covers
+#              two homes, and AutoUpgrade runs on the pinned JRE 11.
+#              The db19 assert_vars.yml (base RU != target RU, oracle_sid) is
+#              deliberately not imported - it guards the CPU test, not this host.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Oracle Linux 8 prerequisites (db19_engineering os_prereq)
+  ansible.builtin.import_role:
+    name: db19_engineering
+    tasks_from: os_prereq
+  vars: &oradb_db19_vars
+    db19_java_bin: "{{ oradb_autoupgrade_java }}"
+    db19_min_free_gb: "{{ oradb_min_free_gb }}"
+    db19_listener_port: "{{ oradb_listener_port }}"
+    db19_oradba_dir: "{{ oradb_oradba_dir }}"
+    db19_datafile_dir: "{{ oradb_datafile_dir }}"
+    db19_recovery_dir: "{{ oradb_recovery_dir }}"
+    # A label, not necessarily a version: "latest" when unpinned. db19_engineering
+    # uses it only in file names (download stamp, config, patch-set record).
+    db_base_ru: "{{ oradb19_label }}"
+    db19_home_ru: "{{ oradb19_label }}"
+    db19_home_path: "{{ oradb19_home }}"
+    db19_patch_list: "{{ oradb19_patch_list }}"
+    db19_base_image_url: "{{ oradb19_base_image_url }}"
+    db19_gold_image_create: false
+    db19_gold_image_file: ""
+  tags:
+    - install
+    - prereq
+
+- name: OraDBA runtime layer (db19_engineering oradba)
+  ansible.builtin.import_role:
+    name: db19_engineering
+    tasks_from: oradba
+  vars: *oradb_db19_vars
+  tags:
+    - install
+    - oradba
+
+- name: AutoUpgrade (db19_engineering autoupgrade)
+  ansible.builtin.import_role:
+    name: db19_engineering
+    tasks_from: autoupgrade
+  vars: *oradb_db19_vars
+  tags:
+    - install
+    - homes
+    - home19
+    - home26
+
+- name: MOS credentials in the AutoUpgrade keystore (db19_engineering credentials)
+  ansible.builtin.import_role:
+    name: db19_engineering
+    tasks_from: credentials
+  vars: *oradb_db19_vars
+  tags:
+    - install
+    - homes
+    - home19
+    - home26
+
+- name: Download the 19c RU and stage the base image (db19_engineering download)
+  ansible.builtin.import_role:
+    name: db19_engineering
+    tasks_from: download
+  vars: *oradb_db19_vars
+  tags:
+    - install
+    - homes
+    - home19
+
+- name: Create the 19c EE home (db19_engineering create_home)
+  ansible.builtin.import_role:
+    name: db19_engineering
+    tasks_from: create_home
+  vars: *oradb_db19_vars
+  tags:
+    - install
+    - homes
+    - home19

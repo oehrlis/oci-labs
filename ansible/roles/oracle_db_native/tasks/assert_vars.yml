@@ -1,0 +1,46 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/assert_vars.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Fail early on missing inputs instead of half-building the lab.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert inventory values from Terraform
+  ansible.builtin.assert:
+    that:
+      - oradb_databases | length > 0
+      - >-
+        oradb_databases | map(attribute='sid') | select('match', '^[A-Za-z][A-Za-z0-9]{0,7}$') | list | length
+        == oradb_databases | length
+      - oradb_databases | map(attribute='pdbs') | map('length') | min > 0
+      - oradb_live_cdb in (oradb_databases | map(attribute='sid') | list)
+      - oradb_connector_name | length > 0
+      - oradb_compartment_ocid is match('^ocid1\.(compartment|tenancy)\.')
+      - oradb_host_private_ip | length > 0
+      - oradb26_install_method in ['autoupgrade', 'zip']
+    fail_msg: >-
+      Inventory values missing or invalid - run terraform apply in terraform/envs/datasafe-demo
+      and use inventories/generated/datasafe-demo/hosts.yml. Every CDB needs a SID of
+      1-8 characters and at least one PDB.
+    quiet: true
+
+- name: Assert the run-time secrets
+  ansible.builtin.assert:
+    that:
+      - oradb_sys_password | length >= 12
+      - oradb_ds_secret | length >= 12
+    fail_msg: >-
+      oradb_sys_password and oradb_ds_secret are required. Use make dsdemo-install
+      (0600 vars file from terraform output and op read) - never -e on the command line.
+    quiet: true
+  no_log: true
+  tags:
+    - databases
+    - ds_prereqs
+    - install

@@ -1,0 +1,76 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/os.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: OS additions on top of db19_engineering os_prereq: 26ai
+#              preinstall RPM, Java 17 for the connector, python3.11 as python3.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# noqa command-instead-of-module: a read-only availability query - the dnf
+# module has no "is this package offered" check that does not install it.
+- name: Check whether the repository offers the 26ai preinstall RPM  # noqa: command-instead-of-module
+  ansible.builtin.command: "dnf -q list {{ oradb26_preinstall_package }}"
+  register: oradb26_preinstall_offered
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Install the 26ai preinstall RPM
+  ansible.builtin.dnf:
+    name: "{{ oradb26_preinstall_package }}"
+    state: present
+  when: oradb26_preinstall_offered.rc == 0
+  become: true
+
+- name: Report a missing 26ai preinstall RPM instead of skipping silently
+  ansible.builtin.debug:
+    msg:
+      - "NOT INSTALLED: {{ oradb26_preinstall_package }} is not offered by the enabled repositories."
+      - "Kernel parameters and limits come from the 19c preinstall RPM instead."
+      - "Find the name with: sudo dnf search preinstall - then set oradb26_preinstall_package and re-run TAG=prereq"
+  when: oradb26_preinstall_offered.rc != 0
+
+- name: Install the connector and demo packages
+  ansible.builtin.dnf:
+    name: "{{ oradb_packages }}"
+    state: present
+  become: true
+
+- name: Read the current python3 alternative
+  ansible.builtin.command: readlink -f /usr/bin/python3
+  register: oradb_python3_current
+  changed_when: false
+  failed_when: false
+
+- name: Point python3 at python3.11 (connector setup.py needs 3.8+)
+  ansible.builtin.command: "alternatives --set python3 {{ oradb_python3 }}"
+  when: oradb_python3_current.stdout != oradb_python3
+  changed_when: true
+  become: true
+
+- name: Check JAVA_HOME of the connector (install_datasafe_service.sh validates it)
+  ansible.builtin.stat:
+    path: "{{ oradb_java_home }}/bin/java"
+  register: oradb_java_bin
+
+- name: Fail on a missing connector JAVA_HOME
+  ansible.builtin.assert:
+    that:
+      - oradb_java_bin.stat.exists
+    fail_msg: "{{ oradb_java_home }}/bin/java not found - set oradb_java_home to the installed JRE."
+    quiet: true
+
+- name: Create the 26ai stage directory
+  ansible.builtin.file:
+    path: "{{ oradb26_stage_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0775"
+  become: true

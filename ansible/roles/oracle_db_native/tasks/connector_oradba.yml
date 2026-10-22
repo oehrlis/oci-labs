@@ -1,0 +1,86 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/connector_oradba.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Register the Data Safe connector in OraDBA, so that
+#              oradba_dsctl.sh status/start/stop manage it (demo step 6).
+# Notes......: Two steps, both by the tools that own the data:
+#                oradba_homes.sh add --type datasafe     -> oradba_homes.conf entry
+#                ds_connector_register_oradba.sh         -> (oci=<connector>) metadata
+#              The second needs the first: it refuses an environment that is
+#              not in oradba_homes.conf yet. Both run in a login shell of the
+#              oracle user, which loads the OraDBA environment.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Check whether the connector is installed
+  ansible.builtin.stat:
+    path: "{{ oradb_connector_home }}/setup.py"
+  register: oradb_connector_for_oradba
+  become: true
+
+- name: Report the skipped OraDBA registration instead of skipping silently
+  ansible.builtin.debug:
+    msg:
+      - "SKIPPED OraDBA registration: no connector in {{ oradb_connector_home }}."
+      - "Install it first (see the connector step above), then run: make dsdemo-step TAG=connector"
+  when: not oradb_connector_for_oradba.stat.exists
+
+- name: Register the connector in OraDBA
+  when: oradb_connector_for_oradba.stat.exists
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  block:
+    - name: Read the OraDBA homes configuration
+      ansible.builtin.command:
+        cmd: "grep -E '^{{ oradb_connector_oradba_home }}:' {{ oradb_oradba_dir }}/etc/oradba_homes.conf"
+      register: oradb_homes_entry
+      changed_when: false
+      failed_when: false
+
+    - name: Add the connector as OraDBA home (oradba_homes.sh add) - {{ oradb_connector_oradba_home }}
+      ansible.builtin.command:
+        argv:
+          - bash
+          - -lc
+          - '"$0" add --name "$1" --path "$2" --type datasafe --desc "$3"'
+          - "{{ oradb_oradba_dir }}/bin/oradba_homes.sh"
+          - "{{ oradb_connector_oradba_home }}"
+          - "{{ oradb_connector_home }}"
+          - "LRN6087 Data Safe connector {{ oradb_connector_name }}"
+      environment:
+        ORADBA_BASE: "{{ oradb_oradba_dir }}"
+      when: oradb_homes_entry.rc != 0
+      changed_when: true
+
+    - name: Attach the connector name to the OraDBA home (ds_connector_register_oradba.sh)
+      ansible.builtin.command:
+        argv:
+          - bash
+          - -lc
+          - '"$0" --datasafe-home "$1" --connector "$2"'
+          - "{{ oradb_odb_datasafe_base }}/bin/ds_connector_register_oradba.sh"
+          - "{{ oradb_connector_oradba_home }}"
+          - "{{ oradb_connector_name }}"
+      environment:
+        ORADBA_BASE: "{{ oradb_oradba_dir }}"
+        ODB_DATASAFE_BASE: "{{ oradb_odb_datasafe_base }}"
+      when: ('(oci=' ~ oradb_connector_name ~ ')') not in oradb_homes_entry.stdout
+      changed_when: true
+
+    - name: Show the connector as OraDBA sees it (oradba_dsctl.sh status)
+      ansible.builtin.command: /usr/local/bin/dsdemo-connector status
+      register: oradb_dsctl
+      changed_when: false
+      failed_when: false
+      become: true
+      become_user: root
+
+    - name: Report the OraDBA connector status
+      ansible.builtin.debug:
+        msg: "{{ oradb_dsctl.stdout_lines | default([]) + oradb_dsctl.stderr_lines | default([]) }}"

@@ -1,0 +1,1910 @@
+{
+  "data": [
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-04-25T16:40:00.254000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu01_cdb01_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an6bsi5ad6bia7jgrdgojz4qi5rqk6bqpfre2ruf6wu233rrkwlrutqra7s4",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-04-25T16:40:00.254000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-11-01T03:30:00.968000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu01_cdb01_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anbbr4wpnlsquoho2sn7v2jt7grvyjt6rtreahr5yfvfttcfdnppvgcnnkf5",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-11-01T03:30:00.968000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-05-23T00:11:00.851000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu01_cdb01_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anh4zh422zlumxvtzbgyzrn4cuqrpglwp5zwmhukm7hocqiknili6eaucddh",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-05-23T00:11:00.851000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-01-31T21:15:00.295000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu01_cdb01_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.ankzf4r6ituoxuny4pmxwjvfgd5uwxjdpvn44mw2puows5lzusjngtbwec3v",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-01-31T21:15:00.295000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-11-05T00:17:00.773000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu01_cdb01_pdb04",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an52jcio23jarp4npuiu5mrwdw3xotaanxotnbgx3nyn7gfmmcwa4ae7w22w",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-11-05T00:17:00.773000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-01-20T15:02:00.167000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu01_cdb01_pdb05",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anlnxmyrlhd2niwzahbvi4tkuquc4it5fcr3xmid52hpa45wtbff7xhzmvqk",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-01-20T15:02:00.167000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-08-16T22:24:00.871000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu02_cdb02_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anltnkaarsyunoqaux4govuvebfv7oywv6uu2qmitsqomh6md6kdgiklc7h3",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-08-16T22:24:00.871000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-03-07T20:16:00.646000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu02_cdb02_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anyc6gu3jrknjqo5kldfnhiygggyrb2tnwpil2cxir3ljkobn3q5mh7luk4j",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-03-07T20:16:00.646000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "DATABASE_CLOUD_SERVICE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-09-10T04:11:00.945000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu02_cdb02_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anmuvdocpelobk4uttr7asdbnlddn377ogrw7cy2r24zodmpitsm6zlf4kbf",
+      "infrastructure-type": "CLOUD_AT_CUSTOMER",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-09-10T04:11:00.945000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-03-20T06:43:00.832000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu03_cdb03_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.any6lqefjskmpf4rj6rx4uaqb4bwhsecym7b2fx6ez5gb5qnidyrxtdn6w66",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-03-20T06:43:00.832000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-06-08T14:39:00.220000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu03_cdb03_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anh4bzcy57ehdpa27qb3bxm5qwzm2je5c7bpux6quxy3om3vlmj76day3ya3",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-06-08T14:39:00.220000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-09-05T19:27:00.050000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu03_cdb03_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an6jv3niqcggqzidtpaz3tmyjrj4knxwrtxqyf2o7rdi4endplsqyfygj7bx",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "ORA-01017: invalid username/password; logon denied",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2026-09-05T19:27:00.050000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-10-02T18:21:00.986000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu03_cdb03_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.andryzs7yqj2az73fe7k6fq2m75tu5fv7ixnzkuzborre7rdg3hsovrvebxe",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "ORA-28000: The account is locked.",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2025-10-02T18:21:00.986000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-09-29T16:05:00.525000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu04_cdb04_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anvu7p6tg2edyxn6nytjvbad5mvbjftrunb7hiiz2tqazvj6e3l34kk277ik",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "Login timeout: connection to the target database could not be established within 60 seconds",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2025-09-29T16:05:00.525000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-02-02T21:00:00.853000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu04_cdb04_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.angjed6nj7cnoc67ckqcjanxk72lwdvksz4jij6jrwmakjlsfyvixfltbq2k",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-02-02T21:00:00.853000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-04-20T09:48:00.952000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu04_cdb04_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anccyw2j5r37yw3pupgfxseq3e3u4owwjabq2vjnruv4nqpjvd3wbdytx6f4",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-04-20T09:48:00.952000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-08-16T21:27:00.845000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu04_cdb04_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anm62lwhayoclmasau6dy57yeeolv67h3bm2elchbl5sfu3nxrlmwcph5tfm",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "Target database deactivated by user",
+      "lifecycle-state": "INACTIVE",
+      "system-tags": {},
+      "time-created": "2025-08-16T21:27:00.845000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-12-06T11:19:00.805000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu04_cdb04_pdb04",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.andcbsycklaoloek25mf6tf2zsobsnkegcey65hgk6fcpq5c2kbn4c4x55ar",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-12-06T11:19:00.805000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-05-08T21:06:00.775000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu05_cdb05_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.any3wiixfy4lgmutpasuhyfuckl2k4dwwgqjpyyjzo6qgrtlsu6cg573f6yy",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-05-08T21:06:00.775000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-01-10T13:42:00.643000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu05_cdb05_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anbn5frlbmddwhga6iriompzzrbcsvo427ucw2iklogvjffzcy3i765dtw2r",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-01-10T13:42:00.643000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-07-03T12:48:00.413000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu05_cdb05_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.antmx3xnhvvb2qrg7bbmnhnyr5nihlzpzc6q5mwaeu746gofznwutxwqvj6g",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-07-03T12:48:00.413000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-02-18T06:36:00.549000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu05_cdb05_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an5rzihirrgjvpbaamx5ptakfwi42t2jdl3rppyz3ee2dtswb3n4vx4t2yag",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "Failed to connect to the target database through on-premises connector sample-conn-01: connector is not reachable",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2026-02-18T06:36:00.549000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2024-11-22T14:00:00.448000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu05_cdb05_pdb04",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anr2jcc4nuggxl5az4m2r5cxfety2g6rkukdfy4gxgyepmf42zvzhilrpr7q",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2024-11-22T14:00:00.448000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2024-12-01T12:14:00.460000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu05_cdb05_pdb05",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an6whrsni4wznliritnlovztgutlyzkec466bed6fsczahfa73gzb42rcegq",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2024-12-01T12:14:00.460000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-06-20T02:29:00.727000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu06_cdb06_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anqfgqgzirkajfft4d3hhjvzocxhmmdb5bb4z3ggxopifzcnp7bjwwjf2keo",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-06-20T02:29:00.727000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-11-26T06:54:00.297000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu06_cdb06_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anvl3wabgs3tjlwjwbxft5xh5jclyx6ierftil62qoudxt2ds3o55oxlq6xk",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-11-26T06:54:00.297000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-08-28T15:36:00.342000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu06_cdb06_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an7xk3uwg5xsmrrmol6xqhdyrbc2r6opx46euw6v2vc7juaxlrrarpmzwkin",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-08-28T15:36:00.342000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-06-30T03:03:00.895000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu07_cdb07_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anqwbdy4hnp3q2fz6eum5paylmpawje3upmkjnww3azvwahibsu66zyaomoj",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-06-30T03:03:00.895000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-11-23T09:41:00.627000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu07_cdb07_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.antfmxoagpeaub3mb62c6voqcc3jde7qq2dssiaozhutykb5rwfpkzlila6c",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-11-23T09:41:00.627000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-05-14T12:41:00.289000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu07_cdb07_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an4e4b2mbmqozmoib3db4cfyqc7lhuj3wdjwkyujt5cniizrifudjktb5nfk",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "Failed to fetch connection details for the target database",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2025-05-14T12:41:00.289000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-05-12T14:57:00.811000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu07_cdb07_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.angbth7lpphwyuvep5myu2kg5s327jzvk2v5dqxnpvqko542ks356xpfrhg6",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-05-12T14:57:00.811000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-09-14T05:32:00.267000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu07_cdb07_pdb04",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.ancqoccvrfyqfsfk6foyzk3pb6cffazsucaxlrspgivu2ay655dlwsyljgxg",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-09-14T05:32:00.267000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-07-05T02:08:00.427000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu08_cdb08_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.ant7int5xhusf5ejw3ywinwbzvtfrg5bcldo3vlygdgjinlibsywscxda3um",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-07-05T02:08:00.427000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-12-15T14:54:00.430000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu08_cdb08_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.annb2cdprryrvuau25tp7q7l2dbr2je6m4thobthd4az6p7eyuijgtagwqh3",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-12-15T14:54:00.430000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2024-12-31T02:40:00.049000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu08_cdb08_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.antcules5dbkdz44dw75j3k6jyactd5objcv7bir7nso5eyz5kop6r3dk7p7",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2024-12-31T02:40:00.049000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-07-11T21:50:00.205000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu09_cdb09_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anqzlfcxykam4mjl3wlvmp2gwru72kcae2hcg4pz7sizn6scgxushrkma6dd",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-07-11T21:50:00.205000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-05-17T06:11:00.521000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu09_cdb09_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.ankvmr4645rrh66ic3q4oxhp2irth6co3mnkqmyo5qva5laxdgnkggfue4zl",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "Target database deactivated by user",
+      "lifecycle-state": "INACTIVE",
+      "system-tags": {},
+      "time-created": "2025-05-17T06:11:00.521000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-01-10T12:29:00.998000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu09_cdb09_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.ans6m3j2ibqtkjd3osaprsswe3qgy5nzmkrw5u6ayc5swsghanj6gzbgy43p",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "Target database deactivated by user",
+      "lifecycle-state": "INACTIVE",
+      "system-tags": {},
+      "time-created": "2026-01-10T12:29:00.998000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-05-06T04:06:00.663000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu09_cdb09_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anwusyf3zggijgyth7enh3kwtgan6ii6kjritwapdbnn56ryakluenneivly",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-05-06T04:06:00.663000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentprod",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2024-12-30T16:45:00.165000+00:00"
+        },
+        "DBSec": {
+          "Environment": "prod",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-prod",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu09_cdb09_pdb04",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION",
+        "AUDIT_SETTING",
+        "DATA_DISCOVERY",
+        "MASKING"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "prod"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an423qyr23pfcryyocxgi6jgil3qqiwbplb35yppdm43yfvr7sxt62lo3b35",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2024-12-30T16:45:00.165000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-02-26T05:32:00.664000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu10_cdb10_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anpir5si2mmgtflmorzehd3y67zxq5yldt5n7nnxhiqxdbpcbfs5hr5lemsu",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-02-26T05:32:00.664000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-07-13T13:32:00.530000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu10_cdb10_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anxd2tpvlrvpidboazof4gad6sala6mswppildoeaudm3cg5tcl3hahl3bss",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-07-13T13:32:00.530000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-04-29T11:37:00.800000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu10_cdb10_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anjsxu4dvggbjosfuqu5zynqt5d4oux4h3ixqutjt6cou4yklf7guqsuvg3q",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-04-29T11:37:00.800000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-09-09T16:15:00.961000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu10_cdb10_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anr3ijrxehye7ehsk7g22n6bkbplkiflhddnckkds6dgpy7qaj2znenubkrz",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "ORA-28001: the password has expired",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2026-09-09T16:15:00.961000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-05-10T10:31:00.750000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu11_cdb11_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anp4g2kydeuj3j7ra4vkfnsqqnhmydxrrhmb23tbzi3t4puznqo6x3e6qyhw",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-05-10T10:31:00.750000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-03-03T22:47:00.936000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu11_cdb11_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anmoulz7fwk2tqm3cyypx5z6qy4blxdki7pyb5ic3xecrvilqd7nwsysn2nw",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-03-03T22:47:00.936000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-12-23T11:39:00.603000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu11_cdb11_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anp7k2gkn7ap33gfqi4e74eohypmw4nrg72vm7dypfgifx6pdyvqiiewkhlb",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-12-23T11:39:00.603000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-11-22T11:42:00.918000+00:00"
+        },
+        "DBSec": {
+          "Environment": "test",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-test",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu11_cdb11_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anmyskbbvje4ihqdr7kcpy5q4qs6n6zf6koo6afr62ti7lysawgsxutxgmin",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": "ORA-12514: TNS:listener does not currently know of service requested in connect descriptor",
+      "lifecycle-state": "NEEDS_ATTENTION",
+      "system-tags": {},
+      "time-created": "2025-11-22T11:42:00.918000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-04-02T09:09:00.763000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "cdbroot",
+          "ContainerStage": "cdbroot-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu12_cdb12_CDBROOT",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "cdbroot",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anchaqk4du43gmd5moiuevlmcirll4434xihrclae5zeboynwwdwll2mml6e",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-04-02T09:09:00.763000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-10-27T11:40:00.059000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu12_cdb12_pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.an52cjkwmuxk4sfvxbmzwildm242odq4fuegkdd2ydwmhetzfnlfxmrk6bzc",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-10-27T11:40:00.059000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-08-13T02:15:00.686000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu12_cdb12_pdb02",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.ann764ghg662l3wgpet7jqmppuxbjomavvuspwnlltaq3pz2atn6rqfnj6pp",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-08-13T02:15:00.686000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2026-02-27T04:36:00.763000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu12_cdb12_pdb03",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.antgk2ppdimychvyaalwua6cuj427buhnwes4r6gupsyz22qp3dcvn7ltvy6",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2026-02-27T04:36:00.763000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2024-11-22T14:06:00.227000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-clu12_cdb12_pdb04",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.annrh3vwhprol2zdf7yv3uqyofeknj5rjllsjdblwz3uota75wnhrlm4qjmj",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2024-11-22T14:06:00.227000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmenttest",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-08-18T12:23:00.290000+00:00"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "sample-legacy-db",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "test"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.anvnsccv23kehmj5bjrrnehkb46udcugzf6fkj4owelluinjigerhci3ihip",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-08-18T12:23:00.290000+00:00"
+    },
+    {
+      "associated-resource-ids": [],
+      "compartment-id": "ocid1.compartment.oc1..samplecompartmentdev",
+      "database-type": "INSTALLED_DATABASE",
+      "defined-tags": {
+        "Oracle-Tags": {
+          "CreatedBy": "sample-automation",
+          "CreatedOn": "2025-01-05T12:48:00.290000+00:00"
+        },
+        "DBSec": {
+          "Environment": "dev",
+          "ContainerType": "pdb",
+          "ContainerStage": "pdb-dev",
+          "Classification": "undef"
+        }
+      },
+      "description": "SAMPLE DATA - synthetic target for the LRN6087 demo, not a real database",
+      "display-name": "demo-cdb99-pdb01",
+      "features": [
+        "ASSESSMENT",
+        "AUDIT_COLLECTION"
+      ],
+      "freeform-tags": {
+        "sample": "true",
+        "container-type": "pdb",
+        "stage": "dev"
+      },
+      "id": "ocid1.datasafetargetdatabase.oc1.eu-zurich-1.aniovuu4ub7mrpmhbmixn5ckh3zm7n2dnsdtmvyr4shhkoi2fnn553ebzz3h",
+      "infrastructure-type": "ON_PREMISES",
+      "lifecycle-details": null,
+      "lifecycle-state": "ACTIVE",
+      "system-tags": {},
+      "time-created": "2025-01-05T12:48:00.290000+00:00"
+    }
+  ]
+}

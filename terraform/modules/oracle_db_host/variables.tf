@@ -174,6 +174,18 @@ variable "listener_port" {
   default     = 1521
 }
 
+variable "egress_https_only" {
+  type        = bool
+  description = <<-EOT
+    Restrict NSG egress to TCP 443 plus intra-VCN traffic. Default false keeps
+    the open egress the CPU patch lab needs (MOS and AutoUpgrade downloads).
+    Note: the subnet security list of the network module still allows its own
+    common egress (DNS, NTP, HTTP 80, HTTPS 443, ICMP) - security lists and
+    NSGs are evaluated as a union.
+  EOT
+  default     = false
+}
+
 # -----------------------------------------------------------------------------
 # Cloud-init / bootstrap
 # -----------------------------------------------------------------------------

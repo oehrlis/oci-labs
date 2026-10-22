@@ -1,0 +1,239 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.20
+# Version....: v0.2.0
+# Purpose....: Default variables for the oracle_db_native role.
+# Notes......: One OL8 host with Oracle Database 19c EE (CDB19) and Oracle AI
+#              Database 26ai EE (CDB26), installed natively - the LRN6087 Data
+#              Safe demo host. The OS layer, OraDBA, AutoUpgrade, the MOS
+#              keystore and the 19c home come from db19_engineering
+#              (import_role tasks_from, see tasks/homes19.yml) - that role
+#              itself stays unchanged.
+#              Names (oradb_cdb*, oradb_connector_*, oradb_compartment_ocid,
+#              oradb_region, oradb_host_private_ip, oradb_instance_principal)
+#              come from the Terraform-generated inventory (envs/datasafe-demo).
+#              Secrets come from a 0600 vars file built by make at run time:
+#              oradb_sys_password, oradb_ds_secret, mos_username, mos_password,
+#              db19_autoupgrade_keystore_password, oradb19_base_image_url,
+#              oradb26_home_zip_url.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Secrets - required, supplied at run time (see docs/datasafe-demo.md)
+# ------------------------------------------------------------------------------
+oradb_sys_password: ""
+oradb_ds_secret: ""
+
+# ------------------------------------------------------------------------------
+# Filesystem layout - same contract as db19_engineering
+# ------------------------------------------------------------------------------
+#   /u00  ORACLE_BASE, both ORACLE_HOMEs, connector (boot volume)
+#   /u01  datafiles (block volume, oradb_data_volume)
+#   /u02  fast recovery area (boot volume)
+oracle_root: /u00
+oracle_data: /u01
+oracle_arch: /u02
+oracle_base: "{{ oracle_root }}/app/oracle"
+oracle_inventory: "{{ oracle_root }}/app/oraInventory"
+oracle_os_user: oracle
+oracle_os_group_install: oinstall
+oracle_os_group_dba: dba
+oracle_os_group_oper: oper
+
+# Data volume: Terraform attaches it paravirtualized when attach_data_volume is
+# true. The role takes the volume labelled oradb_data_label, or else the only
+# blank disk (no partition, no filesystem), formats it xfs and mounts it on
+# oracle_data. More than one blank disk is a hard failure, never a guess.
+oradb_data_volume: true
+oradb_data_label: u01data
+oradb_data_mount_opts: defaults,nofail
+
+# Free space below ORACLE_BASE before anything is installed: two homes plus
+# the staged 19c base image, 19c RU and 26ai gold image.
+oradb_min_free_gb: 60
+
+# ------------------------------------------------------------------------------
+# OS layer on top of db19_engineering os_prereq
+# ------------------------------------------------------------------------------
+# The 26ai preinstall RPM is installed when the repository offers it. The 19c
+# RPM already sets kernel parameters and limits for both releases, so a missing
+# 26ai RPM is reported, not fatal.
+oradb26_preinstall_package: oracle-ai-database-preinstall-26ai
+
+oradb_packages:
+  - python3.11-pip
+  - java-17-openjdk-headless
+  - jq
+  - openssl
+
+# AutoUpgrade is documented for JDK 8 to 11. With java-17 on the host the
+# /usr/bin/java alternative may move to 17, so AutoUpgrade is pinned to the
+# JRE 11 that db19_engineering installs.
+oradb_autoupgrade_java: /usr/lib/jvm/jre-11-openjdk/bin/java
+
+# The connector setup.py needs Python 3.8+, odb_datasafe calls plain python3.
+# OL8's dnf runs on platform-python, so the python3 alternative is safe to move.
+oradb_python3: /usr/bin/python3.11
+
+# Data Safe on-premises connector runtime (install_datasafe_service.sh -j).
+oradb_java_home: /usr/lib/jvm/jre-17-openjdk
+
+# ------------------------------------------------------------------------------
+# Oracle Database 19c EE home - built by db19_engineering download/create_home
+# ------------------------------------------------------------------------------
+# No pin by default: patch=RU without a version is the latest Release Update
+# that AutoUpgrade resolves at install time (19.32 on 2026-10-20, 19.33 once
+# the October 2026 RU is out). RECOMMENDED would add OJVM, Data Pump bundle
+# patch and an MRP - more downloads and time without value for Data Safe; set
+# oradb19_patch_list to "RECOMMENDED,OPATCH" to get it anyway. A pin
+# (oradb19_ru = "19.32") gives "RU:19.32,OPATCH" and a versioned home path.
+# The resolved RU is recorded by db19_engineering (patchset-<label>.txt in
+# /opt/stage) and reported by the verify step from v$instance.
+# The 19c base image is never downloadable: oradb19_base_image_url (a PAR,
+# make dsdemo-par) stages it, or it is copied into /opt/stage by hand.
+oradb19_ru: ""
+oradb19_label: "{{ oradb19_ru if oradb19_ru | length > 0 else 'latest' }}"
+oradb19_home: "{{ oracle_base }}/product/{{ oradb19_ru if oradb19_ru | length > 0 else '19c' }}/dbhome_1"
+oradb19_patch_list: "{{ ('RU:' ~ oradb19_ru) if oradb19_ru | length > 0 else 'RU' }},OPATCH"
+oradb19_base_image_url: ""
+
+# ------------------------------------------------------------------------------
+# Oracle AI Database 26ai EE home
+# ------------------------------------------------------------------------------
+# autoupgrade - create_home with download=yes. For target_version 23 AutoUpgrade
+#               fetches the RU gold image from MOS (full home, RU included) -
+#               no base image needed, unlike 19c.
+# zip         - stage an OTN/eDelivery image zip (oradb26_home_zip_url, PAR
+#               from make dsdemo-par DB26_ZIP=1, or copied by hand), unzip it
+#               into the home and run runInstaller -silent.
+oradb26_install_method: autoupgrade
+
+# Empty = latest RU that AutoUpgrade resolves at install time, same rule as
+# 19c. A pin (e.g. "23.26.2") gives "RU:23.26.2,OPATCH" and a versioned home.
+oradb26_ru: ""
+oradb26_patch_list: "{{ ('RU:' ~ oradb26_ru) if oradb26_ru | length > 0 else 'RU' }},OPATCH"
+oradb26_home: "{{ oracle_base }}/product/{{ oradb26_ru if oradb26_ru | length > 0 else '26ai' }}/dbhome_1"
+oradb26_target_version: "23"
+
+# Own stage and log directories: patches_info.json and the AutoUpgrade job
+# state must not collide with the 19c run. The MOS keystore is shared.
+oradb26_stage_dir: /opt/stage/26ai
+oradb26_autoupgrade_log_dir: "{{ oracle_base }}/cfgtoollogs/autoupgrade-26ai"
+oradb26_autoupgrade_config_dir: "{{ oracle_base }}/etc/autoupgrade"
+oradb26_autoupgrade_keystore_dir: "{{ oracle_base }}/etc/autoupgrade/keystore"
+oradb26_autoupgrade_jar: /opt/autoupgrade/autoupgrade.jar
+
+oradb26_home_zip: LINUX.X64_2326100_db_home.zip
+oradb26_home_zip_url: ""
+
+# ------------------------------------------------------------------------------
+# Container databases
+# ------------------------------------------------------------------------------
+# Names from the inventory. CDB26 is listed first on purpose: OraDBA starts the
+# default listener from the first oratab home, and the listener runs from the
+# 26ai home (a 26ai listener serves the 19c database as well).
+oradb_cdb19_name: CDB19
+oradb_cdb19_pdbs:
+  - PDB19A
+  - PDB19B
+oradb_cdb26_name: CDB26
+oradb_cdb26_pdbs:
+  - PDB26A
+  - PDB26B
+
+# PDB created live in demo step 2 (demo.sh) and dropped by reset.sh.
+oradb_live_pdb: AIPDB1
+oradb_live_cdb: "{{ oradb_cdb26_name }}"
+
+# Memory: 32 GB host, both CDBs together take about 9 GB.
+oradb_databases:
+  - sid: "{{ oradb_cdb26_name }}"
+    release: 26
+    home: "{{ oradb26_home }}"
+    pdbs: "{{ oradb_cdb26_pdbs }}"
+    sga_mb: 4096
+    pga_mb: 1024
+  - sid: "{{ oradb_cdb19_name }}"
+    release: 19
+    home: "{{ oradb19_home }}"
+    pdbs: "{{ oradb_cdb19_pdbs }}"
+    sga_mb: 3072
+    pga_mb: 768
+
+oradb_datafile_dir: "{{ oracle_data }}/oradata"
+oradb_recovery_dir: "{{ oracle_arch }}/fast_recovery_area"
+oradb_recovery_size_mb: 10240
+oradb_redo_log_size_mb: 200
+oradb_character_set: AL32UTF8
+oradb_dbca_template: General_Purpose.dbc
+
+# Release record written by the verify step: what the lab actually runs.
+oradb_release_file: "{{ oracle_base }}/etc/dsdemo-releases.txt"
+
+# Oracle 19c prerequisite checks reject OL8 (same as db19_engineering).
+oradb19_cv_assume_distid: OEL7.9
+
+# One listener, 26ai home, both CDBs register with it.
+oradb_listener_name: LISTENER
+oradb_listener_port: 1521
+oradb_net_host: "{{ ansible_facts['fqdn'] | default(ansible_facts['hostname']) }}"
+
+# dbca for a CDB takes 15-30 minutes on 4 OCPU.
+oradb_dbca_timeout: 7200
+
+# ------------------------------------------------------------------------------
+# OraDBA (installed by db19_engineering oradba.yml)
+# ------------------------------------------------------------------------------
+oradb_oradba_dir: "{{ oracle_base }}/local/oradba"
+
+# ------------------------------------------------------------------------------
+# odb_datasafe
+# ------------------------------------------------------------------------------
+# Overridable from Terraform (odb_datasafe_version / odb_datasafe_sha256) - set
+# both together, see the runbook. 1.3.1 brings ds_target_register.sh --type.
+oradb_odb_datasafe_version: 1.3.1
+oradb_odb_datasafe_repo: https://github.com/oehrlis/odb_datasafe
+oradb_odb_datasafe_release: "{{ oradb_odb_datasafe_repo }}/releases/download/v{{ oradb_odb_datasafe_version }}"
+oradb_odb_datasafe_url: "{{ oradb_odb_datasafe_release }}/odb_datasafe-{{ oradb_odb_datasafe_version }}.tar.gz"
+# Pinned from odb_datasafe-1.3.1.tar.gz.sha256 of the GitHub release - it must
+# match oradb_odb_datasafe_version, get_url verifies it.
+oradb_odb_datasafe_sha256: 389f101977e8f09e5bd4f7fc1711d2b25bfef41c6965b1f121e87b03d9571be0
+oradb_odb_datasafe_base: "{{ oracle_base }}/local/odb_datasafe"
+
+# Data Safe service account. Root gets C##<user>, PDBs the local <user>.
+oradb_ds_user: DS_ADMIN
+
+# Tag environment derived from the compartment name (ds_target_update_tags.sh,
+# ds_target_register.sh). Empty = "undef". Decision open, see the runbook.
+oradb_env_comp_regex: ""
+
+# ------------------------------------------------------------------------------
+# Data Safe on-premises connector
+# ------------------------------------------------------------------------------
+oradb_connector_name: dsc-zrh-lab-dsdemo-01
+oradb_connector_port: 1561
+oradb_connector_base: "{{ oracle_base }}/product"
+oradb_connector_home: "{{ oradb_connector_base }}/{{ oradb_connector_name }}"
+
+# OraDBA home name of the connector (oradba_homes.conf, product type
+# datasafe). oradba_dsctl.sh status/start/stop address the connector by it.
+oradb_connector_oradba_home: dscon1
+
+# true (instance principal): ds_connector_create.sh runs on the host - OCI
+# create, bundle download, setup.py and systemd in one go.
+# false: the bundle is created on the laptop and copied to
+# oradb_connector_bundle_dir (runbook fallback), Ansible installs it.
+oradb_instance_principal: false
+oradb_connector_bundle_dir: /home/{{ oracle_os_user }}/connector-bundle
+
+# OCI CLI on the host - instance principal path only
+oradb_oci_cli_venv: /opt/oci-cli
+oradb_compartment_ocid: ""
+oradb_region: eu-zurich-1
+oradb_host_private_ip: ""

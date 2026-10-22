@@ -8,6 +8,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **datasafe-demo**: odb_datasafe default 1.3.1 (first release with `ds_target_register.sh --type onprem`),
+  sha256 from the release asset.
+- **lint-shell** also checks `demos/`.
 - **RA-oci-labs-014**: `enable_auto_stop` default changed from `false` to `true`
   in `terraform/envs/cpu-patch-test`. Idle labs stop nightly at 18:00 UTC.
   AutoUpgrade runs must set `enable_auto_stop = false` explicitly to avoid
@@ -40,6 +43,25 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `cpu-lab-coll-rollback MODE=restore|home`. Engine pinned to 0.6.1.
   Runbook: `docs/runbook-oradba-automation-lab.md`.
 
+- **datasafe-demo**: new stack `terraform/envs/datasafe-demo` for the LRN6087 Data Safe demo (Oracle AI
+  World 2026) - own core (VCN, Bastion), one OL8 x86 host (4 OCPU, 32 GB) with a data volume on `/u01`,
+  daily START and STOP schedules from `schedule_profile` (`cest`, `cet`, `pdt`, `off`; working hours
+  07:00-22:00 local, cron in UTC) plus the IAM policy the schedules need, optional instance principal.
+  Ansible role `oracle_db_native` and playbook `lab-datasafe-demo.yml`: native Oracle Database 19c EE
+  (CDB19, PDB19A/PDB19B) and Oracle AI Database 26ai EE (CDB26, PDB26A/PDB26B), homes through AutoUpgrade
+  (19c via `db19_engineering` tasks, unchanged; 26ai via `create_home` with the MOS RU gold image, zip
+  fallback), one listener, OraDBA, Data Safe service accounts, odb_datasafe 1.2.1, on-premises connector as
+  systemd service registered in OraDBA (`oradba_homes.sh`, `ds_connector_register_oradba.sh`). Demo scripts
+  (six steps: AIPDB1 created live in CDB26, registration through `ds_target_register.sh --type` when
+  available, else OCI CLI; connector managed with OraDBA), reset, Bastion tunnel and a synthetic fleet
+  snapshot generator in `demos/datasafe-lrn6087/`. `dsdemo-*` Makefile targets incl. `dsdemo-schedule`,
+  `dsdemo-par` and `dsdemo-par-revoke`; runbook `docs/datasafe-demo.md`. Decisions 2026-10-20: targets
+  are registered as `ON_PREMISES` (`--type onprem`, OCI CLI payload without `instanceId`); step 6 restarts
+  the connector and waits until Data Safe reports it ACTIVE (timeout); 19c and 26ai RUs are not pinned by
+  default (latest at install time, optional `db19_ru` / `db26_ru`, resolved releases reported by verify);
+  odb_datasafe version and SHA-256 overridable from Terraform for the 1.3.0 bump (default stays 1.2.1).
+- **oracle_db_host**: optional `egress_https_only` (NSG egress TCP 443 plus intra-VCN). Default `false`;
+  a `moved` block keeps existing stacks free of a rule replacement.
 - **Secret scan with OCI rules**: `.gitleaks.toml` extends the gitleaks
   defaults with rules for OCI pre-authenticated request URLs, real OCIDs and
   API key fingerprints - the defaults find none of them. The GitHub Actions
