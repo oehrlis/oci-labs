@@ -14,3 +14,4 @@ tfplan
 tfplan.*
 .bastion-tunnel.cmd
 .bastion-tunnel.log
+.patch-par

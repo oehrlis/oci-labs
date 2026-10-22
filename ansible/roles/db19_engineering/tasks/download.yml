@@ -5,11 +5,13 @@
 # Name.......: tasks/download.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.08.19
-# Version....: v0.1.0
+# Version....: v0.2.0
 # Purpose....: Download the Oracle media for a given Release Update from MOS.
 # Notes......: Called once per RU - for the base RU during install, and again
 #              for the target RU during a CPU test. Requires the auto-login
 #              keystore from credentials.yml.
+#              Fallback: with db19_patch_url set, the target RU is staged from a
+#              bucket PAR instead and AutoUpgrade runs with download=no.
 #              Caveat: Oracle states that for 19c and 21c "AutoUpgrade Patching
 #              cannot automatically download this base image". A 19c home can
 #              therefore only be built without a manually staged
@@ -51,6 +53,93 @@
   when: db19_download_stamp.stat.exists
 
 # ---------------------------------------------------------------------------
+# 0b. Fallback - stage the target RU from a bucket PAR instead of MOS
+# ---------------------------------------------------------------------------
+# cpu-patch-tests downloads the patch set (au-download) and uploads it to the
+# orarepo bucket; db19_patch_url is a read PAR on that prefix. The host pulls the
+# objects itself, region-internal - nothing travels through the controller.
+
+# Two decisions: the target RU comes from the PAR (also on a re-run after the
+# stamp, so create_home and deploy never fall back to MOS), and it still has to
+# be pulled (only without the stamp).
+- name: Decide whether the target RU comes from a bucket PAR
+  ansible.builtin.set_fact:
+    db19_patch_par_staged: "{{ (db19_patch_url | length > 0) and (db19_home_ru == db_target_ru) }}"
+
+# Overrides the role default for the rest of the play: create_home and deploy
+# must not reach for MOS either.
+- name: Switch AutoUpgrade to the staged media
+  ansible.builtin.set_fact:
+    db19_autoupgrade_download: "no"
+  when: db19_patch_par_staged | bool
+
+- name: Stage the target RU from db19_patch_url
+  when:
+    - db19_patch_par_staged | bool
+    - not db19_download_stamp.stat.exists
+  block:
+    - name: List the objects below the PAR prefix
+      ansible.builtin.uri:
+        url: "{{ db19_patch_url }}?fields=name,size"
+        return_content: true
+      register: db19_patch_par_listing
+      no_log: true
+
+    - name: Select the objects to stage
+      ansible.builtin.set_fact:
+        db19_patch_par_objects: >-
+          {{ db19_patch_par_listing.json.objects | default([])
+             | rejectattr('name', 'search', '/$') | list }}
+
+    - name: Assert the PAR prefix is not empty
+      ansible.builtin.assert:
+        that: db19_patch_par_objects | length > 0
+        fail_msg: >-
+          db19_patch_url lists no objects. Upload the patch set from
+          cpu-patch-tests first (make upload OCI_OBJECT_PREFIX=...), or unset the
+          PAR (make cpu-lab-par-revoke) to download from MOS.
+        quiet: true
+
+    - name: Report the objects to stage
+      ansible.builtin.debug:
+        msg: >-
+          Staging {{ db19_patch_par_objects | length }} object(s) for RU
+          {{ db19_home_ru }} from the bucket PAR:
+          {{ db19_patch_par_objects | map(attribute='name') | map('basename') | list }}
+
+    # The object URL is the PAR up to "/o/" plus the full object name - this
+    # holds whether the PAR path itself ends at "/o/" or at the prefix.
+    - name: Download the objects into {{ db19_stage_dir }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.get_url:
+        url: "{{ db19_patch_url.split('/o/')[0] }}/o/{{ item.name | urlencode }}"
+        dest: "{{ db19_stage_dir }}/{{ item.name | basename }}"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0644"
+        timeout: 120
+      loop: "{{ db19_patch_par_objects }}"
+      loop_control:
+        label: "{{ item.name | basename }}"
+      register: db19_patch_par_dl
+      retries: 3
+      delay: 10
+      until: db19_patch_par_dl is succeeded
+      no_log: true
+
+    - name: Check the staged sizes against the listing
+      become: true
+      ansible.builtin.stat:
+        path: "{{ db19_stage_dir }}/{{ item.name | basename }}"
+        get_checksum: false
+      loop: "{{ db19_patch_par_objects }}"
+      loop_control:
+        label: "{{ item.name | basename }}"
+      register: db19_patch_par_stat
+      failed_when: db19_patch_par_stat.stat.size | default(-1) != item.size
+
+# ---------------------------------------------------------------------------
 # 1. Gold image first - it contains the base release, so nothing else is needed
 # ---------------------------------------------------------------------------
 
@@ -65,6 +154,7 @@
     mode: "0644"
   when:
     - not db19_download_stamp.stat.exists
+    - not (db19_patch_par_staged | bool)
     - db19_try_gold_image | bool
 
 - name: Attempt the gold-image download for RU {{ db19_home_ru }}
@@ -84,6 +174,7 @@
   poll: 30
   when:
     - not db19_download_stamp.stat.exists
+    - not (db19_patch_par_staged | bool)
     - db19_try_gold_image | bool
 
 - name: Record whether the gold-image path worked
@@ -125,6 +216,7 @@
 - name: Download the media for RU {{ db19_home_ru }}
   when:
     - not db19_download_stamp.stat.exists
+    - not (db19_patch_par_staged | bool)
     - not (db19_gold_image_used | bool)
   become: true
   become_user: "{{ oracle_os_user }}"

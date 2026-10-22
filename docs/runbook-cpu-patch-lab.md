@@ -552,6 +552,36 @@ mistake (see "A pending deploy job blocks every later AutoUpgrade job"):
 make cpu-lab-patch BASTION=1 ANSIBLE_EXTRA="-e db19_autoupgrade_log_dir=/u00/app/oracle/cfgtoollogs/autoupgrade-2026-10"
 ```
 
+### Fallback - target RU from the bucket instead of MOS
+
+The default stays the MOS download on the host. When that is not wanted or not
+possible, `cpu-patch-tests` downloads the patch set (`au-download`) and uploads it
+below a prefix of the `orarepo` bucket (`make upload OCI_OBJECT_PREFIX=patches/2026-10/`).
+The lab then gets a read PAR on exactly that prefix:
+
+```bash
+make cpu-lab-patch-par PATCH_PREFIX=patches/2026-10/   # lists the objects it will stage
+make cpu-lab-patch BASTION=1 ANSIBLE_EXTRA="-e db19_autoupgrade_log_dir=/u00/app/oracle/cfgtoollogs/autoupgrade-2026-10"
+make cpu-lab-par-revoke                                # after the run
+```
+
+- The URL is kept in `terraform/envs/cpu-patch-test/.patch-par` (0600, git-ignored)
+  and reaches Ansible in the 0600 vars file of the make targets - no Terraform
+  apply, no inventory change. Every make target that uses it prints a line saying so
+- The host lists the prefix and pulls the objects itself into `/opt/stage`,
+  region-internal; nothing travels through the controller. Sizes are checked
+  against the listing
+- AutoUpgrade then runs with `download=no` for `create_home` and `deploy`. Only the
+  target RU uses the PAR - a `cpu-lab-install` with the file present still builds
+  the base RU as before
+- The PAR covers only the prefix: an object outside it answers HTTP 401
+  (verified 2026-10-22)
+- **Not yet proven:** the target list is `RECOMMENDED`. Whether AutoUpgrade
+  resolves it from a staged folder without MOS - and whether it needs the
+  `patches_info.json` / `bug-map.json` that `make upload` (only `*.zip`) leaves
+  out - is checked on the first run. If it refuses, upload those JSON files too,
+  or fall back to MOS by revoking the PAR
+
 ## Step 5 - Verify
 
 ```bash

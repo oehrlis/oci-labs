@@ -222,6 +222,15 @@ db19_base_image_zip: "LINUX.X64_193000_db_home.zip"
 # Empty = the file must already be present in db19_stage_dir.
 db19_base_image_url: ""
 
+# Fallback for the TARGET RU when the host should not download from MOS: an OCI
+# bucket pre-authenticated request on a prefix (AnyObjectRead + ListObjects), as
+# minted by "make cpu-lab-patch-par PATCH_PREFIX=patches/2026-10/". Every object
+# below the prefix is staged into db19_stage_dir, the MOS download is skipped,
+# and AutoUpgrade runs with download=no. The base RU never uses it.
+# Normally passed in the make targets' 0600 vars file, not set here.
+# Empty = MOS download (default).
+db19_patch_url: ""
+
 # Patch lists. Two deliberately different strategies, because the two homes
 # answer two different questions.
 #

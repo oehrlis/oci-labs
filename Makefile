@@ -363,10 +363,12 @@ mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run
 mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
 sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password 2>/dev/null || echo '')"; \
 ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password 2>/dev/null || echo '')"; \
+patch_url="$$(cat "$(PATCH_PAR_FILE)" 2>/dev/null || true)"; \
+if [[ -n "$$patch_url" ]]; then echo "ℹ️  Target RU from the bucket PAR in $(PATCH_PAR_FILE) - not from MOS (make cpu-lab-par-revoke to undo)"; fi; \
 vars_file="$$(mktemp "$${TMPDIR:-/tmp}/cpu-lab-vars.XXXXXX")"; \
 trap 'rm -f "$$vars_file"' EXIT INT TERM; \
-MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" \
-  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"]}, open(sys.argv[1], "w"))' "$$vars_file"
+MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" PATCH_URL="$$patch_url" \
+  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"], "db19_patch_url": os.environ["PATCH_URL"]}, open(sys.argv[1], "w"))' "$$vars_file"
 endef
 
 .PHONY: cpu-lab-install
@@ -521,18 +523,58 @@ cpu-lab-par-list: guard-oci ## List existing PARs on the base image bucket
 	    --output table
 
 .PHONY: cpu-lab-par-revoke
-cpu-lab-par-revoke: guard-oci ## Revoke the base-image PARs on the bucket and clear the .env entry
+cpu-lab-par-revoke: guard-oci ## Revoke the base-image and patch PARs on the bucket and clear their local copies
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  profile="$${profile:-DEFAULT}"; \
-	  ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
-	      --query 'data[?name==`$(PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
-	  if [[ -z "$$ids" ]]; then echo "No PAR named $(PAR_NAME) found."; exit 0; fi; \
-	  for id in $$ids; do \
-	    echo "Revoking $$id"; \
-	    "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
+	  for name in $(PAR_NAME) $(PATCH_PAR_NAME); do \
+	    ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
+	        --query "data[?name=='$$name'].id" --raw-output | tr -d '[]", ' | grep . || true)"; \
+	    if [[ -z "$$ids" ]]; then echo "No PAR named $$name found."; continue; fi; \
+	    for id in $$ids; do \
+	      echo "Revoking $$name $$id"; \
+	      "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
+	    done; \
 	  done; \
-	  $(drop_base_image_url)
-	@echo "✅ PAR(s) revoked and removed from $(CPU_ENV_FILE)"
+	  $(drop_base_image_url); \
+	  rm -f "$(PATCH_PAR_FILE)"
+	@echo "✅ PAR(s) revoked; $(CPU_ENV_FILE) entry and $(PATCH_PAR_FILE) removed"
+
+# Fallback patch source for the target RU (MOS on the host stays the default).
+# cpu-patch-tests downloads the patch set and uploads it below PATCH_PREFIX in
+# the same bucket (make upload OCI_OBJECT_PREFIX=...). This read PAR covers that
+# prefix only; the host lists and pulls the objects itself. The URL lands in a
+# 0600 file the make targets pass on in their vars file - no Terraform apply.
+PATCH_PAR_NAME := cpu-lab-patches
+PATCH_PAR_FILE := $(CPU_ENV_DIR)/.patch-par
+PATCH_PREFIX   ?=
+
+.PHONY: cpu-lab-patch-par
+cpu-lab-patch-par: guard-oci ## Mint a read PAR on PATCH_PREFIX in the orarepo bucket for the target RU (PAR_DAYS=7)
+	@[[ -n "$(PATCH_PREFIX)" ]] || { echo "❌ PATCH_PREFIX is required, e.g. PATCH_PREFIX=patches/2026-10/"; exit 1; }
+	@[[ "$(PATCH_PREFIX)" == */ ]] || echo "⚠️  PATCH_PREFIX does not end with / - it matches every object name starting with '$(PATCH_PREFIX)'"
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  profile="$${profile:-DEFAULT}"; \
+	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
+	  echo -e "$(COLOR_BOLD)Minting a pre-authenticated request for the patch set$(COLOR_RESET)"; \
+	  echo "  profile : $$profile"; \
+	  echo "  bucket  : $(PAR_BUCKET)"; \
+	  echo "  prefix  : $(PATCH_PREFIX)"; \
+	  echo "  access  : AnyObjectRead + ListObjects, this prefix only"; \
+	  echo "  expires : $$expires  ($(PAR_DAYS) days)"; \
+	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
+	      --bucket-name "$(PAR_BUCKET)" \
+	      --name "$(PATCH_PAR_NAME)" \
+	      --object-name "$(PATCH_PREFIX)" \
+	      --access-type AnyObjectRead \
+	      --bucket-listing-action ListObjects \
+	      --time-expires "$$expires" \
+	      --query 'data."full-path"' --raw-output)"; \
+	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
+	  list="$$(curl -fsS --max-time 30 "$$uri?fields=name,size")" || { echo "❌ PAR does not list the prefix"; exit 1; }; \
+	  echo "$$list" | python3 -c 'import json,sys; o=[x for x in json.load(sys.stdin).get("objects",[]) if not x["name"].endswith("/")]; print("  objects : %d, %.1f GB" % (len(o), sum(x.get("size",0) for x in o)/1e9)); [print("    " + x["name"]) for x in o]'; \
+	  ( umask 077; printf '%s\n' "$$uri" > "$(PATCH_PAR_FILE)" ); \
+	  echo "  written : $(PATCH_PAR_FILE) (git-ignored, 0600; token not echoed)"
+	@echo "✅ Patch PAR ready - cpu-lab-patch now stages the target RU from it (zero objects fails the run)"
 
 # ==============================================================================
 # Gold images

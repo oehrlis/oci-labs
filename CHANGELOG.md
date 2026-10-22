@@ -33,6 +33,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Patch PAR fallback for the target RU**: `make cpu-lab-patch-par PATCH_PREFIX=...`
+  mints a read PAR (AnyObjectRead + ListObjects) on a prefix of the `orarepo`
+  bucket, where `cpu-patch-tests` uploads its downloaded patch set. With it,
+  `db19_engineering` stages the target RU from the bucket into `/opt/stage`
+  and runs AutoUpgrade with `download=no`; MOS on the host stays the default.
+  The URL travels in the 0600 vars file, not through Terraform.
+  `cpu-lab-par-revoke` now revokes it together with the base-image PAR (and no
+  longer stops early when no base-image PAR exists). Runbook: "Fallback - target
+  RU from the bucket instead of MOS".
 - **oradba.automation lab test**: `ansible/playbooks/lab-oradba-automation.yml`
   runs the collection's `site_setup`, `patch_download`, `home_create`,
   `patch_apply` and `patch_rollback` against the real `CPUDB` of the
