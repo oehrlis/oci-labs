@@ -44,6 +44,80 @@ Nothing sensitive goes into cloud-init: `user_data` is readable by any user on
 the instance through the metadata service. MOS credentials and the SYS password
 are passed per run via `-e`.
 
+## Layout - one CPU network, one stack per product
+
+Since 2026-10-23 the CPU tests grow towards one shared network and one stack per
+product or release on top of it:
+
+```text
+envs/core            VCN 10.29.0.0/16, DB subnet, NAT, Bastion, bucket orarepo
+  |                  core_owner = "core" - outlives every lab, never destroyed by one
+  +-- envs/cpu-patch-26ai   26ai host (OL9), reads core via terraform_remote_state
+  +-- envs/cpu-patch-wlsXX  WebLogic hosts (planned, same pattern)
+
+envs/cpu-patch-test  19c host - still with its own VCN and Bastion, moves onto
+                     the core with the next rebuild (gold image, OL9)
+```
+
+Every `cpu-lab-*` target takes `CPU_ENV=<stack>` (default `cpu-patch-test`).
+Each stack has its own Bastion tunnel port - `cpu-patch-test` 2222,
+`cpu-patch-26ai` 2223 - so two labs can be driven at the same time:
+
+```bash
+make cpu-lab-plan CPU_ENV=cpu-patch-26ai
+make cpu-lab-apply CPU_ENV=cpu-patch-26ai
+make cpu-lab-install CPU_ENV=cpu-patch-26ai BASTION=1
+make cpu-lab-patch CPU_ENV=cpu-patch-26ai BASTION=1
+make cpu-lab-stop CPU_ENV=cpu-patch-26ai
+```
+
+A host stack never creates or destroys a network resource; its destroy removes
+host, NSG, keys and inventory. The role is the same for both releases -
+`db_release` 19 | 26 in the inventory selects the release profile
+(`db_release_profiles` in the role defaults).
+
+## Costs
+
+OCI list prices in USD, checked 2026-10-23. Compute E4.Flex: 0.025 per OCPU-hour,
+0.0015 per GB-hour of memory ([Oracle E4 announcement][e4-price]). Block Volume
+Balanced (10 VPU): 0.0255 per GB-month storage plus 0.0170 per GB-month
+performance = 0.0425 per GB-month ([OCI price list][oci-price]). Object Storage
+Standard: 0.0255 per GB-month. A third-party calculator showed a higher E4 OCPU
+rate (0.0328) - check the [OCI cost estimator][oci-estimator] before a budget
+decision.
+
+Free: VCN, NAT gateway, Internet gateway, Bastion, egress up to 10 TB a month,
+Logging (flow logs) within the free 10 GB a month.
+
+<!-- markdownlint-disable MD013 MD060 -->
+| Item | Sizing | Running | Stopped |
+| --- | --- | --- | --- |
+| db19 host (`cpu-patch-test`) | 8 OCPU / 32 GB | 0.248 per hour | 0 |
+| db26 host (`cpu-patch-26ai`) | 8 OCPU / 32 GB | 0.248 per hour | 0 |
+| WLS host (planned) | 4 OCPU / 32 GB | 0.148 per hour | 0 |
+| Boot volume per host | 200 GB, Balanced | included below | 8.50 per month (0.28 per day) |
+| Bucket `orarepo` | 314 GB, 594 objects (2026-10-23) | 8.00 per month | 8.00 per month |
+<!-- markdownlint-restore -->
+
+What that means:
+
+- **Two DB hosts running at the same time cost 0.50 per hour** - the budget of
+  0.5 per hour. A third host on top (WLS) goes to 0.64 per hour: run WLS with one
+  DB host stopped, or size it at 4 OCPU / 16 GB (0.124 per hour)
+- Compute is only charged while a host runs; `make cpu-lab-stop` after every run
+- **Storage runs all the time.** Three hosts parked: 3 x 8.50 = 25.50 per month
+  for boot volumes, plus 8.00 for the bucket - about 34 per month without a single
+  running hour. The biggest levers are a destroy after the report and a cleanup of
+  old media in `orarepo`
+- A CPU cycle as run in 2026-10: 19c about 3 h of host time (baseline, patch,
+  rollback, retries), 26ai about 3 h, WLS about 4 h per version - roughly
+  0.75 + 0.75 + 4 x 0.6 = 3.90 compute, plus about 34 per month storage while
+  the hosts are parked
+
+[e4-price]: https://www.dbta.com/Editorial/News-Flashes/Oracle-Announces-Cloud-Compute-E4-Platform-on-Third-Gen-AMD-EPYC-Processors-146040.aspx
+[oci-price]: https://www.oracle.com/cloud/price-list/
+[oci-estimator]: https://www.oracle.com/cloud/costestimator.html
+
 ## Two phases
 
 The Ansible role splits into a generic phase, reusable for any Oracle 19c lab,
