@@ -15,7 +15,7 @@ galaxy_info:
   role_name: db19_engineering
   author: Stefan Oehrli
   description: >-
-    Oracle Database 19c on Oracle Linux 8 - OS prerequisites, ORACLE_HOME
+    Oracle Database 19c (OL8) and 26ai (OL8/OL9), db_release 19 | 26 - OS prerequisites, ORACLE_HOME
     creation via AutoUpgrade create_home, database creation, and out-of-place
     RU patching for CPU test labs.
   license: Apache-2.0
@@ -24,6 +24,7 @@ galaxy_info:
     - name: EL
       versions:
         - "8"
+        - "9"
   galaxy_tags:
     - oracle
     - database

@@ -44,11 +44,18 @@ ANSIBLE_DIR := ansible
 DOC_DIR     := docs
 TOOLS_DIR   := tools
 
-# -- cpu-patch-test lab --------------------------------------------------------
-CPU_ENV_DIR   := $(TF_DIR)/envs/cpu-patch-test
+# -- CPU patch labs ------------------------------------------------------------
+# One stack per product/release on the shared CPU network. CPU_ENV picks the
+# stack every cpu-lab-* target works on - cpu-patch-test (19c) by default,
+# CPU_ENV=cpu-patch-26ai for 26ai. Each stack has its own tunnel port, so two
+# labs can be driven at the same time.
+CPU_ENV       ?= cpu-patch-test
+CPU_ENV_DIR   := $(TF_DIR)/envs/$(CPU_ENV)
 CPU_ENV_FILE  := $(CPU_ENV_DIR)/.env
 CPU_PLAN_FILE := tfplan
-CPU_INVENTORY := inventories/generated/cpu-patch-test/hosts.yml
+CPU_INVENTORY := inventories/generated/$(CPU_ENV)/hosts.yml
+CPU_TUNNEL_PORT_cpu-patch-test := 2222
+CPU_TUNNEL_PORT_cpu-patch-26ai := 2223
 CPU_PLAYBOOK  := playbooks/lab-cpu-patch.yml
 
 # 1Password references. Read inside recipe bodies only - never at parse time,
@@ -308,12 +315,12 @@ core-destroy: guard-terraform ## Tear the shared core down (asks, YES=1 to skip)
 	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" destroy -input=false $(if $(YES),-auto-approve,)
 
 .PHONY: cpu-lab-init
-cpu-lab-init: guard-terraform ## Init Terraform for the cpu-patch-test env
+cpu-lab-init: guard-terraform ## Init Terraform for the CPU_ENV stack (default cpu-patch-test)
 	$(Q)cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" init -input=false
-	@echo "✅ cpu-patch-test initialised"
+	@echo "✅ $(CPU_ENV) initialised"
 
 .PHONY: cpu-lab-plan
-cpu-lab-plan: guard-terraform ## Plan cpu-patch-test (dry-run, writes tfplan)
+cpu-lab-plan: guard-terraform ## Plan the CPU_ENV stack (dry-run, writes tfplan)
 	$(Q)cd "$(CPU_ENV_DIR)" && \
 	  set -a; [[ -f .env ]] && . ./.env; set +a; \
 	  "$(TERRAFORM)" plan -input=false -out="$(CPU_PLAN_FILE)"
@@ -445,14 +452,14 @@ cpu-lab-start: guard-oci guard-terraform ## Start the stopped lab instance(s)
 .PHONY: cpu-lab-destroy
 cpu-lab-destroy: guard-terraform ## Tear down the lab (asks for confirmation, YES=1 to skip)
 	@if [[ "$(YES)" != "1" ]]; then \
-	  echo -e "$(COLOR_YELLOW)This destroys the whole cpu-patch-test stack.$(COLOR_RESET)"; \
+	  echo -e "$(COLOR_YELLOW)This destroys the whole $(CPU_ENV) stack.$(COLOR_RESET)"; \
 	  read -r -p "Type 'destroy' to confirm: " answer; \
 	  [[ "$$answer" == "destroy" ]] || { echo "Aborted."; exit 1; }; \
 	fi
 	$(Q)cd "$(CPU_ENV_DIR)" && \
 	  set -a; [[ -f .env ]] && . ./.env; set +a; \
 	  "$(TERRAFORM)" destroy -input=false -auto-approve
-	@echo "✅ cpu-patch-test destroyed"
+	@echo "✅ $(CPU_ENV) destroyed"
 
 .PHONY: cpu-lab-cycle
 cpu-lab-cycle: ## Full cycle: apply -> install -> patch -> verify (leaves the lab running)
@@ -729,7 +736,7 @@ cpu-lab-coll-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Collection 
 # Bastion drops the connection, and the tunnel fails with "Permission denied
 # (publickey)" even though -i names the correct key.
 
-BASTION_LOCAL_PORT ?= 2222
+BASTION_LOCAL_PORT ?= $(or $(CPU_TUNNEL_PORT_$(CPU_ENV)),2222)
 BASTION_SESSION_TTL ?= 10800
 
 .PHONY: cpu-lab-bastion-session

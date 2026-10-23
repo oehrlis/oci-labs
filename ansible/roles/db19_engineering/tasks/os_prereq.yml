@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/os_prereq.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.2.0
 # Purpose....: Oracle Linux 8 prerequisites for an Oracle Database 19c install.
 # Notes......: oracle-database-preinstall-19c does the real work - it creates
 #              the oracle user and the oinstall/dba/oper/backupdba/dgdba/kmdba
@@ -19,15 +19,17 @@
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 
-- name: Assert the host runs Oracle Linux 8
+- name: Assert the host runs a supported Oracle Linux release
   ansible.builtin.assert:
     that:
       - ansible_facts['os_family'] == 'RedHat'
-      - ansible_facts['distribution_major_version'] == '8'
+      - ansible_facts['distribution_major_version'] in db_release_profile.os_majors
     fail_msg: >-
-      This role targets Oracle Linux 8. Detected
+      Release {{ db_release }} is set up for Oracle Linux
+      {{ db_release_profile.os_majors | join(' / ') }} in this role. Detected
       {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
-      Oracle 19.3.0 cannot be installed on OL9.
+      19c on OL9 needs a gold image at a recent RU instead of the 19.3.0 base
+      image - not enabled yet.
     success_msg: "Oracle Linux {{ ansible_facts['distribution_version'] }} detected."
 
 - name: Install the Oracle Database preinstall RPM

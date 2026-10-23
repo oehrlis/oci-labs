@@ -1,0 +1,17 @@
+# cpu-patch-26ai env - local state, secrets, and generated keys
+.env
+.env.new
+.ssh/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.new
+crash.log
+crash.*.log
+tfplan
+tfplan.*
+.bastion-tunnel.cmd
+.bastion-tunnel.log
+.patch-par

@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/download.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.2.0
+# Date.......: 2026.10.23
+# Version....: v0.3.0
 # Purpose....: Download the Oracle media for a given Release Update from MOS.
 # Notes......: Called once per RU - for the base RU during install, and again
 #              for the target RU during a CPU test. Requires the auto-login
@@ -295,6 +295,7 @@
   until: db19_base_image_dl is succeeded
   when:
     - not (db19_gold_image_used | bool)
+    - not (db19_create_home_from_gold | bool)
     - not db19_base_image_stat.stat.exists
     - db19_base_image_url | length > 0
 
@@ -315,6 +316,7 @@
   ansible.builtin.assert:
     that:
       - (db19_gold_image_used | bool)
+        or (db19_create_home_from_gold | bool)
         or db19_base_image_final.stat.exists
         or (db19_gold_image_found.files | length > 0)
     fail_msg: >-
@@ -330,7 +332,9 @@
       https://www.oracle.com/database/technologies/oracle19c-linux-downloads.html
     success_msg: >-
       Software source for create_home is available
-      ({{ db19_base_image_final.stat.exists | ternary(db19_base_image_zip, 'gold image') }}).
+      ({{ (db19_create_home_from_gold | bool)
+          | ternary('gold image, downloaded by create_home',
+                    db19_base_image_final.stat.exists | ternary(db19_base_image_zip, 'gold image')) }}).
 
 - name: Stamp this RU as fully staged
   become: true

@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/create_home.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.2.0
 # Purpose....: Create an ORACLE_HOME at a given RU via AutoUpgrade create_home.
 # Notes......: Reused for both homes - the caller sets db19_home_ru and
 #              db19_home_path. No runInstaller, no response file: AutoUpgrade
@@ -226,5 +226,5 @@
   ansible.builtin.debug:
     msg: >-
       {{ db19_home_inventory.stdout_lines | default([])
-         | select('search', '(?i)(Oracle Database|Release Update|Patch  *[0-9]+ *:)')
+         | select('search', '(?i)(Oracle (AI )?Database|Release Update|Patch  *[0-9]+ *:)')
          | list }}

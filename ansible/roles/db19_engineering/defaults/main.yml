@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: defaults/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.2.0
 # Purpose....: Default variables for the db19_engineering role.
 # Notes......: oracle_sid, oracle_base, db_base_ru, db_target_ru,
 #              oracle_home_base and oracle_home_target are normally supplied
@@ -31,8 +31,59 @@ db_base_ru: "19.31"
 # Target Release Update the CPU test patches to (out-of-place).
 db_target_ru: "19.32"
 
+# Oracle release the role installs: "19" or "26" (Oracle AI Database 26ai).
+# There is no release 23 - 26ai RU strings start with 23 (23.26.4), the release
+# is 26. Everything that differs between the two lives in db_release_profiles;
+# the db19_* variables below are derived from it, so templates, tasks and the
+# oracle_db_native role that imports this one keep their names.
+db_release: "19"
+
+db_release_profiles:
+  "19":
+    # AutoUpgrade target_version: the tool's own release number.
+    au_target_version: "19"
+    # First field of every RU string of this release.
+    ru_prefix: "19"
+    os_majors: ["8"]
+    preinstall_package: oracle-database-preinstall-19c
+    # YES since 2026-10-23: AutoUpgrade 26.6 downloads 19c gold images from MOS
+    # again (seen in Lauf A, home 19.32.0.0 with OCW 19.32 - a base-image home
+    # carries OCW 19.3). Untested in this role until the next 19c run; on an
+    # HTTP 500 from the Update Advisor fall back with -e db19_autoupgrade_gold_image=AUTO.
+    gold_image: "YES"
+    patch_list_base: "RU:{{ db_base_ru }},JDK,OPATCH,OJVM,DPBP"
+    patch_list_target: "RECOMMENDED:{{ db_target_ru }},JDK"
+    dbca_rsp_version: "v19.0.0"
+    dbca_em_configuration: true
+    # 19c prerequisite checks reject OL8 without it.
+    cv_assume_distid: "OEL7.9"
+    uniaud_binopt: true
+  "26":
+    # AutoUpgrade still calls 26ai target_version 23; with 23 it skips the
+    # Update Advisor and takes the gold image straight from ARU.
+    au_target_version: "23"
+    ru_prefix: "23"
+    os_majors: ["8", "9"]
+    # Name on OL8/OL9 not verified in this role - os_prereq reports it.
+    preinstall_package: oracle-ai-database-preinstall-26ai
+    # Empty = no gold_image parameter; AutoUpgrade uses YES itself for 23.
+    gold_image: ""
+    # Base = previous RU (or its last MRP - append the MRP explicitly here,
+    # RECOMMENDED would resolve to today's MOS state). OJVM ships inside the
+    # 26ai RU, a JDK keyword for 23 is unverified - the patchset report shows
+    # what was resolved.
+    patch_list_base: "RU:{{ db_base_ru }},OPATCH"
+    patch_list_target: "RECOMMENDED:{{ db_target_ru }}"
+    dbca_rsp_version: "v23.0.0"
+    dbca_em_configuration: false
+    cv_assume_distid: ""
+    # Unified auditing is the only mode from 23 on - no binary option to set.
+    uniaud_binopt: false
+
+db_release_profile: "{{ db_release_profiles[db_release | string] }}"
+
 # Oracle major release - drives AutoUpgrade target_version and patch names.
-db19_major_release: "19"
+db19_major_release: "{{ db_release_profile.au_target_version }}"
 
 # Edition: EE or SE2
 db19_edition: "EE"
@@ -100,7 +151,7 @@ oracle_os_group_oper: oper
 # ------------------------------------------------------------------------------
 
 # Does the heavy lifting: users, groups, sysctl, limits, required libraries.
-db19_preinstall_package: oracle-database-preinstall-19c
+db19_preinstall_package: "{{ db_release_profile.preinstall_package }}"
 
 # Additional packages the lab needs on top of the preinstall RPM. All of these
 # are in the base OL8 repositories - a missing one is a hard failure.
@@ -191,12 +242,18 @@ db19_autoupgrade_download: "yes"
 # There is currently no way to obtain a 19c gold image. Stefan is clarifying the
 # 19c gold-image situation with the Oracle PM.
 #
-# create_home keeps AUTO because that path is proven: the Updater returns
-# UpdaterInfoPerPrefix{latestVersion='N/A'}, AutoUpgrade shrugs and validates the
-# staged base image instead - that is how the 19.31 home was built on 2026-08-19.
-# A download job in contrast treats the same 500 as fatal, so the download
-# templates pin gold_image=NO.
-db19_autoupgrade_gold_image: "AUTO"
+# Until 2026-10-23 create_home used AUTO: the Updater returned
+# UpdaterInfoPerPrefix{latestVersion='N/A'}, AutoUpgrade shrugged and validated
+# the staged base image instead - that is how the 19.31 home was built on
+# 2026-08-19, and the 19.32/19.33 homes of 2026-10-23 too. Since then the value
+# comes from db_release_profiles (19: YES, 26: no parameter). The download
+# templates keep gold_image=NO - they fetch the individual patches only.
+db19_autoupgrade_gold_image: "{{ db_release_profile.gold_image }}"
+
+# create_home builds from a gold image AutoUpgrade downloads itself - no base
+# image has to be staged then.
+db19_create_home_from_gold: >-
+  {{ db_release | string == '26' or (db19_autoupgrade_gold_image | upper == 'YES') }}
 
 # Attempt a separate gold-image download before falling back to individual
 # patches plus a staged base image. Off: for 19c this is a guaranteed failed run
@@ -248,7 +305,7 @@ db19_patch_url: ""
 # patch, not to one pinned to the base RU - on 2026-08-21 a 19.31 base pulled
 # JDK BP 19.0.0.0.260818 (p39791916). The patch LABELS are fixed, one patch
 # NUMBER is not, which is exactly why report.yml writes the resolved set out.
-db19_patch_list_base: "RU:{{ db_base_ru }},JDK,OPATCH,OJVM,DPBP"
+db19_patch_list_base: "{{ db_release_profile.patch_list_base }}"
 
 # TARGET - RECOMMENDED, so the test sees what Oracle actually recommends for the
 # quarter. In a plain RU quarter that is the RU set; in a quarter with a
@@ -261,7 +318,7 @@ db19_patch_list_base: "RU:{{ db_base_ru }},JDK,OPATCH,OJVM,DPBP"
 # rejected ("when the PATCH parameter specifies a version for RECOMMENDED, the
 # same version must be specified for RU"); bare "RECOMMENDED" silently resolves
 # to the latest RU, which would make the target non-deterministic.
-db19_patch_list_target: "RECOMMENDED:{{ db_target_ru }},JDK"
+db19_patch_list_target: "{{ db_release_profile.patch_list_target }}"
 
 # ------------------------------------------------------------------------------
 # Functional smoke test
@@ -499,7 +556,7 @@ db19_service_stop_timeout: 300
 # ------------------------------------------------------------------------------
 # Oracle 19c prerequisite checks reject OL8. oradba_init used OEL7.6, the
 # tvd-cpureport cloud-init used OEL7.9 - both are accepted by the installer.
-db19_cv_assume_distid: OEL7.9
+db19_cv_assume_distid: "{{ db_release_profile.cv_assume_distid }}"
 
 # Relink with Unified Auditing enabled. AutoUpgrade exposes this as a binary
 # option, so no manual "make -f ins_rdbms.mk uniaud_on ioracle" is needed.

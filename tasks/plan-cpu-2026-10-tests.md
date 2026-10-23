@@ -106,10 +106,50 @@ Issues aus dem Lauf, fuer den Report:
 
 ### B - DB 26ai: 23.26.3 -> 23.26.4 (Fr/Sa)
 
-- [ ] Zweiter Host im Stack `cpu-patch-test` (OL9, 4 OCPU / 32 GB) - **plan/apply durch Stefan**
-- [ ] 26ai-Home 23.26.3 + CDB/PDB ueber `oracle_db_native` (Gold Image von MOS)
-- [ ] Patch auf 23.26.4 out-of-place mit derselben Messung wie A, Rollback
+Entscheide 2026-10-23 (Stefan): ein VCN + eine Bastion fuer das Thema CPU, getrennte
+Hosts pro Version/Produkt; OL9; eine Rolle mit Release als Variable (nur `19` | `26`);
+Basis = vorherige MRP oder RU, was geht (fuer 26ai gibt es MRPs und Gold Images).
+
+Nachtrag 2026-10-23 (Stefan): Basisdienste (VCN, Bastion, Bucket) kommen aus dem
+**Core-Stack `envs/core`**, Host-Envs fuer db19 / db26 / wlsXX haengen daran (19c zieht beim
+naechsten Neubau nach). Gold Image als Default-Weg **jetzt** fuer 19 und 26 (heute baute
+`create_home` aus `LINUX.X64_193000_db_home.zip` + Patches). 26ai-Host wie 19c (8 OCPU /
+32 GB), WLS-Hosts 4 OCPU, Summe < 0.5 USD/h; **Kostenaufstellung inkl. Storage in die Doku**.
+Autonomie wie A (apply Stefan).
+
+Bestand (Survey 2026-10-23): alle Hosts im Stack `cpu-patch-test` sind identisch (Shape,
+Image, Rolle skalar), das Inventory hat eine Gruppe mit 19c-Variablen, `oracle_db_native`
+erzwingt OL8 und Data-Safe-Variablen, **kein 26ai-Deploy-Flow existiert**.
+
+Weg - kein Umbau am 19c-Stack, kein Plan auf Host 01:
+
+1. **Neues Env `terraform/envs/cpu-patch-26ai`**: nutzt VCN, DB-Subnetz und Bastion aus
+   `envs/core` per `terraform_remote_state` (lokaler State), baut nur Host + Key +
+   Inventory (`oracle_db_host`-Modul, OL9-Image, 8 OCPU / 32 GB, Gruppe `cpu_patch_26ai`).
+   Spaeter WLS-Hosts (4 OCPU) nach demselben Muster
+2. **Makefile**: `CPU_ENV ?= cpu-patch-test` steuert Env-Dir, Inventory, Playbook; alle
+   `cpu-lab-*`-Ziele inkl. Bastion-Tunnel laufen mit `CPU_ENV=cpu-patch-26ai`. Tunnel-Port
+   je Env (2222 / 2223), damit beide parallel gehen
+3. **Rolle `db19_engineering` versionieren**: `db_release: 19 | 26` (23.x-RU-Strings ->
+   26, explizit). Je Release: OS-Assert (19: OL8, 26: OL8/OL9), Preinstall-RPM
+   (`oracle-database-preinstall-19c` | `-23ai`), Base-Image/Gold-Image-Weg, Default-
+   Patch-Listen, AU `target_version`. Patch, Verify, Smoke, Rollback, Report bleiben
+   gemeinsam - gleiche Messung wie A. Umbenennen in `db_engineering` erst nach dem Zyklus
+4. **Basis 26ai**: Home aus dem Gold Image der Basis (23.26.3 bzw. letzte MRP davor),
+   per AU `create_home`; CDB + PDB1 per dbca wie bei 19c. Ziel 23.26.4: RU 40002013 bzw.
+   Gold Image 40014644
+5. Lauf: plan/apply **Stefan**, dann install, patch, verify, rollback, stop, `import-lab`
+
+- [ ] 1-3 bauen, offline pruefen (`terraform validate`, `--syntax-check`, ansible-lint,
+  19c-Inventory: Rolle rendert fuer 19 unveraendert)
+- [ ] `make cpu-lab-plan CPU_ENV=cpu-patch-26ai` - erwartet: 1 Instanz, Key, Inventory,
+  **nichts** im 19c-State - **apply durch Stefan**
+- [ ] Install 26ai Basis, CDB/PDB, Baseline-Snapshot
+- [ ] Patch auf 23.26.4 out-of-place, Verify, Rollback, Stop
 - [ ] Import nach `cpu-patch-tests`
+
+Nicht in B: 19c auf OL9 (Stefan: sollte gehen - heute scheitert das Base-Image 19.3.0 an
+OL9, Weg ueber Gold Image/`-applyRU`; eigener Punkt nach dem Zyklus).
 
 ### C - WLS/FMW (Sa/So, Rest aus Las Vegas)
 

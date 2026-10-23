@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/create_db.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.2.0
 # Purpose....: Create the lab database and its Oracle Net configuration.
 # Notes......: A default seeded-template database is enough for a CPU test; the
 #              database NAME is a per-lab parameter (oracle_sid). Created as a
@@ -127,13 +127,16 @@
       {{ oracle_home_base }}/bin/dbca -silent -createDatabase
       -responseFile {{ oracle_base }}/etc/dbca_{{ oracle_sid }}.rsp
       -ignorePreReqs
-  environment:
-    ORACLE_HOME: "{{ oracle_home_base }}"
-    ORACLE_BASE: "{{ oracle_base }}"
-    ORACLE_SID: "{{ oracle_sid }}"
-    TNS_ADMIN: "{{ oracle_home_base }}/network/admin"
-    CV_ASSUME_DISTID: "{{ db19_cv_assume_distid }}"
-    PATH: "{{ oracle_home_base }}/bin:/usr/local/bin:/usr/bin:/bin"
+  # CV_ASSUME_DISTID only where a release needs it (19c on OL8) - an empty value
+  # is not the same as an unset one for the prerequisite checks.
+  environment: >-
+    {{ {'ORACLE_HOME': oracle_home_base,
+        'ORACLE_BASE': oracle_base,
+        'ORACLE_SID': oracle_sid,
+        'TNS_ADMIN': oracle_home_base ~ '/network/admin',
+        'PATH': oracle_home_base ~ '/bin:/usr/local/bin:/usr/bin:/bin'}
+       | combine({'CV_ASSUME_DISTID': db19_cv_assume_distid}
+                 if db19_cv_assume_distid | length > 0 else {}) }}
   register: db19_dbca
   changed_when: db19_dbca.rc == 0
   async: 7200

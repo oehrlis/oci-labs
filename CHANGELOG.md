@@ -8,6 +8,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `db19_engineering`: `db_release` 19 | 26 with `db_release_profiles` - OS check, preinstall RPM,
+  AutoUpgrade `target_version` (26ai: 23, the tool's value), gold image, patch lists, dbca schema,
+  `CV_ASSUME_DISTID` and `binopt.uniaud` per release; the `db19_*` names stay, so `oracle_db_native`
+  keeps working. A guard rejects a release that does not fit the RU strings
+- `db19_engineering`: release 19 builds homes from a gold image (`gold_image=YES`) instead of the
+  19.3.0 base image plus patches - AutoUpgrade 26.6 serves 19c gold images again. Not yet run in this
+  role; on an Update Advisor HTTP 500 fall back with `-e db19_autoupgrade_gold_image=AUTO`. Also
+  affects the 19c home of `oracle_db_native` (datasafe-demo)
 - **datasafe-demo**: odb_datasafe default 1.3.1 (first release with `ds_target_register.sh --type onprem`),
   sha256 from the release asset.
 - **lint-shell** also checks `demos/`.
@@ -33,6 +41,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **cpu-patch-26ai** (`terraform/envs/cpu-patch-26ai`): 26ai host for the CPU tests on the shared
+  core - VCN, DB subnet and Bastion are read from `envs/core` via `terraform_remote_state`, the stack
+  creates only host, NSG, keys and inventory (OL9, 8 OCPU / 32 GB, no public IP). First stack of the
+  layout "one CPU network, one stack per product/release"
+- `make cpu-lab-* CPU_ENV=<stack>`: every CPU lab target works on the chosen stack (default
+  `cpu-patch-test`), with its own Bastion tunnel port (2222 / 2223)
 - **Patch PAR fallback for the target RU**: `make cpu-lab-patch-par PATCH_PREFIX=...`
   mints a read PAR (AnyObjectRead + ListObjects) on a prefix of the `orarepo`
   bucket, where `cpu-patch-tests` uploads its downloaded patch set. With it,

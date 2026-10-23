@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/assert_vars.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.2.0
 # Purpose....: Fail fast on missing or contradictory role input.
 # Notes......: Runs under the "always" tag so a step-by-step run on a test VM
 #              is validated the same way as a full run.
@@ -25,6 +25,19 @@
       got "{{ oracle_sid | default('') }}". Set it per lab via the Terraform
       variable oracle_sid or -e oracle_sid=MYDB.
     success_msg: "Lab database name: {{ oracle_sid }}"
+
+# Release and RU strings must agree: 26ai RUs start with 23, 19c RUs with 19.
+# Without this a 26ai inventory that forgot db_release would run as 19.
+- name: Assert the release matches the Release Updates
+  ansible.builtin.assert:
+    that:
+      - db_release | string in db_release_profiles
+      - (db_base_ru | string).split('.')[0] == db_release_profile.ru_prefix
+      - (db_target_ru | string).split('.')[0] == db_release_profile.ru_prefix
+    fail_msg: >-
+      db_release "{{ db_release }}" does not fit the RUs {{ db_base_ru }} ->
+      {{ db_target_ru }}. Releases are 19 and 26; 26ai RU strings start with 23.
+    success_msg: "Release {{ db_release }}, RUs {{ db_base_ru }} -> {{ db_target_ru }}."
 
 - name: Assert the base and target Release Updates differ
   ansible.builtin.assert:

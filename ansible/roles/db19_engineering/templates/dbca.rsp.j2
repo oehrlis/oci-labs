@@ -8,7 +8,7 @@
 #          up in "ps" output.
 #-------------------------------------------------------------------------------
 
-responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_v19.0.0
+responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_{{ db_release_profile.dbca_rsp_version }}
 gdbName={{ oracle_sid }}
 sid={{ oracle_sid }}
 databaseConfigType=SI
@@ -23,7 +23,9 @@ pdbAdminPassword={{ db19_sys_password }}
 templateName={{ db19_dbca_template }}
 sysPassword={{ db19_sys_password }}
 systemPassword={{ db19_sys_password }}
+{% if db_release_profile.dbca_em_configuration | bool %}
 emConfiguration=NONE
+{% endif %}
 datafileDestination={{ db19_datafile_dir }}
 recoveryAreaDestination={{ db19_recovery_dir }}
 recoveryAreaSize={{ db19_recovery_size_mb }}
