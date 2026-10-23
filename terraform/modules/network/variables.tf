@@ -121,10 +121,12 @@ variable "ssh_port" {
   default     = 22
 }
 
+# Opt-in like allowed_ssh_cidrs: no stack passes this and none runs WireGuard, yet
+# the old default opened UDP 51820 to 0.0.0.0/0 on every public subnet (2026-10-23).
 variable "allowed_wireguard_cidrs" {
   type        = list(string)
-  description = "CIDRs allowed to access WireGuard on the public subnet."
-  default     = ["0.0.0.0/0"]
+  description = "CIDRs allowed to access WireGuard on the public subnet. Empty = no ingress."
+  default     = []
 }
 
 variable "wireguard_port" {

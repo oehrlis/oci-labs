@@ -6,6 +6,19 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **network**: `allowed_wireguard_cidrs` defaults to `[]` (was `0.0.0.0/0`) - no stack passes it and none runs
+  WireGuard, yet every public subnet had UDP 51820 open to the internet. Opt-in like `allowed_ssh_cidrs`; the next
+  `apply` of core, cpu-lab and datasafe-demo removes the rule
+
+### Fixed
+
+- **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
+  26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
+  installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch
+  (`--alias`, stdin)
+
 ### Changed
 
 - **datasafe-demo**: odb_datasafe default 1.3.1 (first release with `ds_target_register.sh --type onprem`),
