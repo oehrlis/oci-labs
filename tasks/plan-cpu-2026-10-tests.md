@@ -75,9 +75,34 @@ Ergebnis: `cputest-*.json` / `.md` (macht die Lab-Rolle heute schon), importiert
 - [x] tfvars `db_base_ru = "19.32"`, `db_target_ru = "19.33"`,
   `db_oracle_home_base = ".../product/19.32-rec/dbhome_1"`; `make cpu-lab-plan`:
   nur `local_file.ansible_inventory` (1 add / 1 destroy), `moved` egress_all, Outputs
-- [ ] `make cpu-lab-apply` - **Stefan**
-- [ ] `make cpu-lab-patch` (MOS auf dem Host), `cpu-lab-verify`, `cpu-lab-rollback`
-- [ ] Ergebnis nach `cpu-patch-tests`: `make import-lab`, Notes je Zeile
+- [x] `make cpu-lab-apply` - Stefan, nur Inventory
+- [x] `make cpu-lab-patch` 2026-10-23 11:07-11:45, Log-Pfad `autoupgrade-2026-10`,
+  **PASSED** - 19.33.0.0.0, 30 sqlpatch-Zeilen SUCCESS, 0 -> 0 invalid, 15 Komponenten,
+  Smoke PL/SQL / OJVM (JDK 1.8.0_511) / Data Pump PASS. Patch-Set: RU 39915792, OJVM
+  39803650, DPBP 40057600, JDK 39902051, OPatch 54, `MRP: no` (zu 19.33 gibt es im Oktober
+  keine). Laufzeit: Download 3 min (MOS, kein Fallback), Home 20 min, analyze 1 min,
+  **Downtime 1 min** (11:34:45 Shutdown - 11:35:32 open), datapatch 5 min (CDB 3, PDBs 2),
+  Postchecks 1.5 min
+- [x] `make cpu-lab-rollback` 11:57-11:59 (1.5 min): Flashback auf
+  `AU_PATCHING_9212_CPUDB1932000`, CPUDB 19.32.0.0.0 aus `19.32-rec`, 0 invalid, oratab
+  zurueck auf `:Y`. **Offen beim naechsten Start:** PDB$SEED-Modus, GRP noch da,
+  `dba_registry_sqlpatch` nach dem Rollback - der Tunnel war beim Nachcheck schon zu
+- [x] `make import-lab` (OVERWRITE=1, nur der 19.33-Report als LAB_DIR): RU, OJVM, JDK
+  `ok`/`tested`, from 19.32, to 19.33.0.0.0, OL 8.10, Laufzeit aufgeteilt. Ersetzt die
+  unbelegten `ok`-Platzhalter
+- [ ] Notes in `test_results_2026-10.csv` ergaenzen - **Stefan / cpu-patch-tests-Session**
+  (import-lab kann es nicht): from `19.32.0.0.261020` statt `19.32`; PDB$SEED nach dem
+  Deploy READ WRITE (manueller Schritt); Rollback per GRP in 1.5 min belegt
+
+Issues aus dem Lauf, fuer den Report:
+
+- **PDB$SEED READ WRITE nach dem Deploy** (auch Lauf A). Alert-Log: AU oeffnet den Seed
+  nach seinem Restart 11:43:08 READ ONLY und 11:43:10 wieder READ WRITE - passt zu
+  "Resetting the database's state", AU stellt vermutlich den Zustand her, den es um 11:33:02
+  fuer GRP/Fixups selbst gesetzt hat. Manuell: Seed schliessen, READ ONLY oeffnen
+- AU meldet "Drop GRP [CPUDB] SUCCESS", der GRP bleibt aber (korrekt bei
+  `drop_grp_after_patching=no`) - irrefuehrende Meldung
+- `OLD_TIME_ZONES_EXIST` - Fixup wie konfiguriert uebersprungen, DST ist nicht Teil des Patches
 
 ### B - DB 26ai: 23.26.3 -> 23.26.4 (Fr/Sa)
 
@@ -112,12 +137,16 @@ Ergebnis: `cputest-*.json` / `.md` (macht die Lab-Rolle heute schon), importiert
 
 ### Befunde Lab-Rolle (2026-10-23)
 
-- [ ] `cpu-lab-verify` taugt nicht als Vorher-Aufnahme: der Smoke-Test laeuft mit
+- [x] `cpu-lab-verify` taugt nicht als Vorher-Aufnahme: der Smoke-Test laeuft mit
   `oracle_home_target`, bevor die oratab-Assertion greift - `expdp` aus 19.32 gegen die
   DB auf 19.31 hing > 10 min. Fix: oratab-Assertion vor den Smoke ziehen [P2]
-- [ ] Smoke-Passwort `CPUSMOKE` steht in `ps`: das Parfile hilft nicht, weil das ganze
+- [x] Smoke-Passwort `CPUSMOKE` steht in `ps`: das Parfile hilft nicht, weil das ganze
   Script als Argument von `bash -c` laeuft (`ansible.builtin.shell`). Fix: Script als
   Datei (template, 0700) oder Passwort per stdin [P2]
+- [x] Report: Basis-Zeile zeigte `db19_patch_list_base` statt des Basis-Homes, AU-Zeile ein
+  rohes Dict, OS-Zeile umbrochen
+- Alle drei behoben in `0299329` und `60fa2e5` (Merge `73eb698`), lint gruen, **auf dem
+  Host noch nicht gelaufen** - kommt mit dem naechsten Verify
 
 ### Ausserhalb des kritischen Pfads
 
