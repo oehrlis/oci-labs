@@ -45,7 +45,8 @@ Laptop: Bastion-Tunnel 127.0.0.1:2222, eigene odb_datasafe-Kopie, OCI CLI Profil
 - Data Safe in der ACE-Tenancy und in `eu-zurich-1` aktiviert
 - Ein bestehendes Compartment fuer die Demo, dessen OCID bekannt ist
 - 1Password-Eintrag fuer das Data-Safe-Secret (C##DS_ADMIN / DS_ADMIN), z. B. `datasafe-demo-ds-admin`,
-  Feld `password`. Oracle-Passwortregeln: mit Buchstabe beginnen, mindestens 12 Zeichen, keine Anfuehrungszeichen
+  Feld `password`. Oracle-Passwortregeln: mit Buchstabe beginnen, mindestens 12 Zeichen, mindestens ein Sonderzeichen (`_`;
+  `DS_USER_PROFILE` prueft mit `ORA12C_VERIFY_FUNCTION`), keine Anfuehrungszeichen
 - MOS-Zugang fuer AutoUpgrade: 1Password Vault `secrets`, Eintrag `Oracle-MOS`, Felder `username` und `password` -
   dieselben Referenzen wie beim CPU-Lab (`OP_MOS_USER` / `OP_MOS_PASS` im Makefile)
 - Das 19c-Basis-Image `LINUX.X64_193000_db_home.zip` in einem Object-Storage-Bucket (Default `orarepo`); fuer den
