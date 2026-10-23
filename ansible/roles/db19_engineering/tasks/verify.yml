@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/verify.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.21
-# Version....: v0.2.0
+# Date.......: 2026.10.23
+# Version....: v0.2.1
 # Purpose....: Verify and report the outcome of a quarterly CPU patch test.
 # Notes......: Four levels, because a patch can fail at four different places:
 #                binary     the patch is in the ORACLE_HOME (opatch)
@@ -39,24 +39,8 @@
          ~ '-to-' ~ (db_target_ru | replace('.', '_')) ~ '-'
          ~ (ansible_facts['date_time']['date'] | replace('-', '')) }}
 
-- name: Resolve the ORACLE_HOME registered in oratab
-  become: true
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      awk -F: -v sid="{{ oracle_sid }}" '$1 == sid { print $2 }' /etc/oratab | tail -1
-    executable: /bin/bash
-  register: db19_oratab_home
-  changed_when: false
-
-- name: Assert oratab points at the target home
-  ansible.builtin.assert:
-    that:
-      - db19_oratab_home.stdout | trim == oracle_home_target
-    fail_msg: >-
-      /etc/oratab points {{ oracle_sid }} at "{{ db19_oratab_home.stdout | trim }}"
-      instead of {{ oracle_home_target }}.
-    success_msg: "oratab points {{ oracle_sid }} at {{ oracle_home_target }}."
+- name: Assert the database runs from the target home
+  ansible.builtin.import_tasks: target_home_active.yml
 
 # ---------------------------------------------------------------------------
 # Post-patch snapshot - same query set as the baseline, from the target home

@@ -1,0 +1,39 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/target_home_active.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Assert that the database runs from the target home before any
+#              post-patch check touches it.
+# Notes......: smoke.yml and verify.yml run every command from
+#              oracle_home_target. Against a database still on the base home
+#              that does not fail cleanly - on 2026-10-23 an expdp from 19.32
+#              hung for more than 10 minutes against CPUDB on 19.31. One
+#              oratab check up front turns that into an immediate, named error.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Resolve the ORACLE_HOME registered in oratab
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      awk -F: -v sid="{{ oracle_sid }}" '$1 == sid { print $2 }' /etc/oratab | tail -1
+    executable: /bin/bash
+  register: db19_oratab_home
+  changed_when: false
+
+- name: Assert oratab points at the target home
+  ansible.builtin.assert:
+    that:
+      - db19_oratab_home.stdout | trim == oracle_home_target
+    fail_msg: >-
+      /etc/oratab points {{ oracle_sid }} at "{{ db19_oratab_home.stdout | trim }}"
+      instead of {{ oracle_home_target }}. The post-patch checks run from the
+      target home - for a pre-patch look use the baseline that cpu-lab-patch
+      captures, not cpu-lab-verify.
+    success_msg: "oratab points {{ oracle_sid }} at {{ oracle_home_target }}."
