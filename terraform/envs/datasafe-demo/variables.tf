@@ -33,6 +33,12 @@ variable "region" {
   default     = "eu-zurich-1"
 }
 
+variable "home_region" {
+  type        = string
+  description = "Home region of the tenancy for IAM resources (policies, dynamic groups). Empty = region."
+  default     = ""
+}
+
 variable "compartment_ocid" {
   type        = string
   description = <<-EOT

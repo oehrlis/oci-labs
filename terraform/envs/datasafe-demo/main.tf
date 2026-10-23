@@ -353,7 +353,8 @@ resource "oci_resource_scheduler_schedule" "db_host_stop" {
 # resourceschedule) and needs a policy to touch the instance. Scoped to the two
 # schedules of this stack and the demo compartment.
 resource "oci_identity_policy" "scheduler" {
-  count = local.schedule_enabled && var.create_scheduler_policy ? 1 : 0
+  provider = oci.home
+  count    = local.schedule_enabled && var.create_scheduler_policy ? 1 : 0
 
   compartment_id = local.compartment_ocid
   name           = "pol-${local.lab_name_core}-sched-01"
@@ -375,7 +376,8 @@ resource "oci_identity_policy" "scheduler" {
 # outside the demo compartment, and it goes away with terraform destroy.
 
 resource "oci_identity_dynamic_group" "db_host" {
-  count = var.enable_instance_principal ? 1 : 0
+  provider = oci.home
+  count    = var.enable_instance_principal ? 1 : 0
 
   compartment_id = var.tenancy_ocid
   name           = "dg-${local.lab_name_core}-db-01"
@@ -386,7 +388,8 @@ resource "oci_identity_dynamic_group" "db_host" {
 }
 
 resource "oci_identity_policy" "db_host" {
-  count = var.enable_instance_principal ? 1 : 0
+  provider = oci.home
+  count    = var.enable_instance_principal ? 1 : 0
 
   compartment_id = local.compartment_ocid
   name           = "pol-${local.lab_name_core}-db-01"

@@ -45,4 +45,13 @@ provider "oci" {
   region              = var.region
 }
 
+# IAM writes (policies, dynamic groups) are only accepted in the home region of
+# the tenancy - the Trivadis tenancy runs in eu-zurich-1 but its home is FRA
+# (403 NotAllowed, 2026-10-23). Empty home_region = same as region.
+provider "oci" {
+  alias               = "home"
+  config_file_profile = var.oci_config_profile
+  region              = coalesce(var.home_region, var.region)
+}
+
 # --- EOF ----------------------------------------------------------------------

@@ -14,6 +14,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
+  `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
+  (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
 - **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
   26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
   installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch

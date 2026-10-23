@@ -21,6 +21,9 @@ compartment_ocid = "ocid1.compartment.oc1..xxx"
 
 # Naming -> zrh-lab-dsdemo-01, host ci-zrh-lab-dsdemo-01-db-01
 region_key       = "zrh"
+
+# Home region for IAM resources when it differs from the deployment region
+# home_region = "eu-frankfurt-1"
 environment_code = "lab"
 stack_code       = "dsdemo"
 lab_instance     = 1
