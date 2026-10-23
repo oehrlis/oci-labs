@@ -136,6 +136,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `db19_engineering`: the deploy job switches to `gold_image=YES` when a gold image of the target RU
+  is staged. With `NO` and no base image in the folder, analyze stopped with "A usable base image
+  file is not found" (26ai 2026-10-23, Lauf A finding 7). The patch-set manifest reads the gold
+  download on the gold path - it listed the base RU's patches and verify reported a false
+  "missing 39578879"; fix not yet run on a host. Known: the deploy downloads the gold image a
+  second time (about 5 GB)
 - `db19_engineering`: the oracle-user check read `getent_passwd`, which current ansible-core no
   longer injects as a variable - it failed on every fresh host although the preinstall RPM had
   created the user. Reads `ansible_facts['getent_passwd']` now (affects 19c too)

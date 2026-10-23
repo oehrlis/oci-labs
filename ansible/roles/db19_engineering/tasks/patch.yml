@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/patch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.2.0
 # Purpose....: Quarterly CPU test - patch out-of-place from the base RU to the
 #              target RU using AutoUpgrade.
 # Notes......: Three steps, all AutoUpgrade:
@@ -95,6 +95,18 @@
 - name: Report the patch level before the move
   ansible.builtin.debug:
     msg: "Before: {{ db19_version_before.stdout | trim }}"
+
+- name: Look for a staged gold image of the target RU
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns: "db_goldimage_{{ db_target_ru | replace('.', '_') }}*.zip"
+  register: db19_deploy_gold_found
+
+- name: Deploy against the gold image when the target home came from one
+  ansible.builtin.set_fact:
+    db19_deploy_gold_image: "YES"
+  when: db19_deploy_gold_found.files | length > 0
 
 - name: Render the AutoUpgrade deploy config
   become: true

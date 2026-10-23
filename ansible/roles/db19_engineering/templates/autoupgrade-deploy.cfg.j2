@@ -24,8 +24,9 @@ patch1.download={{ db19_autoupgrade_download }}
 # Pinned explicitly: with no gold_image value AutoUpgrade resolves it internally
 # and fails on the broken 19c path with
 #   "Failed to process the gold_image parameter for prefix patch1"
-# The media are already staged locally at this point, so a gold image is not
-# wanted here anyway.
+# The media are already staged locally at this point. patch.yml sets YES when
+# the target home was built from a gold image - then there is no base image in
+# the folder and NO fails.
 patch1.gold_image={{ db19_deploy_gold_image }}
 patch1.patch_node=localhost
 patch1.drop_grp_after_patching={{ db19_drop_grp_after_patching | ternary('yes', 'no') }}

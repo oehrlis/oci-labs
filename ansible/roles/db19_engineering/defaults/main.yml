@@ -277,8 +277,11 @@ db19_download_stamp_file: >-
 # db_goldimage_23_26_3_<...>.zip. create_home builds from the newest match.
 db19_gold_image_pattern: "db_goldimage_{{ db19_home_ru | replace('.', '_') }}*.zip"
 
-# gold_image for the deploy (out-of-place move) job. NO on purpose - the target
-# home already exists and all media are staged, so there is nothing to fetch.
+# gold_image for the deploy (out-of-place move) job. NO for a home built from
+# the base image plus patches. patch.yml switches it to YES when a gold image of
+# the target RU is staged: without a base image in the folder, analyze with NO
+# stops with "A usable base image file is not found" (26ai, 2026-10-23; Lauf A
+# finding 7 for 19c).
 db19_deploy_gold_image: "NO"
 db19_base_image_zip: "LINUX.X64_193000_db_home.zip"
 

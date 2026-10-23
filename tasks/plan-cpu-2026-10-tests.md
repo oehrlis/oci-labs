@@ -140,13 +140,29 @@ Weg - kein Umbau am 19c-Stack, kein Plan auf Host 01:
    Gold Image 40014644
 5. Lauf: plan/apply **Stefan**, dann install, patch, verify, rollback, stop, `import-lab`
 
-- [ ] 1-3 bauen, offline pruefen (`terraform validate`, `--syntax-check`, ansible-lint,
-  19c-Inventory: Rolle rendert fuer 19 unveraendert)
-- [ ] `make cpu-lab-plan CPU_ENV=cpu-patch-26ai` - erwartet: 1 Instanz, Key, Inventory,
-  **nichts** im 19c-State - **apply durch Stefan**
-- [ ] Install 26ai Basis, CDB/PDB, Baseline-Snapshot
-- [ ] Patch auf 23.26.4 out-of-place, Verify, Rollback, Stop
-- [ ] Import nach `cpu-patch-tests`
+- [x] 1-3 gebaut, offline geprueft (`bc48733`); Plan 15 add / 0 change / 0 destroy, apply Stefan
+- [x] Install 2026-10-23, 7 Anlaeufe bis gruen (15:13-15:26): Host `ci-chzh-l-cpu26-01-db-01`,
+  OL 9.8, CDB `CPU26` + PDB1 auf **23.26.3.0.0** aus Gold Image (Oracle-Build 2026-10-21:
+  RU 39578879 + OCW 39578859 + 25 MRP-Fixes), 0 invalid, 14 Komponenten. Befunde unterwegs:
+  `getent_passwd` (ansible-core), Gold-Download fehlte `dl1.gold_image=YES`, create_home nutzte das
+  Gold Image nicht, abgebrochene AU-Jobs blockieren den Log-Pfad
+- [x] Patch 23.26.3 -> 23.26.4 (2. Lauf 16:43-17:10, Deploy mit `gold_image=YES`): **PASSED** -
+  4 harte Kriterien PASS, 0 -> 0 invalid, 14 Komponenten, Smoke PL/SQL / OJVM (JDK 11.0.33) /
+  Data Pump PASS. Ziel-Home: **RU 40007731** (23.26.4.0.0) + OCW 40007723. **Downtime 9 s**
+  (16:58:33 - 16:58:42), datapatch 6.5 min (CDB 3.5, PDBs 2.5). Weiches Kriterium "binary patch
+  set" FAIL ist ein Rollen-Fehler (Manifest las 23.26.3), behoben, nicht auf dem Host gelaufen
+- [x] Rollback 17:11-17:12 (1 min): Flashback auf `AU_PATCHING_9212_CPU262326300`, 23.26.3, 0
+  invalid, oratab `:Y`, sqlpatch nur 39578879, PDB$SEED READ ONLY. **GRP noch da** - vor dem
+  naechsten Lauf droppen. Instanz STOPPED
+- [ ] Import nach `cpu-patch-tests` - **blockiert, Stefan**: die Periodendaten fuehren 40002013
+  als "Database RU" und **40007731 als "GI RU"**, im DB-Home meldet `opatch` 40007731 als "Database
+  Release Update : 23.26.4.0.0". `import-lab` (Dry-Run) fuellt deshalb keine Zeile, ein
+  `OVERWRITE=1` haette die GI-Zeile als getestet markiert. Erst Patch-IDs klaeren, dann
+  `make import-lab PERIOD=2026-10 LAB_DIR=<nur der CPU26-Report> OS_LABEL="Oracle Linux 9.8"`
+
+Issues 26ai fuer den Report: PDB$SEED nach dem Deploy READ WRITE (17:07:11 RO, 17:07:12 RW) -
+wie bei 19c, also AutoUpgrade-Verhalten ueber beide Releases; Basis enthaelt die MRP-Fixes vom
+Download-Tag (Gold Image); Deploy laedt das Gold Image ein zweites Mal (ca. 5 GB).
 
 Nicht in B: 19c auf OL9 (Stefan: sollte gehen - heute scheitert das Base-Image 19.3.0 an
 OL9, Weg ueber Gold Image/`-applyRU`; eigener Punkt nach dem Zyklus).
