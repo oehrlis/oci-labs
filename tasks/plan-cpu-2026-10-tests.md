@@ -56,11 +56,19 @@ Ergebnis: `cputest-*.json` / `.md` (macht die Lab-Rolle heute schon), importiert
 
 ### A - DB 19c: 19.32 -> 19.33 (Fr 2026-10-23)
 
-- [ ] Baseline 19.32 herstellen: CPUDB per Lab-Rolle auf das vorhandene Home
-  `product/19.32/dbhome_1` (August-Referenzlauf), tfvars `db_base_ru = "19.32"`.
-  Frischer AutoUpgrade-Log-Pfad (offener August-Job)
-- [ ] `db_target_ru = "19.33"`, `make cpu-lab-plan` (erwartet nur Inventory) -
-  **apply durch Stefan**
+- [x] Baseline 19.32 herstellen (2026-10-23, 09:45-10:24): **frisches Home**
+  `product/19.32-rec/dbhome_1` per Lab-Rolle, `RECOMMENDED:19.32,JDK` = RU 19.32 +
+  OJVM + DPBP + OPatch 54 + MRP 40062896 (19.32.0.0.261020, `release 19.32.0.0.0DBRU`) +
+  JDK 39902051. Log-Pfad `autoupgrade-2026-10-base`. 19.31 -> 19.32, 0 invalid, datapatch
+  leer, harte Kriterien PASS. GRP `AU_PATCHING_9212_CPUDB1931000` danach gedroppt.
+  Die vorhandenen Homes fielen im `analyze` durch: AU 26.6 loest `OPATCH`/`MRP`/`JDK`
+  gegen den heutigen MOS-Stand auf. `product/19.32/dbhome_1` (August) fehlen OPatch 54,
+  MRP, JDK 2610; `RU:19.32,OJVM,DPBP` ohne OPATCH lehnt AU ab ("OPATCH must be included").
+  `product/19.32.0.0` (Lauf A) fehlt die MRP 40062896
+- [x] tfvars `db_base_ru = "19.32"`, `db_target_ru = "19.33"`,
+  `db_oracle_home_base = ".../product/19.32-rec/dbhome_1"`; `make cpu-lab-plan`:
+  nur `local_file.ansible_inventory` (1 add / 1 destroy), `moved` egress_all, Outputs
+- [ ] `make cpu-lab-apply` - **Stefan**
 - [ ] `make cpu-lab-patch` (MOS auf dem Host), `cpu-lab-verify`, `cpu-lab-rollback`
 - [ ] Ergebnis nach `cpu-patch-tests`: `make import-lab`, Notes je Zeile
 
@@ -94,6 +102,15 @@ Ergebnis: `cputest-*.json` / `.md` (macht die Lab-Rolle heute schon), importiert
   mitten im Patch). Destroy nach dem Report
 - [ ] Abstimmung mit der `cpu-patch-tests`-Session: `data/2026-10.yaml` ist dort
   uncommitted (cycle-start laeuft) - ich schreibe dort nichts ausser per `import-lab`
+
+### Befunde Lab-Rolle (2026-10-23)
+
+- [ ] `cpu-lab-verify` taugt nicht als Vorher-Aufnahme: der Smoke-Test laeuft mit
+  `oracle_home_target`, bevor die oratab-Assertion greift - `expdp` aus 19.32 gegen die
+  DB auf 19.31 hing > 10 min. Fix: oratab-Assertion vor den Smoke ziehen [P2]
+- [ ] Smoke-Passwort `CPUSMOKE` steht in `ps`: das Parfile hilft nicht, weil das ganze
+  Script als Argument von `bash -c` laeuft (`ansible.builtin.shell`). Fix: Script als
+  Datei (template, 0700) oder Passwort per stdin [P2]
 
 ### Ausserhalb des kritischen Pfads
 
