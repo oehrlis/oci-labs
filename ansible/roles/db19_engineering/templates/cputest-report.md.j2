@@ -10,9 +10,8 @@
 # CPU Patch Test {{ oracle_sid }} - {{ db_base_ru }} to {{ db_target_ru }}
 
 - Date: {{ ansible_facts['date_time']['iso8601'] | default('unknown') }}
-- Host: {{ inventory_hostname }} ({{ ansible_facts['distribution'] | default('?') }}
-  {{ ansible_facts['distribution_version'] | default('') }})
-- AutoUpgrade: {{ db19_autoupgrade_version | default('unknown') }}
+- Host: {{ inventory_hostname }} ({{ ansible_facts['distribution'] | default('?') }} {{ ansible_facts['distribution_version'] | default('') }})
+- AutoUpgrade: {{ db19_autoupgrade_build | default('unknown') }}
 - Base home: `{{ oracle_home_base }}`
 - Target home: `{{ oracle_home_target }}`
 
@@ -48,8 +47,17 @@
 ## Requested patch sets
 
 ```text
-base   {{ db19_patch_list_base | trim }}
 target {{ db19_patch_list_target | trim }}
+```
+
+Patches in the base home `{{ oracle_home_base }}` (`opatch lspatches`):
+
+```text
+{% if (db19_base_home_lspatches.rc | default(1)) == 0 %}
+{{ db19_base_home_lspatches.stdout_lines | reject('match', '^(OPatch succeeded|\\s*$)') | join('\n') }}
+{% else %}
+not captured
+{% endif %}
 ```
 
 Resolved patch numbers found in the target home:

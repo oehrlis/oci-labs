@@ -42,6 +42,18 @@
 - name: Assert the database runs from the target home
   ansible.builtin.import_tasks: target_home_active.yml
 
+# The report used to print db19_patch_list_base - the list the variable holds,
+# not what the base home carries. A base home built with another list (2026-10-23:
+# RECOMMENDED:19.32,JDK) was then reported wrong. Read the home instead.
+- name: Read the patches in the base home
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_base }}/OPatch/opatch lspatches -oh {{ oracle_home_base }}"
+  register: db19_base_home_lspatches
+  changed_when: false
+  failed_when: false
+
 # ---------------------------------------------------------------------------
 # Post-patch snapshot - same query set as the baseline, from the target home
 # ---------------------------------------------------------------------------
@@ -280,7 +292,7 @@
            'target_ru': db_target_ru,
            'base_home': oracle_home_base,
            'target_home': oracle_home_target,
-           'autoupgrade': db19_autoupgrade_version | default('unknown'),
+           'autoupgrade': db19_autoupgrade_build | default('unknown'),
            'report_stem': db19_report_stem,
            'patch_list_base': db19_patch_list_base,
            'patch_list_target': db19_patch_list_target,

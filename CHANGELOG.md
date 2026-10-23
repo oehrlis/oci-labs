@@ -130,6 +130,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schema SQL goes to sqlplus on stdin, the Data Pump parfile is written by Ansible (0600)
   and removed even when the round trip fails. Before, both heredocs sat in the argv of the
   `/bin/bash -c` that Ansible spawns
+- `db19_engineering` test report: the base line now lists the patches the base home
+  actually carries (`opatch lspatches`). It printed `db19_patch_list_base` - wrong for a
+  base home built with another list (2026-10-23: `RECOMMENDED:19.32,JDK` shown as
+  `RU:19.32,JDK,OPATCH,OJVM,DPBP`). The AutoUpgrade line shows the build instead of the
+  raw command result, the host line no longer breaks
 
 - **`make cpu-lab-bastion-tunnel` failed three times in a row** on a fresh
   session: the Bastion refuses the key for a few seconds after the session is
