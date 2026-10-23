@@ -319,13 +319,12 @@ register_odb() {
     args+=(--port "${DEMO_LISTENER_PORT}" --service "$(service_of "${cdb}" "${scope}")"
         --connector "${DEMO_CONNECTOR}" -c "${DEMO_COMP}" -N "$(target_name "${cdb}" "${scope}")"
         --description "LRN6087 demo - ${scope} on ${cdb} ($(release_of "${cdb}")) at ${DEMO_HOST}")
-    if [[ "${mode}" == "plan" ]]; then
-        args+=(-n)
-    else
-        local secret_file
-        secret_file="$(ds_secret_file)"
-        args+=(--secret-file "${secret_file}")
-    fi
+    # odb_datasafe 1.3.1 demands the secret for -n as well ("Missing required
+    # option: --ds-secret", 2026-10-23) - the 0600 file is passed in both modes
+    local secret_file
+    secret_file="$(ds_secret_file)"
+    args+=(--secret-file "${secret_file}")
+    [[ "${mode}" == "plan" ]] && args+=(-n)
     ds_target_register.sh "${args[@]}"
 }
 
