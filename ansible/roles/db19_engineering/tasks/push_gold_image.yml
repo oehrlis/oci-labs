@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/push_gold_image.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.21
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.1.1
 # Purpose....: Upload a self-made gold image plus its manifest to Object Storage.
 # Notes......: Uploads from the LAB HOST, not from the control node: the artifact
 #              is several GB and the host sits in the same region as the bucket,
@@ -83,7 +83,7 @@
            'oracle_base': oracle_base,
            'built_on': inventory_hostname,
            'built_at': ansible_facts['date_time']['iso8601'] | default('unknown'),
-           'autoupgrade': db19_autoupgrade_version | default('unknown'),
+           'autoupgrade': db19_autoupgrade_build | default('unknown'),
            'requested_patch_list': db19_patch_list_base | trim,
            'resolved_patches': (db19_gold_patchset_raw.content | b64decode
                                 | from_json).patches | default([])
