@@ -18,9 +18,11 @@
 #           as <name>.zip and <name>_pwd.b64 (docs/datasafe-demo.md, fallback).
 # Both end in install_datasafe_service.sh --prepare / --install.
 
+# oracle_cman_home, not setup.py: setup.py is there right after the unpack, so a
+# failed setup.py install looked installed and was never repeated (2026-10-23)
 - name: Check whether the connector is already installed
   ansible.builtin.stat:
-    path: "{{ oradb_connector_home }}/setup.py"
+    path: "{{ oradb_connector_home }}/oracle_cman_home"
   register: oradb_connector_installed
   # become: the connector home is 0750 oracle - as opc stat reports "missing".
   become: true
@@ -109,13 +111,35 @@
           - "{{ oradb_connector_bundle_dir }}/{{ oradb_connector_name }}_pwd.b64"
           - "{{ oradb_connector_port | string }}"
         chdir: "{{ oradb_connector_home }}"
+      # setup.py stops with "JAVA_HOME is not set, please set the JAVA_HOME" otherwise
+      environment:
+        JAVA_HOME: "{{ oradb_java_home }}"
       changed_when: true
+      become: true
+      become_user: "{{ oracle_os_user }}"
+
+    # setup.py install leaves CMAN running outside systemd on the connector port;
+    # the unit then fails with TNS-12542 (address in use). A plain shutdown hung
+    # in "Shutdown in progress" (2026-10-23) - abort, systemd starts it cleanly.
+    - name: Stop the CMAN instance started by setup.py
+      ansible.builtin.command:
+        argv:
+          - "{{ oradb_connector_home }}/oracle_cman_home/bin/cmctl"
+          - shutdown
+          - abort
+          - -c
+          - cust_cman
+      environment:
+        ORACLE_HOME: "{{ oradb_connector_home }}/oracle_cman_home"
+      register: oradb_cman_stop
+      changed_when: oradb_cman_stop.rc == 0
+      failed_when: false
       become: true
       become_user: "{{ oracle_os_user }}"
 
 - name: Re-check the connector installation
   ansible.builtin.stat:
-    path: "{{ oradb_connector_home }}/setup.py"
+    path: "{{ oradb_connector_home }}/oracle_cman_home"
   register: oradb_connector_ready
   become: true
 
