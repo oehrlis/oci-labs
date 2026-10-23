@@ -36,6 +36,13 @@ Bis Sonntag 2026-10-25 so viel wie moeglich, danach remote aus Las Vegas, Report
 
 Prioritaet bei Zeitmangel: DB 19c > DB 26ai > WLS 14.1.2 > WLS 15.1.1 > WLS 12.2.1.4 > WLS 14.1.1.
 
+Methode (Stefan, 2026-10-23): getestet wird immer das neue RU. Basis ist der Stand des
+Vormonats - vorheriges RU plus letzte MRP davor (Oktober: 19.32 + MRP September; November:
+19.33 plain als Basis). Ob monatlich getestet wird, ist offen. **Abweichung 2026-10:** die
+Basis traegt MRP 40062896 (19.32.0.0.261020, erschienen mit 19.33), weil
+`RECOMMENDED:19.32` gegen den heutigen MOS-Stand aufloest - im Report als
+`from 19.32.0.0.261020` benennen. Ab dem naechsten Zyklus die Basis-MRP explizit pinnen.
+
 ## Testprotokoll (gleich fuer alle DB-Tests)
 
 Das Werkzeug fuer das neue Home ist Mittel, nicht Testgegenstand. Fuer die DB nehmen wir
