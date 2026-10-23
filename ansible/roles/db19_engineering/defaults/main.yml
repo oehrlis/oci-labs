@@ -51,6 +51,9 @@ db_release_profiles:
     # carries OCW 19.3). Untested in this role until the next 19c run; on an
     # HTTP 500 from the Update Advisor fall back with -e db19_autoupgrade_gold_image=AUTO.
     gold_image: "YES"
+    # Download the gold image first (download mode, gold_image=YES), then build
+    # the home from the file. create_home does not fetch it itself.
+    try_gold_image: true
     patch_list_base: "RU:{{ db_base_ru }},JDK,OPATCH,OJVM,DPBP"
     patch_list_target: "RECOMMENDED:{{ db_target_ru }},JDK"
     dbca_rsp_version: "v19.0.0"
@@ -66,14 +69,22 @@ db_release_profiles:
     os_majors: ["8", "9"]
     # Name on OL8/OL9 not verified in this role - os_prereq reports it.
     preinstall_package: oracle-ai-database-preinstall-26ai
-    # Empty = no gold_image parameter; AutoUpgrade uses YES itself for 23.
-    gold_image: ""
-    # Base = previous RU (or its last MRP - append the MRP explicitly here,
-    # RECOMMENDED would resolve to today's MOS state). OJVM ships inside the
-    # 26ai RU, a JDK keyword for 23 is unverified - the patchset report shows
-    # what was resolved.
-    patch_list_base: "RU:{{ db_base_ru }},OPATCH"
-    patch_list_target: "RECOMMENDED:{{ db_target_ru }}"
+    # YES is required. Without the parameter AutoUpgrade 26.6 looks for a base
+    # image in the folder and stops in the prechecks (AP_DISK_SPACE_FOR_PATCHING
+    # "Unable to determine archive size", 2026-10-23). With target_version 23 it
+    # skips the Update Advisor and takes the gold image straight from ARU.
+    gold_image: "YES"
+    # create_home only looks for the gold image in the folder - without a prior
+    # download it stops with "Unable to find any Gold Image containing the
+    # requested patches" (2026-10-23). The download adds MRP and OCW itself:
+    # "the generated Gold Image always includes those fixes".
+    try_gold_image: true
+    # Base = previous RU. The gold image carries its own OPatch, OJVM ships
+    # inside the 26ai RU, and the download adds MRP and OCW itself - so the base
+    # is "RU + its latest MRP" as of the download day, not a pinned MRP. RU only
+    # is what the 2026-10-23 probe resolved for both RUs.
+    patch_list_base: "RU:{{ db_base_ru }}"
+    patch_list_target: "RU:{{ db_target_ru }}"
     dbca_rsp_version: "v23.0.0"
     dbca_em_configuration: false
     cv_assume_distid: ""
@@ -250,16 +261,21 @@ db19_autoupgrade_download: "yes"
 # templates keep gold_image=NO - they fetch the individual patches only.
 db19_autoupgrade_gold_image: "{{ db_release_profile.gold_image }}"
 
-# create_home builds from a gold image AutoUpgrade downloads itself - no base
-# image has to be staged then.
-db19_create_home_from_gold: >-
-  {{ db_release | string == '26' or (db19_autoupgrade_gold_image | upper == 'YES') }}
 
 # Attempt a separate gold-image download before falling back to individual
 # patches plus a staged base image. Off: for 19c this is a guaranteed failed run
 # (see above) that only fills the log with a misleading config error. Flip to
 # true once Oracle fixes /v2/patchplanner/requests - no other change needed.
-db19_try_gold_image: false
+db19_try_gold_image: "{{ db_release_profile.try_gold_image }}"
+
+# Stamp of a completed download. The gold path has its own, so a run that
+# fetched individual patches before does not skip the gold-image download.
+db19_download_stamp_file: >-
+  {{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}{{ '-gold' if (db19_try_gold_image | bool) else '' }}
+
+# File name AutoUpgrade gives a downloaded gold image, e.g.
+# db_goldimage_23_26_3_<...>.zip. create_home builds from the newest match.
+db19_gold_image_pattern: "db_goldimage_{{ db19_home_ru | replace('.', '_') }}*.zip"
 
 # gold_image for the deploy (out-of-place move) job. NO on purpose - the target
 # home already exists and all media are staged, so there is nothing to fetch.

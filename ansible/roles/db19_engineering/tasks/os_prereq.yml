@@ -107,8 +107,8 @@
 - name: Assert the oracle OS user exists
   ansible.builtin.assert:
     that:
-      - getent_passwd[oracle_os_user] is defined
-      - getent_passwd[oracle_os_user] is not none
+      - (ansible_facts['getent_passwd'] | default({}))[oracle_os_user] is defined
+      - ansible_facts['getent_passwd'][oracle_os_user] is not none
     fail_msg: >-
       OS user "{{ oracle_os_user }}" is missing. The preinstall RPM
       {{ db19_preinstall_package }} should have created it.

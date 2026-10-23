@@ -12,10 +12,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   AutoUpgrade `target_version` (26ai: 23, the tool's value), gold image, patch lists, dbca schema,
   `CV_ASSUME_DISTID` and `binopt.uniaud` per release; the `db19_*` names stay, so `oracle_db_native`
   keeps working. A guard rejects a release that does not fit the RU strings
-- `db19_engineering`: release 19 builds homes from a gold image (`gold_image=YES`) instead of the
-  19.3.0 base image plus patches - AutoUpgrade 26.6 serves 19c gold images again. Not yet run in this
-  role; on an Update Advisor HTTP 500 fall back with `-e db19_autoupgrade_gold_image=AUTO`. Also
-  affects the 19c home of `oracle_db_native` (datasafe-demo)
+- `db19_engineering`: both releases try the gold image first (`db19_try_gold_image` true,
+  `gold_image=YES`) instead of the 19.3.0 base image plus patches - AutoUpgrade 26.6 serves 19c gold
+  images again (Lauf A). 19c not yet run on this path; without a gold image it falls back to the
+  base image. Also affects the 19c home of `oracle_db_native` (datasafe-demo)
 - **datasafe-demo**: odb_datasafe default 1.3.1 (first release with `ds_target_register.sh --type onprem`),
   sha256 from the release asset.
 - **lint-shell** also checks `demos/`.
@@ -136,6 +136,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `db19_engineering`: the oracle-user check read `getent_passwd`, which current ansible-core no
+  longer injects as a variable - it failed on every fresh host although the preinstall RPM had
+  created the user. Reads `ansible_facts['getent_passwd']` now (affects 19c too)
+- `db19_engineering`: the gold-image path works end to end. The download template lacked
+  `dl1.gold_image=YES` (AutoUpgrade then fetches individual patches only), and create_home never
+  used the downloaded image. create_home now builds from the newest `db_goldimage_<RU>_*.zip` via
+  `GOLDIMAGE:`; 19c falls back to `gold_image=AUTO` plus the base image when none came down. The
+  download stamp has its own name on the gold path. Verified on the 26ai host 2026-10-23: gold image
+  23.26.3 (RU + OCW + MRP fixes) downloaded, home built, CDB created in 12.5 min
 - `db19_engineering` smoke test: asserts first that oratab points at the target home
   (new `tasks/target_home_active.yml`, shared with `verify.yml`). Before, `cpu-lab-verify`
   against a database still on the base home ran `expdp` from the target home and hung for

@@ -5,7 +5,7 @@
 # Name.......: tasks/download.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.10.23
-# Version....: v0.3.0
+# Version....: v0.4.0
 # Purpose....: Download the Oracle media for a given Release Update from MOS.
 # Notes......: Called once per RU - for the base RU during install, and again
 #              for the target RU during a CPU test. Requires the auto-login
@@ -41,14 +41,14 @@
 - name: Check for the download stamp of this RU
   become: true
   ansible.builtin.stat:
-    path: "{{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}"
+    path: "{{ db19_download_stamp_file }}"
   register: db19_download_stamp
 
 - name: Report that the media are already staged
   ansible.builtin.debug:
     msg: >-
       Media for RU {{ db19_home_ru }} already staged
-      ({{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}) - skipping
+      ({{ db19_download_stamp_file }}) - skipping
       download. Remove the stamp to force a re-download.
   when: db19_download_stamp.stat.exists
 
@@ -295,7 +295,6 @@
   until: db19_base_image_dl is succeeded
   when:
     - not (db19_gold_image_used | bool)
-    - not (db19_create_home_from_gold | bool)
     - not db19_base_image_stat.stat.exists
     - db19_base_image_url | length > 0
 
@@ -316,7 +315,6 @@
   ansible.builtin.assert:
     that:
       - (db19_gold_image_used | bool)
-        or (db19_create_home_from_gold | bool)
         or db19_base_image_final.stat.exists
         or (db19_gold_image_found.files | length > 0)
     fail_msg: >-
@@ -332,14 +330,12 @@
       https://www.oracle.com/database/technologies/oracle19c-linux-downloads.html
     success_msg: >-
       Software source for create_home is available
-      ({{ (db19_create_home_from_gold | bool)
-          | ternary('gold image, downloaded by create_home',
-                    db19_base_image_final.stat.exists | ternary(db19_base_image_zip, 'gold image')) }}).
+      ({{ db19_base_image_final.stat.exists | ternary(db19_base_image_zip, 'gold image') }}).
 
 - name: Stamp this RU as fully staged
   become: true
   ansible.builtin.copy:
-    dest: "{{ db19_stage_dir }}/.download-complete-{{ db19_home_ru }}"
+    dest: "{{ db19_download_stamp_file }}"
     owner: "{{ oracle_os_user }}"
     group: "{{ oracle_os_group_install }}"
     mode: "0644"
