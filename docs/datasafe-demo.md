@@ -14,20 +14,26 @@ Entwicklung, Test und Demonstration, kein produktiver Betrieb.
 ## Zielbild
 
 ```text
-ACE-Tenancy, eu-zurich-1, bestehendes Compartment (wird nie angelegt oder geloescht)
-  VCN vcn-zrh-lab-dsdemo-01 (core-Modul, core_owner = dsdemo), Bastion, kein Public IP, NSG egress nur 443
-  ci-zrh-lab-dsdemo-01-db-01 (VM.Standard.E4.Flex, 4 OCPU, 32 GB, OL8)
+Trivadis-Tenancy (Profil TRIVADIS), eu-zurich-1, Home-Region eu-frankfurt-1 (IAM-Writes)
+Compartment Projects_Internal/comp-oradba-dsdemo (per OCI CLI angelegt, nicht von Terraform)
+  VCN vcn-chzh-l-dsdemo-01-net-01, Bastion, kein Public IP, kein Ingress aus dem Internet, NSG egress nur 443
+  Flow Logs auf allen Subnetzen, IMDSv2 only
+  ci-chzh-l-dsdemo-01-db-01 (VM.Standard.E5.Flex, 4 OCPU, 32 GB, OL8)
     Boot Volume 150 GB: /u00 (ORACLE_BASE, beide Homes), /u02 (FRA), /opt/stage (Medien)
     Data Volume 100 GB: /u01 (Datafiles, xfs, LABEL=u01data)
     19c EE Home (neuestes RU)  -> CDB19: CDB$ROOT, PDB19A, PDB19B   -> 3 Targets (ON_PREMISES)
-    26ai EE Home (neuestes RU) -> CDB26: CDB$ROOT, PDB26A, PDB26B  -> 3 Targets (ON_PREMISES)
+    26ai EE Home (23.26.4)     -> CDB26: CDB$ROOT, PDB26A, PDB26B  -> 3 Targets (ON_PREMISES)
       AIPDB1 -> wird in Schritt 2 live in CDB26 angelegt und registriert, reset.sh entfernt sie
     LISTENER (26ai Home, Port 1521) fuer beide CDBs
-    OraDBA (oradba-services.service), odb_datasafe 1.3.1
-    Connector dsc-zrh-lab-dsdemo-01 (systemd, CMAN-Port 1561), in OraDBA als dscon1 registriert
-  Resource Scheduler: Start 07:00 / Stopp 22:00 Lokalzeit (schedule_profile)
-Laptop: Bastion-Tunnel 127.0.0.1:2222, eigene odb_datasafe-Kopie, OCI CLI Profil ACE
+    OraDBA (oradba-services.service), odb_datasafe 1.3.1 (+ SQL-Fix CONTAINER=ALL, siehe Bekannte Grenzen)
+    Connector dsc-chzh-l-dsdemo-01 (systemd, CMAN-Port 1561), in OraDBA als dscon1 registriert
+  Resource Scheduler: Start 07:00 / Stopp 22:00 Lokalzeit (schedule_profile), Policy in der Home-Region
+Laptop: Bastion-Tunnel 127.0.0.1:2223 (2222 belegt das cpu-lab), eigene odb_datasafe-Kopie, Profil TRIVADIS
 ```
+
+Umzug 2026-10-23: Im ACE-Tenant war das Data-Safe-Target-Limit bei zwei aktiven Targets erreicht (400
+LimitExceeded) - das Lab wurde dort abgebaut und im Trivadis-Tenant neu aufgebaut
+(`tasks/plan-datasafe-demo-trivadis.md`).
 
 | Datei | Zweck |
 | --- | --- |
@@ -45,7 +51,8 @@ Laptop: Bastion-Tunnel 127.0.0.1:2222, eigene odb_datasafe-Kopie, OCI CLI Profil
 - Data Safe in der ACE-Tenancy und in `eu-zurich-1` aktiviert
 - Ein bestehendes Compartment fuer die Demo, dessen OCID bekannt ist
 - 1Password-Eintrag fuer das Data-Safe-Secret (C##DS_ADMIN / DS_ADMIN), z. B. `datasafe-demo-ds-admin`,
-  Feld `password`. Oracle-Passwortregeln: mit Buchstabe beginnen, mindestens 12 Zeichen, keine Anfuehrungszeichen
+  Feld `password`. Oracle-Passwortregeln: mit Buchstabe beginnen, mindestens 12 Zeichen, mindestens ein Sonderzeichen (`_`;
+  `DS_USER_PROFILE` prueft mit `ORA12C_VERIFY_FUNCTION`), keine Anfuehrungszeichen
 - MOS-Zugang fuer AutoUpgrade: 1Password Vault `secrets`, Eintrag `Oracle-MOS`, Felder `username` und `password` -
   dieselben Referenzen wie beim CPU-Lab (`OP_MOS_USER` / `OP_MOS_PASS` im Makefile)
 - Das 19c-Basis-Image `LINUX.X64_193000_db_home.zip` in einem Object-Storage-Bucket (Default `orarepo`); fuer den
@@ -355,6 +362,25 @@ python3 -I demos/datasafe-lrn6087/fleet-snapshot/gen_fleet_snapshot.py -o demos/
 
 Gegen odb_datasafe 1.2.1 offline geprueft (OCI CLI durch einen Stub ersetzt, null Aufrufe): `--count` und
 `--problems` laufen mit `--input-json` ohne OCI-Zugriff.
+
+### Erkenntnisse aus dem Aufbau 2026-10-22/23
+
+- **Tunnel-Port:** `DSDEMO_LOCAL_PORT=2223` fuer `make dsdemo-*` und `demo.sh`/`reset.sh`, solange das cpu-lab 2222
+  belegt. Eine frische Bastion-Session lehnt den Key die ersten Sekunden ab - `make dsdemo-tunnel` notfalls
+  wiederholen
+- **Home-Region:** IAM-Ressourcen (Scheduler-Policy, Dynamic Group) gehen ueber `home_region` / Provider `oci.home`;
+  Compartment und Tag-Namespace per CLI mit `--region eu-frankfurt-1`. Neue Tags erscheinen in Zuerich mit Verzoegerung
+- **Secrets:** das Data-Safe-Secret braucht ein Sonderzeichen (`DS_USER_PROFILE` prueft mit
+  `ORA12C_VERIFY_FUNCTION`), das Bundle-Passwort ebenfalls
+- **Connector-Bundle:** nur ueber `--from-json` erzeugen (`onPremConnectorId`, `password`, `file`) -
+  `--password file://...` schickt den Pfad als Passwort (400 "Invalid input")
+- **odb_datasafe 1.3.1:** `CONTAINER=ALL` in `create_ds_admin_prerequisites.sql` bricht jede PDB ab - korrigierte
+  Datei auf dem Host von Hand (Original `.1.3.1-orig` daneben), Fix fuer 1.3.2 im odb_datasafe-Repo
+  (`tasks/plan-lrn6087-lab-fixes.md`). `-n` verlangt das Secret (demo.sh uebergibt die Datei immer), der Cache der
+  Target-Liste kennt live registrierte Targets nicht (`DS_TARGET_CACHE_TTL="0"` in der Demo-Kopie)
+- **Ohne Terminal** (Recording, Automatisierung): `demo.sh --no-pause`, `reset.sh --apply --yes`
+- **Schritt 5 direkt nach Schritt 2:** das Erst-Assessment des neuen Targets laeuft noch, `refresh` liefert 409 -
+  im Vortrag liegen Minuten dazwischen, beim Probelauf kurz warten
 
 ## Bekannte Grenzen
 

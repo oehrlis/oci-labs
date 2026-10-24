@@ -6,6 +6,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **network**: `allowed_wireguard_cidrs` defaults to `[]` (was `0.0.0.0/0`) - no stack passes it and none runs
+  WireGuard, yet every public subnet had UDP 51820 open to the internet. Opt-in like `allowed_ssh_cidrs`; the next
+  `apply` of core, cpu-lab and datasafe-demo removes the rule
+
 ### Changed
 
 - `db19_engineering`: `db_release` 19 | 26 with `db_release_profiles` - OS check, preinstall RPM,
@@ -145,6 +151,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
+  `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
+  (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
+- **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
+  26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
+  installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch
+  (`--alias`, stdin)
 - `db19_engineering`: the deploy job switches to `gold_image=YES` when a gold image of the target RU
   is staged. With `NO` and no base image in the folder, analyze stopped with "A usable base image
   file is not found" (26ai 2026-10-23, Lauf A finding 7). The patch-set manifest reads the gold

@@ -48,11 +48,14 @@
         argv:
           - bash
           - -lc
-          - '"$0" add --name "$1" --path "$2" --type datasafe --desc "$3"'
+          - '"$0" add --name "$1" --alias "$1" --path "$2" --type datasafe --desc "$3"'
           - "{{ oradb_oradba_dir }}/bin/oradba_homes.sh"
           - "{{ oradb_connector_oradba_home }}"
           - "{{ oradb_connector_home }}"
           - "LRN6087 Data Safe connector {{ oradb_connector_name }}"
+        # Ansible runs commands on a pty, so oradba_homes.sh saw a terminal and
+        # waited on "Alias name" (2026-10-23) - --alias plus stdin keep it batch
+        stdin: ""
       environment:
         ORADBA_BASE: "{{ oradb_oradba_dir }}"
       when: oradb_homes_entry.rc != 0
@@ -67,6 +70,7 @@
           - "{{ oradb_odb_datasafe_base }}/bin/ds_connector_register_oradba.sh"
           - "{{ oradb_connector_oradba_home }}"
           - "{{ oradb_connector_name }}"
+        stdin: ""
       environment:
         ORADBA_BASE: "{{ oradb_oradba_dir }}"
         ODB_DATASAFE_BASE: "{{ oradb_odb_datasafe_base }}"

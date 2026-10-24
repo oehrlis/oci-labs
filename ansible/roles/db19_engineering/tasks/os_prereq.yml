@@ -104,6 +104,8 @@
     key: "{{ oracle_os_user }}"
     fail_key: false
 
+# ansible_facts, not the bare getent_passwd: ansible-core 2.21 no longer injects
+# module-returned facts as top-level vars (2026-10-22, user existed, assert failed)
 - name: Assert the oracle OS user exists
   ansible.builtin.assert:
     that:

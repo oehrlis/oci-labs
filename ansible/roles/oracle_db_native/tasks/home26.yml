@@ -8,7 +8,7 @@
 # Version....: v0.2.0
 # Purpose....: Create the Oracle AI Database 26ai EE home.
 # Notes......: oradb26_install_method:
-#                autoupgrade  create_home with download=yes, target_version 23.
+#                autoupgrade  download, then create_home, target_version 23.
 #                             AutoUpgrade pulls the RU gold image from MOS with
 #                             the keystore of credentials.yml - unlike 19c no
 #                             base image is needed.
@@ -63,7 +63,23 @@
         dest: "{{ oradb26_autoupgrade_config_dir }}/create-home-26ai.cfg"
         mode: "0644"
 
-    - name: Download the 26ai RU gold image and create the home (30-60 minutes)
+    # create_home does not download on its own: AutoUpgrade 26.6 validates the
+    # folder first and stops with "No newer Oracle Database Release Update file
+    # is found" on an empty one (2026-10-22). Download with the same config first.
+    - name: Download the 26ai RU gold image (20-40 minutes)
+      ansible.builtin.command:
+        cmd: >-
+          {{ oradb_autoupgrade_java }} -jar {{ oradb26_autoupgrade_jar }}
+          -config {{ oradb26_autoupgrade_config_dir }}/create-home-26ai.cfg
+          -patch -mode download -noconsole
+      environment:
+        ORACLE_BASE: "{{ oracle_base }}"
+      register: oradb26_download
+      changed_when: oradb26_download.rc == 0
+      async: 10800
+      poll: 60
+
+    - name: Create the 26ai home from the downloaded gold image (20-40 minutes)
       ansible.builtin.command:
         cmd: >-
           {{ oradb_autoupgrade_java }} -jar {{ oradb26_autoupgrade_jar }}
