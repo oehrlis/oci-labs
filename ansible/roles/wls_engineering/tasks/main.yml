@@ -9,9 +9,9 @@
 # Purpose....: Entry point of wls_engineering. One phase per tag, every phase
 #              loops over the selected WebLogic versions.
 # Notes......: install   OS, JDK, Oracle home, baseline SPB, domain, start, smoke
-#              patch     out-of-place swap at the same path (see patch.yml)
+#              patch     SPB in place, home archived first (see patch.yml)
 #              verify    servers, smoke, patch level, report (read-only)
-#              rollback  swap the pre-patch home back (never runs by default)
+#              rollback  OPatch nrollback of the SPB (never runs by default)
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
@@ -41,7 +41,7 @@
   tags:
     - install
 
-- name: Patch every selected version out-of-place
+- name: Patch every selected version in place
   ansible.builtin.include_tasks:
     file: patch.yml
     apply:
@@ -69,7 +69,7 @@
   tags:
     - verify
 
-- name: Roll every selected version back to the pre-patch home
+- name: Roll the SPB back on every selected version
   ansible.builtin.include_tasks:
     file: rollback.yml
     apply:

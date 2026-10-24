@@ -94,7 +94,7 @@
         group: "{{ oracle_os_group_install }}"
         mode: "0644"
       vars:
-        wv_inv_dir: "{{ wls_inventory_root }}/wls-{{ wv_tag }}-base"
+        wv_inv_dir: "{{ wv_inv_dir_base }}"
 
     - name: Write the response file
       become: true

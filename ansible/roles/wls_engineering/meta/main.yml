@@ -16,8 +16,8 @@ galaxy_info:
   author: Stefan Oehrli
   description: >-
     Oracle WebLogic Server 12.2.1.4 / 14.1.1 / 14.1.2 / 15.1.1 side by side on one
-    host - Oracle home, Stack Patch Bundle via SPBAT, a simple domain, and an
-    out-of-place SPB swap at the same path for CPU test labs.
+    host - Oracle home, Stack Patch Bundle via SPBAT, a simple domain, the SPB
+    under test in place and its OPatch rollback, for CPU test labs.
   license: Apache-2.0
   min_ansible_version: "2.14"
   platforms:

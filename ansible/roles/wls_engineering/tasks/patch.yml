@@ -4,22 +4,16 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/patch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.1.0
-# Purpose....: Out-of-place SPB of one version - swap at the same path.
-# Notes......: Oracle documents no procedure to point a domain at a different
-#              Oracle home path, and Zero Downtime Patching needs managed servers
-#              clustered over two or more nodes - neither fits one host with an
-#              AdminServer and one managed server. This mirrors what ZDT does
-#              internally, with Oracle's cloning tools (decided 2026-10-23):
-#                1. copyBinary the running home, pasteBinary it to a clone,
-#                   SPBAT apply on the clone              - no downtime
-#                2. copyBinary the patched clone            - no downtime
-#                3. stop, move the home to _pre-<cycle>, pasteBinary the patched
-#                   archive to the original path, start   - the downtime
-#              The domain is never touched: it keeps pointing at the same path.
-#              Every home has its own inventory pointer (vars.yml), so the moved
-#              backup stays consistent and rollback.yml only moves it back.
+# Date.......: 2026.10.24
+# Version....: v0.2.0
+# Purpose....: Apply the Stack Patch Bundle under test to one version, in place.
+# Notes......: The documented way (SPB README): stop everything that runs from
+#              the home, SPBAT apply, start. Decided 2026-10-24 over the
+#              out-of-place swap at the same path - fewer moving parts, the way
+#              customers patch WebLogic, and the downtime measured is the real
+#              one. Before the downtime the home and its inventory are archived;
+#              rollback.yml rolls back with OPatch (nrollback with the bundle's
+#              rollback_patchlist.txt) and keeps the archive as the safety net.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
@@ -30,121 +24,54 @@
 - name: Stage the software
   ansible.builtin.include_tasks: fetch.yml
 
-- name: Check the state of WebLogic {{ wls.version }}
+- name: Check the state of the version - {{ wls.version }}
   become: true
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
     - "{{ wv_home }}/wlserver"
-    - "{{ wv_backup }}"
     - "{{ wv_domain }}/config/config.xml"
+    - "{{ wv_stage }}/.spb-target-applied"
   register: wv_patch_pre
 
-- name: Assert the baseline exists and this cycle has not swapped yet
+- name: Assert the baseline exists and the target SPB is not applied yet
   ansible.builtin.assert:
     that:
       - wv_patch_pre.results[0].stat.exists
-      - wv_patch_pre.results[2].stat.exists
-      - not wv_patch_pre.results[1].stat.exists
+      - wv_patch_pre.results[1].stat.exists
+      - not wv_patch_pre.results[2].stat.exists
     fail_msg: >-
       WebLogic {{ wls.version }}: needs an installed home and domain (make cpu-lab-install)
-      and no {{ wv_backup }} yet - a backup from this cycle means the swap already
-      ran; roll it back first (make cpu-lab-rollback) or set another wls_cycle.
+      and the target SPB not applied yet - {{ wv_stage }}/.spb-target-applied says it
+      is; roll it back first (make cpu-lab-rollback).
 
 - name: Start the servers if they are down
   ansible.builtin.include_tasks: servers.yml
   vars:
     wv_action: start
 
-- name: Record the patch level before the swap
+- name: Record the patch level before the SPB
   ansible.builtin.include_tasks: snapshot.yml
   vars:
     wv_snap: base
 
-# --- 1. clone and patch, no downtime ----------------------------------------------
-- name: Remove what an earlier, unfinished swap left in the stage
-  become: true
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "{{ wv_stage }}/oh-clone"
-    - "{{ wv_stage }}/oh-base.jar"
-    - "{{ wv_stage }}/oh-patched.jar"
-    - "{{ wv_stage }}/.spb-target-applied"
-    - "{{ wv_stage }}/spb-target"
-
-- name: Write the inventory pointers of clone and patched home
-  become: true
-  ansible.builtin.template:
-    src: oraInst.loc.j2
-    dest: "{{ item.loc }}"
-    owner: "{{ oracle_os_user }}"
-    group: "{{ oracle_os_group_install }}"
-    mode: "0644"
-  loop:
-    - { loc: "{{ wv_inv_clone }}", wv_inv_dir: "{{ wls_inventory_root }}/wls-{{ wv_tag }}-clone" }
-    - { loc: "{{ wv_inv_patched }}", wv_inv_dir: "{{ wls_inventory_root }}/wls-{{ wv_tag }}-{{ wls_cycle }}" }
-  vars:
-    wv_inv_dir: "{{ item.wv_inv_dir }}"
-
-- name: Remove the clone inventory of an earlier run
-  become: true
-  ansible.builtin.file:
-    path: "{{ wls_inventory_root }}/wls-{{ wv_tag }}-clone"
-    state: absent
-
-- name: Archive the running home (copyBinary)
+# --- safety net, no downtime ------------------------------------------------------
+# The home is static while the servers run (logs and state live in the domain),
+# so the archive is taken before the downtime starts.
+- name: Archive the home and its inventory before the SPB
   become: true
   become_user: "{{ oracle_os_user }}"
-  ansible.builtin.command:
+  ansible.builtin.command:  # noqa: command-instead-of-module - one archive of home, inventory and pointer
     cmd: >-
-      {{ wv_home }}/oracle_common/bin/copyBinary.sh -javaHome {{ wv_jdk }}
-      -sourceOracleHomeLoc {{ wv_home }} -archiveLoc {{ wv_stage }}/oh-base.jar
-  environment:
-    JAVA_HOME: "{{ wv_jdk }}"
-  register: wv_t_copy_base
-  changed_when: true
+      tar -czf {{ wv_backup_tgz }}
+      -C / {{ wv_home | regex_replace('^/', '') }} {{ wv_inv_dir_base | regex_replace('^/', '') }}
+      {{ wv_inv_base | regex_replace('^/', '') }}
+    creates: "{{ wv_backup_tgz }}"
+  register: wv_t_backup
   async: "{{ wls_async_timeout }}"
   poll: "{{ wls_async_poll }}"
 
-- name: Lay the clone down (pasteBinary)
-  become: true
-  become_user: "{{ oracle_os_user }}"
-  ansible.builtin.command:
-    cmd: >-
-      {{ wv_home }}/oracle_common/bin/pasteBinary.sh -javaHome {{ wv_jdk }}
-      -archiveLoc {{ wv_stage }}/oh-base.jar -targetOracleHomeLoc {{ wv_stage }}/oh-clone
-      -targetOracleHomeName wls{{ wv_tag }}_clone -invPtrLoc {{ wv_inv_clone }} -silent true
-  environment:
-    JAVA_HOME: "{{ wv_jdk }}"
-  register: wv_t_paste_clone
-  changed_when: true
-  async: "{{ wls_async_timeout }}"
-  poll: "{{ wls_async_poll }}"
-
-- name: Apply the target SPB to the clone
-  ansible.builtin.include_tasks: spb.yml
-  vars:
-    wv_spb_zip: "{{ wls.spb_target }}"
-    wv_spb_home: "{{ wv_stage }}/oh-clone"
-    wv_spb_role: target
-
-- name: Archive the patched clone (copyBinary)
-  become: true
-  become_user: "{{ oracle_os_user }}"
-  ansible.builtin.command:
-    cmd: >-
-      {{ wv_stage }}/oh-clone/oracle_common/bin/copyBinary.sh -javaHome {{ wv_jdk }}
-      -sourceOracleHomeLoc {{ wv_stage }}/oh-clone -archiveLoc {{ wv_stage }}/oh-patched.jar
-  environment:
-    JAVA_HOME: "{{ wv_jdk }}"
-  register: wv_t_copy_patched
-  changed_when: true
-  async: "{{ wls_async_timeout }}"
-  poll: "{{ wls_async_poll }}"
-
-# --- 2. the swap - downtime ---------------------------------------------------------
+# --- the patch - downtime ---------------------------------------------------------
 - name: Downtime begins
   ansible.builtin.set_fact:
     wv_down_start: "{{ now(utc=true).timestamp() | int }}"
@@ -154,27 +81,12 @@
   vars:
     wv_action: stop
 
-- name: Move the pre-patch home aside
-  become: true
-  ansible.builtin.command:
-    cmd: "mv {{ wv_home }} {{ wv_backup }}"
-    creates: "{{ wv_backup }}"
-
-- name: Lay the patched home down at the original path (pasteBinary)
-  become: true
-  become_user: "{{ oracle_os_user }}"
-  ansible.builtin.command:
-    cmd: >-
-      {{ wv_backup }}/oracle_common/bin/pasteBinary.sh -javaHome {{ wv_jdk }}
-      -archiveLoc {{ wv_stage }}/oh-patched.jar -targetOracleHomeLoc {{ wv_home }}
-      -targetOracleHomeName wls{{ wv_tag }}_{{ wls_cycle | replace('-', '') }}
-      -invPtrLoc {{ wv_inv_patched }} -silent true
-  environment:
-    JAVA_HOME: "{{ wv_jdk }}"
-  register: wv_t_paste_patched
-  changed_when: true
-  async: "{{ wls_async_timeout }}"
-  poll: "{{ wls_async_poll }}"
+- name: Apply the target SPB in place
+  ansible.builtin.include_tasks: spb.yml
+  vars:
+    wv_spb_zip: "{{ wls.spb_target }}"
+    wv_spb_home: "{{ wv_home }}"
+    wv_spb_role: target
 
 - name: Start the servers from the patched home
   ansible.builtin.include_tasks: servers.yml
@@ -185,7 +97,7 @@
   ansible.builtin.set_fact:
     wv_down_end: "{{ now(utc=true).timestamp() | int }}"
 
-# --- 3. evidence --------------------------------------------------------------------
+# --- evidence ---------------------------------------------------------------------
 - name: Smoke test the patched home
   ansible.builtin.include_tasks: smoke.yml
 
@@ -193,16 +105,6 @@
   ansible.builtin.include_tasks: snapshot.yml
   vars:
     wv_snap: patched
-
-- name: Remove the clone and the archives
-  become: true
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "{{ wv_stage }}/oh-clone"
-    - "{{ wv_stage }}/oh-base.jar"
-    - "{{ wv_stage }}/oh-patched.jar"
 
 - name: Write the report
   ansible.builtin.include_tasks: report.yml

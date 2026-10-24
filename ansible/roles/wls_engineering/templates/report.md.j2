@@ -6,18 +6,16 @@
 - Oracle home: `{{ wv_evidence.home }}`
 - SPB baseline: `{{ wv_evidence.spb_base }}`
 - SPB under test: `{{ wv_evidence.spb_target }}`
-- Method: out-of-place swap at the same path (copyBinary, SPBAT on a clone,
-  pasteBinary at the original path); the domain is not touched
+- Method: SPB in place with SPBAT (servers stopped), home and inventory
+  archived before; rollback with OPatch nrollback (rollback_patchlist.txt)
 
 ## Durations
 
-- copyBinary of the running home: {{ wv_evidence.durations.copy_base or '-' }}
-- pasteBinary of the clone: {{ wv_evidence.durations.paste_clone or '-' }}
+- Archive of home and inventory (no downtime): {{ wv_evidence.durations.backup or '-' }}
 - SPBAT apply: {{ wv_evidence.durations.spb_apply or '-' }}
-- copyBinary of the patched clone: {{ wv_evidence.durations.copy_patched or '-' }}
-- pasteBinary at the original path: {{ wv_evidence.durations.paste_patched or '-' }}
+- OPatch nrollback: {{ wv_evidence.durations.nrollback or '-' }}
 - Downtime (stop to RUNNING): {{ (wv_evidence.durations.downtime_s ~ ' s') if wv_evidence.durations.downtime_s else '-' }}
-- Rollback (stop to RUNNING): {{ (wv_evidence.durations.rollback_s ~ ' s') if wv_evidence.durations.rollback_s else '-' }}
+- Rollback (stop to RUNNING): {{ (wv_evidence.durations.rollback_s ~ ' s') if wv_evidence.durations.rollback_s else '-' }}{{ (' - ' ~ wv_evidence.rollback_method) if wv_evidence.rollback_method else '' }}
 
 ## Smoke test
 

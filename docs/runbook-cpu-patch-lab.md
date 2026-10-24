@@ -118,21 +118,21 @@ copyBinary/pasteBinary) run async - their output appears when the step ends.
 
 ### What the patch does
 
-Oracle documents no procedure to point a domain at a different Oracle home path,
-and Zero Downtime Patching needs managed servers clustered over two or more nodes.
-The role therefore swaps at the same path, the way ZDT does internally:
+In place, the way the SPB README documents it (decided 2026-10-24 over an
+out-of-place swap at the same path - fewer moving parts, the way customers patch
+WebLogic, and the downtime measured is the real one):
 
-1. copyBinary the running home, pasteBinary it to a clone, SPBAT apply on the
-   clone - no downtime
-2. copyBinary the patched clone - no downtime
-3. Stop, move the home to `wls-<version>_pre-<cycle>`, pasteBinary the patched
-   archive to the original path, start - this is the downtime that is measured
+1. Archive home and inventory of the version (`backup-home-pre-<cycle>.tgz` in the
+   stage) - the servers keep running
+2. Stop both servers, `spbat.sh -phase precheck`, `spbat.sh -phase apply`, start -
+   this is the downtime that is measured
+3. Smoke test and `opatch lspatches`
 
-The domain is never touched. Each home has its own inventory pointer (baseline,
-clone, patched), so the moved backup stays consistent. SPBAT has no rollback
-phase - `make cpu-lab-rollback` moves the patched home to `_failed-<cycle>` and the
-backup back. 14.1.2 and 15.1.1 run in secured production mode (no Admin Console):
-every domain gets a domain-wide administration port and SSL with demo
+SPBAT has no rollback phase. `make cpu-lab-rollback` runs `opatch nrollback` with the
+bundle's `rollback_patchlist.txt` - Oracle's documented way back; OPatch stays at
+the version the SPB brought. `ANSIBLE_EXTRA="-e wls_rollback_restore=true"` restores
+the archive instead. 14.1.2 and 15.1.1 run in secured production mode (no Admin
+Console): every domain gets a domain-wide administration port and SSL with demo
 certificates; checks, deployment and shutdown go through the REST management API.
 
 Ports per version (base + 100 x position in `wls_versions`): administration port

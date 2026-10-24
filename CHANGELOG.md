@@ -51,8 +51,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   4 OCPU / 32 GB), inventory group `cpu_wls_hosts`
 - Role `wls_engineering` and playbook `lab-wls-patch.yml`: WebLogic 12.2.1.4 / 14.1.1 / 14.1.2 /
   15.1.1 side by side - JDK, Oracle home, baseline SPB via SPBAT, domain (AdminServer + ms1,
-  administration port, SSL), REST smoke test with a static WAR, and an out-of-place SPB swap at
-  the same path (copyBinary, SPBAT on a clone, pasteBinary) with rollback. Not yet run on a host
+  administration port, SSL), REST smoke test with a static WAR, the SPB under test in place
+  (home and inventory archived first) and its rollback with `opatch nrollback` - the swap at the
+  same path from the first draft was dropped on 2026-10-24. Not yet run on a host
 - `make cpu-lab-repo-par`: read-by-name PAR on the flat `orarepo` bucket, no listing; passed to
   Ansible as `lab_repo_url` in the 0600 vars file
 - **cpu-patch-26ai** (`terraform/envs/cpu-patch-26ai`): 26ai host for the CPU tests on the shared

@@ -183,9 +183,10 @@ Weg:
    `ansible/inventories/cpu-patch-wls/group_vars/all.yml`, von Stefan gepflegt):
    JDK, WLS-Home, Basis-SPB per `spbat`, Domain (AdminServer + 1 Managed Server, Prod Mode)
    per WLST offline, Smoke (Konsole/Health, Deploy einer Test-WAR)
-4. Patch out-of-place: zweites Home derselben Version, Ziel-SPB per `spbat`, Domain auf das
-   neue Home umstellen, Start, Smoke - Laufzeit getrennt (Home, SPB, Downtime) wie bei der DB.
-   Rollback: Domain zurueck auf das alte Home
+4. Patch **in place** (Stefan, 2026-10-24 - statt Swap am selben Pfad): Home + Inventory
+   archivieren, stoppen, `spbat` precheck + apply, starten, Smoke; Laufzeit getrennt (Archiv,
+   SPBAT, Downtime). Rollback: `opatch nrollback` mit `rollback_patchlist.txt` aus dem SPB,
+   Archiv als Netz (`-e wls_rollback_restore=true`). Das SPB-Zip bringt alle Einzelpatches
 5. Reihenfolge 14.1.2, 15.1.1, 12.2.1.4, 14.1.1
 
 - [ ] 1-3 bauen, offline pruefen

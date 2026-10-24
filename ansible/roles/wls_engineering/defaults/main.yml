@@ -50,7 +50,7 @@ wls_os_packages:
 wls_product_root: "{{ oracle_base }}/product"
 wls_domain_root: "{{ oracle_data }}/domains"
 wls_stage_root: "{{ oracle_data }}/stage/wls"
-wls_inventory_root: "{{ oracle_base }}/../oraInventory"
+wls_inventory_root: "{{ oracle_base | dirname }}/oraInventory"
 wls_etc_dir: "{{ oracle_base }}/etc/wls"
 
 # Patch cycle under test - names the swapped home's inventory and the backup.
@@ -87,11 +87,14 @@ wls_client_java_options: >-
   -Dweblogic.security.TrustKeyStore=DemoTrust
   -Dweblogic.security.SSL.ignoreHostnameVerification=true
 
+# Rollback with the archive patch.yml took instead of OPatch nrollback.
+wls_rollback_restore: false
+
 # Waits for a server to report RUNNING (seconds).
 wls_start_timeout: 900
 wls_stop_timeout: 300
 
-# Long steps run async (install, spbat, copyBinary/pasteBinary).
+# Long steps run async (installer, SPBAT, archive, OPatch rollback).
 wls_async_timeout: 7200
 wls_async_poll: 30
 
