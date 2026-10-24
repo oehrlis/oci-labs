@@ -1,0 +1,85 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Entry point of wls_engineering. One phase per tag, every phase
+#              loops over the selected WebLogic versions.
+# Notes......: install   OS, JDK, Oracle home, baseline SPB, domain, start, smoke
+#              patch     out-of-place swap at the same path (see patch.yml)
+#              verify    servers, smoke, patch level, report (read-only)
+#              rollback  swap the pre-patch home back (never runs by default)
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: OS prerequisites for WebLogic
+  ansible.builtin.import_tasks: os_prereq.yml
+  tags:
+    - install
+    - prereq
+
+- name: Select the versions to work on
+  ansible.builtin.import_tasks: select.yml
+  tags:
+    - always
+
+- name: Install every selected version
+  ansible.builtin.include_tasks:
+    file: install.yml
+    apply:
+      tags:
+        - install
+  loop: "{{ wls_selected }}"
+  loop_control:
+    loop_var: wls
+    index_var: wls_idx
+    label: "{{ wls.version }}"
+  tags:
+    - install
+
+- name: Patch every selected version out-of-place
+  ansible.builtin.include_tasks:
+    file: patch.yml
+    apply:
+      tags:
+        - patch
+  loop: "{{ wls_selected }}"
+  loop_control:
+    loop_var: wls
+    index_var: wls_idx
+    label: "{{ wls.version }}"
+  tags:
+    - patch
+
+- name: Verify every selected version
+  ansible.builtin.include_tasks:
+    file: verify.yml
+    apply:
+      tags:
+        - verify
+  loop: "{{ wls_selected }}"
+  loop_control:
+    loop_var: wls
+    index_var: wls_idx
+    label: "{{ wls.version }}"
+  tags:
+    - verify
+
+- name: Roll every selected version back to the pre-patch home
+  ansible.builtin.include_tasks:
+    file: rollback.yml
+    apply:
+      tags:
+        - rollback
+  loop: "{{ wls_selected }}"
+  loop_control:
+    loop_var: wls
+    index_var: wls_idx
+    label: "{{ wls.version }}"
+  tags:
+    - never
+    - rollback

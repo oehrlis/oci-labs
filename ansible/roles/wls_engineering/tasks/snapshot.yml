@@ -1,0 +1,41 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/snapshot.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Record the patch level of the home at the WebLogic path
+#              (wv_snap: base | patched | rolledback | current).
+# Notes......: OPatch reads the home's own oraInst.loc - after a swap that is the
+#              inventory of whichever home sits at the path.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the patches in the home - {{ wv_snap }}
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      {{ wv_home }}/OPatch/opatch version | sed -n 1p
+      {{ wv_home }}/OPatch/opatch lspatches -oh {{ wv_home }} | grep -v '^OPatch succeeded'
+    executable: /bin/bash
+  environment:
+    JAVA_HOME: "{{ wv_jdk }}"
+  register: wv_lspatches
+  changed_when: false
+
+- name: Keep the patch level - {{ wv_snap }}
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.copy:
+    dest: "{{ wv_stage }}/lspatches-{{ wv_snap }}.txt"
+    content: "{{ wv_lspatches.stdout }}\n"
+    mode: "0640"
+
+- name: Report the patch level - {{ wv_snap }}
+  ansible.builtin.debug:
+    msg: "{{ wv_lspatches.stdout_lines }}"

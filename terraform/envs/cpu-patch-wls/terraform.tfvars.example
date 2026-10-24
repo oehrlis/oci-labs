@@ -1,0 +1,36 @@
+# terraform.tfvars - cpu-patch-wls - copy to terraform.tfvars
+# Network and Bastion come from envs/core - no network variables here.
+
+oci_config_profile = "TRIVADIS"
+# compartment_ocid = "ocid1.compartment.oc1..."
+region_key       = "chzh"
+environment_code = "l"
+stack_code       = "cpuwl"
+lab_instance     = 1
+
+common_freeform_tags = {
+  project = "oradba-labs"
+  owner   = "oehrlis"
+  stack   = "cpuwl"
+}
+
+# One WebLogic host, all versions side by side (Stefan, 2026-10-23); OL9.
+lab_count                    = 1
+ol_version                   = "9"
+db_host_shape                = "VM.Standard.E4.Flex"
+db_host_ocpus                = 4
+db_host_memory_gbs           = 32
+db_host_boot_volume_size_gbs = 200
+
+attach_data_volume   = false
+data_volume_size_gbs = 100
+
+# Off: a STOP_RESOURCE in the middle of a patch run wrecks it.
+enable_auto_stop = false
+
+db_oracle_root = "/u00"
+db_oracle_data = "/u01"
+db_oracle_arch = "/u02"
+db_oracle_base = ""
+
+core_state_path = "../core/terraform.tfstate"

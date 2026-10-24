@@ -1,0 +1,82 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/rollback.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Put the pre-patch home of one version back at its path.
+# Notes......: SPBAT has no rollback phase. The swap left the untouched baseline
+#              home in _pre-<cycle> with its own inventory, so the rollback is a
+#              move: stop, patched home to _failed-<cycle>, baseline back, start.
+#              The patched home is kept for a look; a second rollback in the same
+#              cycle refuses rather than overwrite it.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Derive the layout
+  ansible.builtin.include_tasks: vars.yml
+
+- name: Check the homes of WebLogic {{ wls.version }}
+  become: true
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ wv_backup }}/wlserver"
+    - "{{ wv_failed }}"
+  register: wv_rb_pre
+
+- name: Assert there is a pre-patch home to go back to
+  ansible.builtin.assert:
+    that:
+      - wv_rb_pre.results[0].stat.exists
+      - not wv_rb_pre.results[1].stat.exists
+    fail_msg: >-
+      WebLogic {{ wls.version }}: no {{ wv_backup }} (nothing was swapped in cycle
+      {{ wls_cycle }}), or {{ wv_failed }} exists already (rolled back before -
+      remove it by hand after a look).
+
+- name: Rollback begins
+  ansible.builtin.set_fact:
+    wv_rb_start: "{{ now(utc=true).timestamp() | int }}"
+
+- name: Stop the servers
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: stop
+
+- name: Move the patched home aside
+  become: true
+  ansible.builtin.command:
+    cmd: "mv {{ wv_home }} {{ wv_failed }}"
+    creates: "{{ wv_failed }}"
+
+- name: Put the pre-patch home back
+  become: true
+  ansible.builtin.command:
+    cmd: "mv {{ wv_backup }} {{ wv_home }}"
+    removes: "{{ wv_backup }}"
+
+- name: Start the servers from the pre-patch home
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: start
+
+- name: Rollback ends
+  ansible.builtin.set_fact:
+    wv_rb_end: "{{ now(utc=true).timestamp() | int }}"
+
+- name: Smoke test after the rollback
+  ansible.builtin.include_tasks: smoke.yml
+
+- name: Record the patch level after the rollback
+  ansible.builtin.include_tasks: snapshot.yml
+  vars:
+    wv_snap: rolledback
+
+- name: Write the report
+  ansible.builtin.include_tasks: report.yml
+  vars:
+    wv_phase: rollback

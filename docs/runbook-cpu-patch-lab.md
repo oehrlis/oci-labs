@@ -61,7 +61,8 @@ envs/cpu-patch-test  19c host - still with its own VCN and Bastion, moves onto
 
 Every `cpu-lab-*` target takes `CPU_ENV=<stack>` (default `cpu-patch-test`).
 Each stack has its own Bastion tunnel port - `cpu-patch-test` 2222,
-`cpu-patch-26ai` 2223 - so two labs can be driven at the same time:
+`cpu-patch-26ai` 2224, `cpu-patch-wls` 2225 (2223 belongs to the datasafe-demo tunnel) -
+so several labs can be driven at the same time:
 
 ```bash
 make cpu-lab-plan CPU_ENV=cpu-patch-26ai
@@ -75,6 +76,69 @@ A host stack never creates or destroys a network resource; its destroy removes
 host, NSG, keys and inventory. The role is the same for both releases -
 `db_release` 19 | 26 in the inventory selects the release profile
 (`db_release_profiles` in the role defaults).
+
+## WebLogic - cpu-patch-wls
+
+One host (OL9, 4 OCPU / 32 GB) carries every WebLogic version side by side, role
+`wls_engineering`, playbook `lab-wls-patch.yml`. Versions and their files are listed
+in `ansible/playbooks/group_vars/cpu_wls_hosts.yml`.
+
+### Upload to orarepo first
+
+`orarepo` is flat - upload into the bucket root and put the exact object name into
+`cpu_wls_hosts.yml`. eDelivery V-numbers are fine. A version with an empty name is
+left out and named in the run output.
+
+<!-- markdownlint-disable MD013 MD060 -->
+| Version | Installer | JDK (linux-x64 tar.gz) | Baseline SPB | SPB under test |
+| --- | --- | --- | --- | --- |
+| 14.1.2.0.0 | eDelivery zip with `fmw_14.1.2.0.0_wls.jar` | 17.0.12+ or 21.0.4+ | 2026-07 | 40125898 |
+| 15.1.1.0.0 | eDelivery zip with the generic jar | 17.0.16+ or 21.0.8+ | 2026-07 | 40128310 |
+| 12.2.1.4.0 | in orarepo: `fmw_12.2.1.4.0_infrastructure_Disk1_1of1.zip` | 8 (1.8.0_211+) | 2026-07 | 40129641 |
+| 14.1.1.0.0 | in orarepo: `fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip` | 11.0.6+ (or 8) | 2026-07 | 40129124 |
+<!-- markdownlint-restore -->
+
+The installer jar is found inside the zip by name, or as the only `fmw_*.jar`.
+
+### Run
+
+```bash
+make cpu-lab-plan CPU_ENV=cpu-patch-wls
+make cpu-lab-apply CPU_ENV=cpu-patch-wls        # Stefan
+make cpu-lab-repo-par CPU_ENV=cpu-patch-wls REPO_CHECK=<one uploaded file name>
+make cpu-lab-install CPU_ENV=cpu-patch-wls BASTION=1 ANSIBLE_EXTRA="-e wls_only=14.1.2.0.0"
+make cpu-lab-patch CPU_ENV=cpu-patch-wls BASTION=1 ANSIBLE_EXTRA="-e wls_only=14.1.2.0.0"
+make cpu-lab-verify CPU_ENV=cpu-patch-wls BASTION=1
+make cpu-lab-rollback CPU_ENV=cpu-patch-wls BASTION=1 ANSIBLE_EXTRA="-e wls_only=14.1.2.0.0"
+make cpu-lab-stop CPU_ENV=cpu-patch-wls
+```
+
+Every step prints the full Ansible output. Long steps (installer, SPBAT,
+copyBinary/pasteBinary) run async - their output appears when the step ends.
+
+### What the patch does
+
+Oracle documents no procedure to point a domain at a different Oracle home path,
+and Zero Downtime Patching needs managed servers clustered over two or more nodes.
+The role therefore swaps at the same path, the way ZDT does internally:
+
+1. copyBinary the running home, pasteBinary it to a clone, SPBAT apply on the
+   clone - no downtime
+2. copyBinary the patched clone - no downtime
+3. Stop, move the home to `wls-<version>_pre-<cycle>`, pasteBinary the patched
+   archive to the original path, start - this is the downtime that is measured
+
+The domain is never touched. Each home has its own inventory pointer (baseline,
+clone, patched), so the moved backup stays consistent. SPBAT has no rollback
+phase - `make cpu-lab-rollback` moves the patched home to `_failed-<cycle>` and the
+backup back. 14.1.2 and 15.1.1 run in secured production mode (no Admin Console):
+every domain gets a domain-wide administration port and SSL with demo
+certificates; checks, deployment and shutdown go through the REST management API.
+
+Ports per version (base + 100 x position in `wls_versions`): administration port
+9002 / 9102 / 9202 / 9302, managed server SSL 8002 / 8102 / ...
+
+Reports: `ansible/reports/<host>/cputest-WLS-<version>-<date>-<phase>.json|md`.
 
 ## Costs
 

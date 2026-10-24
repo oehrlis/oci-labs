@@ -169,14 +169,29 @@ OL9, Weg ueber Gold Image/`-applyRU`; eigener Punkt nach dem Zyklus).
 
 ### C - WLS/FMW (Sa/So, Rest aus Las Vegas)
 
-- [ ] Installer 14.1.2 und 15.1.1 von eDelivery nach `orarepo` - **Stefan (Lizenz-Login)**
-- [ ] Rolle `wls_engineering`: JDK, WLS-Home in der Ausgangsversion (SPB 2026-07), einfache
-  Domain mit AdminServer + Managed Server, Smoke (Konsole, Deploy einer Test-App)
-- [ ] SPB 2026-10 out-of-place: zweites Home klonen, `spbat`/OPatch, Domain auf das neue
-  Home zeigen, Start, Smoke; Laufzeit und Issues wie bei der DB
-- [ ] Patches: MOS-Download in `cpu-patch-tests`, Upload nach `orarepo/patches/2026-10/`,
-  Host zieht per PAR (Mechanik von heute, generalisiert auf beliebige Ziele)
-- [ ] Reihenfolge 14.1.2, 15.1.1, 12.2.1.4, 14.1.1
+Entscheide 2026-10-23 (Stefan): **ein** WLS-Host (OL9, 4 OCPU / 32 GB) am Core, alle vier
+Versionen nebeneinander, nacheinander getestet; WLS generic ohne RCU (12.2.1.4: vorhandener
+Infrastructure-Installer, reines WLS-Template); Software und Patches kommen aus `orarepo`
+(flach, keine Ordner) - Stefan laedt vorher hoch, der Host zieht per Bucket-PAR.
+
+Weg:
+
+1. `terraform/envs/cpu-patch-wls` - wie `cpu-patch-26ai`, Stack-Code `cpuwl`, 4 OCPU / 32 GB
+2. Makefile: `CPU_ENV=cpu-patch-wls` waehlt Playbook `lab-wls-patch.yml`, Tunnel-Port 2224;
+   `cpu-lab-install | -patch | -verify | -rollback` wie bei der DB
+3. Rolle `wls_engineering`, je Version aus `wls_versions` (Dateinamen in
+   `ansible/inventories/cpu-patch-wls/group_vars/all.yml`, von Stefan gepflegt):
+   JDK, WLS-Home, Basis-SPB per `spbat`, Domain (AdminServer + 1 Managed Server, Prod Mode)
+   per WLST offline, Smoke (Konsole/Health, Deploy einer Test-WAR)
+4. Patch out-of-place: zweites Home derselben Version, Ziel-SPB per `spbat`, Domain auf das
+   neue Home umstellen, Start, Smoke - Laufzeit getrennt (Home, SPB, Downtime) wie bei der DB.
+   Rollback: Domain zurueck auf das alte Home
+5. Reihenfolge 14.1.2, 15.1.1, 12.2.1.4, 14.1.1
+
+- [ ] 1-3 bauen, offline pruefen
+- [ ] Stefan: Uploads nach `orarepo` (Liste im Runbook), Dateinamen in `group_vars/all.yml`
+- [ ] plan/apply `cpu-patch-wls` - **Stefan**
+- [ ] Je Version: install, patch, verify, rollback; Import nach `cpu-patch-tests`
 
 ### D - Infrastruktur und Ablauf (parallel, nur was die Tests braucht)
 

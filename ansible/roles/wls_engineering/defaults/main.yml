@@ -1,0 +1,104 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Defaults for wls_engineering - WebLogic homes, Stack Patch Bundles
+#              and a simple domain per version for CPU test labs.
+# Notes......: The versions and their files come from group_vars
+#              (wls_versions). Everything below is layout and behaviour.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# --- OS ------------------------------------------------------------------------
+oracle_os_user: oracle
+oracle_os_group_install: oinstall
+oracle_os_uid: 54321
+oracle_os_gid: 54321
+
+# System requirements of 14.1.2 / 15.1.1 on OL9 (sysrs). 12.2.1.4 and 14.1.1
+# need the same set minus libaio-devel - one list for all is simpler and harmless.
+wls_os_packages:
+  - binutils
+  - gcc
+  - gcc-c++
+  - glibc
+  - glibc-devel
+  - libaio
+  - libaio-devel
+  - libgcc
+  - libstdc++
+  - libstdc++-devel
+  - libnsl
+  - sysstat
+  - motif
+  - motif-devel
+  - openssl
+  - make
+  - ksh
+  - libcap
+  - unzip
+  - tar
+  - curl
+
+# --- Layout ----------------------------------------------------------------------
+# oracle_base / oracle_data come from the generated inventory.
+wls_product_root: "{{ oracle_base }}/product"
+wls_domain_root: "{{ oracle_data }}/domains"
+wls_stage_root: "{{ oracle_data }}/stage/wls"
+wls_inventory_root: "{{ oracle_base }}/../oraInventory"
+wls_etc_dir: "{{ oracle_base }}/etc/wls"
+
+# Patch cycle under test - names the swapped home's inventory and the backup.
+wls_cycle: "2026-10"
+
+# Limit a run to one version: -e wls_only=14.1.2.0.0. Empty = every version
+# whose files are all named in wls_versions.
+wls_only: ""
+
+# --- Software repository --------------------------------------------------------
+# Read-by-name PAR on orarepo, passed by make in the 0600 vars file
+# (make cpu-lab-repo-par CPU_ENV=cpu-patch-wls). Ends with "/o/".
+lab_repo_url: ""
+
+# --- Domain -----------------------------------------------------------------------
+wls_admin_user: weblogic
+# make passes the Terraform-generated lab password as db19_sys_password.
+wls_admin_password: "{{ db19_sys_password | default('') }}"
+wls_managed_server: ms1
+
+# Ports per version: base + 100 x position in wls_versions, so all versions can
+# run side by side. Domain-wide administration port on every version - the same
+# t3s/https client handling everywhere, and 14.1.2+ requires it anyway.
+wls_port_admin_listen: 7001
+wls_port_admin_ssl: 7002
+wls_port_admin_port: 9002
+wls_port_ms_listen: 8001
+wls_port_ms_ssl: 8002
+wls_port_ms_admin: 9003
+wls_port_step: 100
+
+# Demo identity/trust - a throw-away lab. Clients must trust DemoTrust.
+wls_client_java_options: >-
+  -Dweblogic.security.TrustKeyStore=DemoTrust
+  -Dweblogic.security.SSL.ignoreHostnameVerification=true
+
+# Waits for a server to report RUNNING (seconds).
+wls_start_timeout: 900
+wls_stop_timeout: 300
+
+# Long steps run async (install, spbat, copyBinary/pasteBinary).
+wls_async_timeout: 7200
+wls_async_poll: 30
+
+# Smoke application: a static WAR - works on Java EE 8 (14.1.2 and older) and
+# Jakarta EE 9.1 (15.1.1) alike.
+wls_smoke_app: cpusmoke
+wls_smoke_marker: "oradba-cpu-smoke"
+
+# Local directory the reports are fetched to (relative to the playbook).
+wls_report_dir: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}"

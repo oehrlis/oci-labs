@@ -1,0 +1,109 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/smoke.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Smoke test one version: both servers RUNNING, a static WAR
+#              deployed to the managed server and served over its SSL port.
+# Notes......: Static on purpose - 15.1.1 is Jakarta EE 9.1, the older releases
+#              Java EE 8. Deployed through the REST edit tree (startEdit, create,
+#              activate), which all four versions have, so no password reaches a
+#              weblogic.Deployer command line. Results land in wv_smoke for the
+#              report; a failed check is a finding, the task does not abort.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the server states for the smoke test
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+    cmd: >-
+      curl -K {{ wv_curl_cfg }} --max-time 20
+      '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes?fields=name,state&links=none'
+    executable: /bin/bash
+  register: wv_smoke_states
+  changed_when: false
+  failed_when: false
+
+- name: Build the smoke WAR
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      d="{{ wv_stage }}/smoke-war"
+      rm -rf "$d" && mkdir -p "$d"
+      printf '<html><body>%s %s</body></html>\n' "{{ wls_smoke_marker }}" "{{ wls.version }}" > "$d/index.html"
+      cd "$d" && "{{ wv_jdk }}/bin/jar" cf "{{ wv_stage }}/{{ wls_smoke_app }}.war" index.html
+    executable: /bin/bash
+    creates: "{{ wv_stage }}/{{ wls_smoke_app }}.war"
+
+- name: Check whether the smoke application is deployed
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+    cmd: >-
+      curl -K {{ wv_curl_cfg }} --max-time 20 -o /dev/null -w '%{http_code}'
+      '{{ wv_admin_url }}/management/weblogic/latest/domainConfig/appDeployments/{{ wls_smoke_app }}?links=none'
+    executable: /bin/bash
+  register: wv_app_exists
+  changed_when: false
+  failed_when: false
+
+- name: Deploy the smoke application
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+    cmd: |
+      set -euo pipefail
+      base='{{ wv_admin_url }}/management/weblogic/latest/edit'
+      post() { curl -K {{ wv_curl_cfg }} --max-time 300 -fS -X POST -H 'Content-Type: application/json' -d "$2" "$base/$1"; }
+      post changeManager/startEdit '{}'
+      app='{"name": "{{ wls_smoke_app }}", "sourcePath": "{{ wv_stage }}/{{ wls_smoke_app }}.war",'
+      app="$app"' "targets": [{"identity": ["servers", "{{ wls_managed_server }}"]}]}'
+      post appDeployments "$app"
+      post changeManager/activate '{}'
+    executable: /bin/bash
+  register: wv_deploy
+  when: wv_app_exists.stdout != '200'
+  changed_when: wv_deploy.rc == 0
+  failed_when: false
+
+- name: Request the smoke page from the managed server
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:  # noqa: command-instead-of-module - same client as every other check
+    cmd: "curl -ks --max-time 10 https://localhost:{{ wv_ports.ms_ssl }}/{{ wls_smoke_app }}/"
+  register: wv_smoke_page
+  until: wls_smoke_marker in wv_smoke_page.stdout
+  retries: 18
+  delay: 10
+  changed_when: false
+  failed_when: false
+
+- name: Evaluate the smoke test
+  vars:
+    wv_smoke_items: "{{ (wv_smoke_states.stdout | default('{}', true) | from_json).get('items', []) }}"
+    wv_smoke_server_states: >-
+      {{ dict(wv_smoke_items | map(attribute='name') | zip(wv_smoke_items | map(attribute='state'))) }}
+  ansible.builtin.set_fact:
+    wv_smoke:
+      admin_running: >-
+        {{ wv_smoke_server_states.AdminServer | default('') == 'RUNNING' }}
+      ms_running: >-
+        {{ wv_smoke_server_states[wls_managed_server] | default('') == 'RUNNING' }}
+      deploy: "{{ 'existing' if wv_app_exists.stdout == '200' else ('ok' if (wv_deploy.rc | default(1)) == 0 else 'failed') }}"
+      page: "{{ wls_smoke_marker in wv_smoke_page.stdout }}"
+
+- name: Report the smoke test
+  ansible.builtin.debug:
+    msg:
+      - "AdminServer RUNNING ..: {{ wv_smoke.admin_running }}"
+      - "{{ wls_managed_server }} RUNNING .........: {{ wv_smoke.ms_running }}"
+      - "deploy {{ wls_smoke_app }} .......: {{ wv_smoke.deploy }}"
+      - "page over SSL {{ wv_ports.ms_ssl }} ...: {{ wv_smoke.page }}"
+      - "{{ wv_deploy.stderr | default('') | truncate(300) }}"

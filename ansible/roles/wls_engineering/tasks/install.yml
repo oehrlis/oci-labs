@@ -1,0 +1,153 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/install.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Baseline of one version: JDK, Oracle home, baseline SPB, domain,
+#              servers up, smoke test, patch-level snapshot.
+# Notes......: Idempotent per step - a home with wlserver/ is not reinstalled,
+#              a baseline SPB with a marker is not applied again, an existing
+#              domain is kept.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Derive the layout
+  ansible.builtin.include_tasks: vars.yml
+
+- name: Stage the software
+  ansible.builtin.include_tasks: fetch.yml
+
+# --- JDK ---------------------------------------------------------------------------
+# Outside every Oracle home: SPBAT refuses a JAVA_HOME inside ORACLE_HOME, and a
+# JDK shared by base and patched home survives the swap untouched.
+- name: Create the JDK directory - {{ wls.jdk_major }}
+  become: true
+  ansible.builtin.file:
+    path: "{{ wv_jdk }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+
+- name: Unpack JDK {{ wls.jdk_major }}
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.unarchive:
+    src: "{{ wv_stage }}/{{ wls.jdk_file }}"
+    dest: "{{ wv_jdk }}"
+    remote_src: true
+    extra_opts: ["--strip-components=1"]
+    creates: "{{ wv_jdk }}/bin/java"
+
+- name: Report the JDK
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ wv_jdk }}/bin/java -version"
+  register: wv_java_version
+  changed_when: false
+
+# --- Oracle home -------------------------------------------------------------------
+- name: Check whether WebLogic is installed - {{ wls.version }}
+  become: true
+  ansible.builtin.stat:
+    path: "{{ wv_home }}/wlserver"
+  register: wv_home_stat
+
+- name: Install the Oracle home
+  when: not wv_home_stat.stat.exists
+  block:
+    - name: Unpack the installer zip
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.unarchive:
+        src: "{{ wv_stage }}/{{ wls.installer_zip }}"
+        dest: "{{ wv_stage }}"
+        remote_src: true
+
+    # Jar names drift between zips (wls_lite vs wls_lite_generic) - take the
+    # named one when present, otherwise the only jar in the zip.
+    - name: Find the installer jar
+      become: true
+      ansible.builtin.find:
+        paths: "{{ wv_stage }}"
+        patterns: "fmw_*.jar"
+      register: wv_jars
+
+    - name: Pick the installer jar
+      ansible.builtin.set_fact:
+        wv_jar: >-
+          {{ (wv_jars.files | map(attribute='path')
+              | select('search', '/' ~ (wls.installer_jar | default('none')) ~ '$') | list
+              or wv_jars.files | map(attribute='path') | list) | first }}
+
+    - name: Write the inventory pointer of the baseline home
+      become: true
+      ansible.builtin.template:
+        src: oraInst.loc.j2
+        dest: "{{ wv_inv_base }}"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0644"
+      vars:
+        wv_inv_dir: "{{ wls_inventory_root }}/wls-{{ wv_tag }}-base"
+
+    - name: Write the response file
+      become: true
+      ansible.builtin.template:
+        src: install.rsp.j2
+        dest: "{{ wv_stage }}/install.rsp"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0644"
+      vars:
+        wv_install_type: >-
+          {{ 'Fusion Middleware Infrastructure' if 'infrastructure' in wv_jar else 'WebLogic Server' }}
+
+    - name: Run the silent installer
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: >-
+          {{ wv_jdk }}/bin/java -jar {{ wv_jar }}
+          -silent -responseFile {{ wv_stage }}/install.rsp
+          -invPtrLoc {{ wv_inv_base }} -jreLoc {{ wv_jdk }}
+        creates: "{{ wv_home }}/wlserver"
+      environment:
+        JAVA_HOME: "{{ wv_jdk }}"
+      register: wv_install
+      async: "{{ wls_async_timeout }}"
+      poll: "{{ wls_async_poll }}"
+
+    - name: Report the installer outcome
+      ansible.builtin.debug:
+        msg: "{{ wv_install.stdout_lines | default([]) | select('search', '(?i)(success|error|warn|fail)') | list }}"
+
+# --- Baseline SPB ------------------------------------------------------------------
+- name: Apply the baseline Stack Patch Bundle
+  ansible.builtin.include_tasks: spb.yml
+  vars:
+    wv_spb_zip: "{{ wls.spb_base }}"
+    wv_spb_home: "{{ wv_home }}"
+    wv_spb_role: base
+
+# --- Domain and servers ------------------------------------------------------------
+- name: Create the domain
+  ansible.builtin.include_tasks: domain.yml
+
+- name: Start the servers
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: start
+
+- name: Smoke test the baseline
+  ansible.builtin.include_tasks: smoke.yml
+
+- name: Record the baseline patch level
+  ansible.builtin.include_tasks: snapshot.yml
+  vars:
+    wv_snap: base

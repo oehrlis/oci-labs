@@ -1,0 +1,31 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: meta/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Role metadata for wls_engineering.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+galaxy_info:
+  role_name: wls_engineering
+  author: Stefan Oehrli
+  description: >-
+    Oracle WebLogic Server 12.2.1.4 / 14.1.1 / 14.1.2 / 15.1.1 side by side on one
+    host - Oracle home, Stack Patch Bundle via SPBAT, a simple domain, and an
+    out-of-place SPB swap at the same path for CPU test labs.
+  license: Apache-2.0
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - oracle
+    - weblogic
+dependencies: []

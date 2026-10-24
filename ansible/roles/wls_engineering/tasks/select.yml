@@ -1,0 +1,69 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/select.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Pick the versions a run works on and name every one it leaves out.
+# Notes......: A version is selected when wls_only matches (or is empty) and all
+#              its files are named. A version left out is reported with the
+#              missing file and the fix - a silent skip would look like a pass.
+#              The index into wls_versions is kept, it drives the port offsets.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the credentials and the repository are set
+  ansible.builtin.assert:
+    that:
+      - wls_admin_password | length >= 8
+      - lab_repo_url | length > 0
+    fail_msg: >-
+      wls_admin_password (from the make vars file) or lab_repo_url is empty.
+      Run through make, and mint the repository PAR first:
+      make cpu-lab-repo-par CPU_ENV=cpu-patch-wls
+    success_msg: "Credentials and software repository are set."
+  no_log: true
+
+- name: Work out which versions are complete
+  ansible.builtin.set_fact:
+    wls_selected: >-
+      {%- set out = [] -%}
+      {%- for v in wls_versions -%}
+        {%- set missing = ['installer_zip', 'jdk_file', 'spb_base', 'spb_target']
+                          | reject('in', v | dict2items | selectattr('value', 'truthy')
+                          | map(attribute='key') | list) | list -%}
+        {%- if (wls_only | length == 0 or wls_only == v.version) and missing | length == 0 -%}
+          {%- set _ = out.append(v | combine({'index': loop.index0})) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ out }}
+    wls_left_out: >-
+      {%- set out = [] -%}
+      {%- for v in wls_versions -%}
+        {%- set missing = ['installer_zip', 'jdk_file', 'spb_base', 'spb_target']
+                          | reject('in', v | dict2items | selectattr('value', 'truthy')
+                          | map(attribute='key') | list) | list -%}
+        {%- if (wls_only | length == 0 or wls_only == v.version) and missing | length > 0 -%}
+          {%- set _ = out.append(v.version ~ ': ' ~ missing | join(', ') ~ ' not named') -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Report the versions left out
+  ansible.builtin.debug:
+    msg:
+      - "Left out - upload to orarepo and name the file in group_vars/cpu_wls_hosts.yml:"
+      - "{{ wls_left_out }}"
+  when: wls_left_out | length > 0
+
+- name: Assert at least one version is selected
+  ansible.builtin.assert:
+    that:
+      - wls_selected | length > 0
+    fail_msg: >-
+      No WebLogic version is complete{{ (' for wls_only=' ~ wls_only) if wls_only | length > 0 else '' }}.
+      Missing: {{ wls_left_out | join('; ') }}
+    success_msg: "Selected: {{ wls_selected | map(attribute='version') | join(', ') }}"

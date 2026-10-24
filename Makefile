@@ -55,8 +55,10 @@ CPU_ENV_FILE  := $(CPU_ENV_DIR)/.env
 CPU_PLAN_FILE := tfplan
 CPU_INVENTORY := inventories/generated/$(CPU_ENV)/hosts.yml
 CPU_TUNNEL_PORT_cpu-patch-test := 2222
-CPU_TUNNEL_PORT_cpu-patch-26ai := 2223
-CPU_PLAYBOOK  := playbooks/lab-cpu-patch.yml
+CPU_TUNNEL_PORT_cpu-patch-26ai := 2224
+CPU_TUNNEL_PORT_cpu-patch-wls := 2225
+CPU_PLAYBOOK_cpu-patch-wls := playbooks/lab-wls-patch.yml
+CPU_PLAYBOOK  := $(or $(CPU_PLAYBOOK_$(CPU_ENV)),playbooks/lab-cpu-patch.yml)
 
 # 1Password references. Read inside recipe bodies only - never at parse time,
 # because a $(shell op read ...) would run before any 'op signin'.
@@ -371,11 +373,12 @@ mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run
 sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password 2>/dev/null || echo '')"; \
 ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password 2>/dev/null || echo '')"; \
 patch_url="$$(cat "$(PATCH_PAR_FILE)" 2>/dev/null || true)"; \
+repo_url="$$(cat "$(REPO_PAR_FILE)" 2>/dev/null || true)"; \
 if [[ -n "$$patch_url" ]]; then echo "ℹ️  Target RU from the bucket PAR in $(PATCH_PAR_FILE) - not from MOS (make cpu-lab-par-revoke to undo)"; fi; \
 vars_file="$$(mktemp "$${TMPDIR:-/tmp}/cpu-lab-vars.XXXXXX")"; \
 trap 'rm -f "$$vars_file"' EXIT INT TERM; \
-MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" PATCH_URL="$$patch_url" \
-  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"], "db19_patch_url": os.environ["PATCH_URL"]}, open(sys.argv[1], "w"))' "$$vars_file"
+MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" PATCH_URL="$$patch_url" REPO_URL="$$repo_url" \
+  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"], "db19_patch_url": os.environ["PATCH_URL"], "lab_repo_url": os.environ["REPO_URL"]}, open(sys.argv[1], "w"))' "$$vars_file"
 endef
 
 .PHONY: cpu-lab-install
@@ -533,7 +536,7 @@ cpu-lab-par-list: guard-oci ## List existing PARs on the base image bucket
 cpu-lab-par-revoke: guard-oci ## Revoke the base-image and patch PARs on the bucket and clear their local copies
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  profile="$${profile:-DEFAULT}"; \
-	  for name in $(PAR_NAME) $(PATCH_PAR_NAME); do \
+	  for name in $(PAR_NAME) $(PATCH_PAR_NAME) $(REPO_PAR_NAME); do \
 	    ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
 	        --query "data[?name=='$$name'].id" --raw-output | tr -d '[]", ' | grep . || true)"; \
 	    if [[ -z "$$ids" ]]; then echo "No PAR named $$name found."; continue; fi; \
@@ -543,8 +546,8 @@ cpu-lab-par-revoke: guard-oci ## Revoke the base-image and patch PARs on the buc
 	    done; \
 	  done; \
 	  $(drop_base_image_url); \
-	  rm -f "$(PATCH_PAR_FILE)"
-	@echo "✅ PAR(s) revoked; $(CPU_ENV_FILE) entry and $(PATCH_PAR_FILE) removed"
+	  rm -f "$(PATCH_PAR_FILE)" "$(REPO_PAR_FILE)"
+	@echo "✅ PAR(s) revoked; $(CPU_ENV_FILE) entry, $(PATCH_PAR_FILE) and $(REPO_PAR_FILE) removed"
 
 # Fallback patch source for the target RU (MOS on the host stays the default).
 # cpu-patch-tests downloads the patch set and uploads it below PATCH_PREFIX in
@@ -582,6 +585,42 @@ cpu-lab-patch-par: guard-oci ## Mint a read PAR on PATCH_PREFIX in the orarepo b
 	  ( umask 077; printf '%s\n' "$$uri" > "$(PATCH_PAR_FILE)" ); \
 	  echo "  written : $(PATCH_PAR_FILE) (git-ignored, 0600; token not echoed)"
 	@echo "✅ Patch PAR ready - cpu-lab-patch now stages the target RU from it (zero objects fails the run)"
+
+# ------------------------------------------------------------------------------
+# Software repository PAR - installers and patches by name from the flat bucket
+# ------------------------------------------------------------------------------
+# orarepo has no folders, so a prefix PAR does not fit. This one reads any object
+# of the bucket by name but cannot LIST it: whoever holds the URL still has to
+# know the file names, and the 590-odd objects stay out of sight. The roles name
+# every file they fetch (wls_versions in the WLS inventory group_vars).
+REPO_PAR_NAME := cpu-lab-repo
+REPO_PAR_FILE := $(CPU_ENV_DIR)/.repo-par
+
+.PHONY: cpu-lab-repo-par
+cpu-lab-repo-par: guard-oci ## Mint a read-by-name PAR on the whole orarepo bucket, no listing (PAR_DAYS=7, REPO_CHECK=<file> to probe)
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  [[ -n "$$profile" ]] || { echo "❌ No TF_VAR_oci_config_profile in $(CPU_ENV_FILE) - refusing to fall back to DEFAULT (wrong tenancy)"; exit 1; }; \
+	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
+	  echo -e "$(COLOR_BOLD)Minting a read-by-name PAR on the software repository$(COLOR_RESET)"; \
+	  echo "  profile : $$profile"; \
+	  echo "  bucket  : $(PAR_BUCKET)"; \
+	  echo "  access  : AnyObjectRead, no listing"; \
+	  echo "  expires : $$expires  ($(PAR_DAYS) days)"; \
+	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
+	      --bucket-name "$(PAR_BUCKET)" \
+	      --name "$(REPO_PAR_NAME)" \
+	      --access-type AnyObjectRead \
+	      --time-expires "$$expires" \
+	      --query 'data."full-path"' --raw-output)"; \
+	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
+	  if [[ -n "$(REPO_CHECK)" ]]; then \
+	    curl -fsSI --max-time 30 "$${uri}$(REPO_CHECK)" >/dev/null \
+	      && echo "  probe   : $(REPO_CHECK) readable" \
+	      || { echo "❌ $(REPO_CHECK) not readable through the PAR"; exit 1; }; \
+	  fi; \
+	  ( umask 077; printf '%s\n' "$$uri" > "$(REPO_PAR_FILE)" ); \
+	  echo "  written : $(REPO_PAR_FILE) (git-ignored, 0600; token not echoed)"
+	@echo "✅ Repository PAR ready - the WLS role fetches every file it names through it"
 
 # ==============================================================================
 # Gold images

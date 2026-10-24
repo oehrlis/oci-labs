@@ -1,0 +1,79 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/report.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Write the evidence of one phase of one version as JSON and
+#              Markdown and fetch both to ansible/reports/<host>/.
+# Notes......: Durations come from the async tasks themselves (delta) and from
+#              the downtime/rollback timestamps - nothing is estimated.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the recorded patch levels
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ wv_stage }}/lspatches-{{ item }}.txt"
+  loop: [base, patched, rolledback, current]
+  register: wv_lsp_files
+  failed_when: false
+
+- name: Assemble the evidence
+  ansible.builtin.set_fact:
+    wv_evidence:
+      product: weblogic
+      version: "{{ wls.version }}"
+      phase: "{{ wv_phase }}"
+      cycle: "{{ wls_cycle }}"
+      host: "{{ inventory_hostname }}"
+      os: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+      jdk: "{{ wv_java_version.stderr_lines[0] | default('see the host') }}"
+      home: "{{ wv_home }}"
+      spb_base: "{{ wls.spb_base }}"
+      spb_target: "{{ wls.spb_target }}"
+      durations:
+        copy_base: "{{ wv_t_copy_base.delta | default('') }}"
+        paste_clone: "{{ wv_t_paste_clone.delta | default('') }}"
+        spb_apply: "{{ wv_spb_apply.delta | default('') }}"
+        copy_patched: "{{ wv_t_copy_patched.delta | default('') }}"
+        paste_patched: "{{ wv_t_paste_patched.delta | default('') }}"
+        downtime_s: "{{ (wv_down_end | int - wv_down_start | int) if wv_down_end is defined else '' }}"
+        rollback_s: "{{ (wv_rb_end | int - wv_rb_start | int) if wv_rb_end is defined else '' }}"
+      smoke: "{{ wv_smoke | default({}) }}"
+      spb_precheck_rc: "{{ wv_spb_precheck.rc | default('') }}"
+      patches: >-
+        {{ dict(wv_lsp_files.results | selectattr('content', 'defined')
+                | map(attribute='item')
+                | zip(wv_lsp_files.results | selectattr('content', 'defined')
+                      | map(attribute='content') | map('b64decode') | map('split', '\n')
+                      | map('select') | map('list'))) }}
+
+- name: Write the evidence on the host
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ wv_stage }}/{{ wv_report_stem }}-{{ wv_phase }}.{{ item.ext }}"
+    content: "{{ item.body }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0644"
+  loop:
+    - { ext: json, body: "{{ wv_evidence | to_nice_json }}\n" }
+    - { ext: md, body: "{{ lookup('ansible.builtin.template', 'report.md.j2') }}" }
+  loop_control:
+    label: "{{ item.ext }}"
+
+- name: Fetch the evidence
+  become: true
+  ansible.builtin.fetch:
+    src: "{{ wv_stage }}/{{ wv_report_stem }}-{{ wv_phase }}.{{ item }}"
+    dest: "{{ wls_report_dir }}/"
+    flat: true
+  loop: [json, md]
+
+- name: Report where the evidence landed
+  ansible.builtin.debug:
+    msg: "{{ wls_report_dir }}/{{ wv_report_stem }}-{{ wv_phase }}.json and .md"

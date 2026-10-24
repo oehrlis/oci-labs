@@ -1,0 +1,62 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: group_vars/cpu_wls_hosts.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: The WebLogic versions of the CPU lab and the files each one needs
+#              from the orarepo bucket.
+# Notes......: orarepo is flat - every entry is an object name in the bucket
+#              root, exactly as uploaded (eDelivery V-numbers are fine). The host
+#              fetches them through the read-by-name PAR from
+#              "make cpu-lab-repo-par CPU_ENV=cpu-patch-wls". An empty name means
+#              "not uploaded yet": the role names the missing file and skips
+#              that version instead of failing the others.
+#
+#              installer_zip  eDelivery zip that contains installer_jar
+#              installer_jar  the jar inside, relative to the zip root
+#              jdk_file       JDK tar.gz (linux-x64), unpacked per major version
+#              spb_base       Stack Patch Bundle of the previous quarter (baseline)
+#              spb_target     Stack Patch Bundle under test (2026-10)
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Order is the test order (plan-cpu-2026-10-tests.md, package C).
+wls_versions:
+  - version: "14.1.2.0.0"
+    jdk_major: "17"
+    installer_zip: ""                 # eDelivery, WLS 14.1.2 generic
+    installer_jar: "fmw_14.1.2.0.0_wls.jar"
+    jdk_file: ""                      # JDK 17 or 21, linux-x64 tar.gz
+    spb_base: ""                      # SPB 2026-07 for 14.1.2
+    spb_target: ""                    # SPB 2026-10, patch 40125898
+
+  - version: "15.1.1.0.0"
+    jdk_major: "21"
+    installer_zip: ""                 # eDelivery, WLS 15.1.1 generic
+    installer_jar: "fmw_15.1.1.0.0_wls.jar"
+    jdk_file: ""                      # JDK 21, linux-x64 tar.gz
+    spb_base: ""                      # SPB 2026-07 for 15.1.1
+    spb_target: ""                    # SPB 2026-10, patch 40128310
+
+  - version: "12.2.1.4.0"
+    jdk_major: "8"
+    # Already in orarepo. The Infrastructure installer, used with the plain WLS
+    # domain template - no RCU (Stefan, 2026-10-23).
+    installer_zip: "fmw_12.2.1.4.0_infrastructure_Disk1_1of1.zip"
+    installer_jar: "fmw_12.2.1.4.0_infrastructure.jar"
+    jdk_file: ""                      # JDK 8, linux-x64 tar.gz
+    spb_base: ""                      # SPB 2026-07 for 12.2.1.4
+    spb_target: ""                    # SPB 2026-10, patch 40129641
+
+  - version: "14.1.1.0.0"
+    jdk_major: "11"
+    # Already in orarepo.
+    installer_zip: "fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip"
+    installer_jar: "fmw_14.1.1.0.0_wls_lite_generic.jar"
+    jdk_file: ""                      # JDK 11 (or 8), linux-x64 tar.gz
+    spb_base: ""                      # SPB 2026-07 for 14.1.1
+    spb_target: ""                    # SPB 2026-10, patch 40129124

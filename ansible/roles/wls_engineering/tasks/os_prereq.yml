@@ -1,0 +1,61 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/os_prereq.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: OS user, packages and directories for WebLogic on OL8/OL9.
+# Notes......: No preinstall RPM for WebLogic - user and group are created here
+#              with the same IDs the database preinstall RPM uses, so a later
+#              database on the same host would not clash.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the host runs Oracle Linux 8 or 9
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+      - ansible_facts['distribution_major_version'] in ['8', '9']
+    fail_msg: >-
+      wls_engineering targets Oracle Linux 8/9, detected
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+    success_msg: "Oracle Linux {{ ansible_facts['distribution_version'] }} detected."
+
+- name: Install the packages WebLogic requires
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ wls_os_packages }}"
+    state: present
+
+- name: Create the install group
+  become: true
+  ansible.builtin.group:
+    name: "{{ oracle_os_group_install }}"
+    gid: "{{ oracle_os_gid }}"
+
+- name: Create the oracle user
+  become: true
+  ansible.builtin.user:
+    name: "{{ oracle_os_user }}"
+    uid: "{{ oracle_os_uid }}"
+    group: "{{ oracle_os_group_install }}"
+    shell: /bin/bash
+
+- name: Create the WebLogic directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0750"
+  loop:
+    - "{{ oracle_base }}"
+    - "{{ wls_product_root }}"
+    - "{{ wls_domain_root }}"
+    - "{{ wls_stage_root }}"
+    - "{{ wls_inventory_root }}"
+    - "{{ wls_etc_dir }}"

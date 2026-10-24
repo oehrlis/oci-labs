@@ -41,12 +41,21 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **cpu-patch-wls** (`terraform/envs/cpu-patch-wls`): one WebLogic host on the shared core (OL9,
+  4 OCPU / 32 GB), inventory group `cpu_wls_hosts`
+- Role `wls_engineering` and playbook `lab-wls-patch.yml`: WebLogic 12.2.1.4 / 14.1.1 / 14.1.2 /
+  15.1.1 side by side - JDK, Oracle home, baseline SPB via SPBAT, domain (AdminServer + ms1,
+  administration port, SSL), REST smoke test with a static WAR, and an out-of-place SPB swap at
+  the same path (copyBinary, SPBAT on a clone, pasteBinary) with rollback. Not yet run on a host
+- `make cpu-lab-repo-par`: read-by-name PAR on the flat `orarepo` bucket, no listing; passed to
+  Ansible as `lab_repo_url` in the 0600 vars file
 - **cpu-patch-26ai** (`terraform/envs/cpu-patch-26ai`): 26ai host for the CPU tests on the shared
   core - VCN, DB subnet and Bastion are read from `envs/core` via `terraform_remote_state`, the stack
   creates only host, NSG, keys and inventory (OL9, 8 OCPU / 32 GB, no public IP). First stack of the
   layout "one CPU network, one stack per product/release"
 - `make cpu-lab-* CPU_ENV=<stack>`: every CPU lab target works on the chosen stack (default
-  `cpu-patch-test`), with its own Bastion tunnel port (2222 / 2223)
+  `cpu-patch-test`), with its own Bastion tunnel port (2222 / 2224 / 2225 - 2223 is the
+  datasafe-demo tunnel)
 - **Patch PAR fallback for the target RU**: `make cpu-lab-patch-par PATCH_PREFIX=...`
   mints a read PAR (AnyObjectRead + ListObjects) on a prefix of the `orarepo`
   bucket, where `cpu-patch-tests` uploads its downloaded patch set. With it,

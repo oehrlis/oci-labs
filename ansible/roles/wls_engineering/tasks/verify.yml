@@ -1,0 +1,41 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/verify.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Read-only look at one version: servers, smoke, patch level.
+# Notes......: Starts nothing - a version whose servers are down is reported as
+#              such. The smoke test redeploys nothing either when the
+#              application is already there.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Derive the layout
+  ansible.builtin.include_tasks: vars.yml
+
+- name: Write the REST credentials for curl
+  become: true
+  ansible.builtin.template:
+    src: curl.cfg.j2
+    dest: "{{ wv_curl_cfg }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0600"
+  no_log: true
+
+- name: Smoke test
+  ansible.builtin.include_tasks: smoke.yml
+
+- name: Record the current patch level
+  ansible.builtin.include_tasks: snapshot.yml
+  vars:
+    wv_snap: current
+
+- name: Write the report
+  ansible.builtin.include_tasks: report.yml
+  vars:
+    wv_phase: verify
