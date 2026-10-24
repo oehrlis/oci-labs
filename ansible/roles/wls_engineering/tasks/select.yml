@@ -27,6 +27,18 @@
     success_msg: "Credentials and software repository are set."
   no_log: true
 
+# cpu-patch-tests' lab profile (make lab-profile, passed by make lab-run as
+# -e @file) names the SPB files per version; installer and JDK stay here.
+- name: Take the SPB names from the lab profile
+  ansible.builtin.set_fact:
+    wls_versions: >-
+      {%- set out = [] -%}
+      {%- for v in wls_versions -%}
+        {%- set _ = out.append(v | combine((wls_spb | default({})).get(v.version, {}))) -%}
+      {%- endfor -%}
+      {{ out }}
+  when: wls_spb is defined
+
 - name: Work out which versions are complete
   ansible.builtin.set_fact:
     wls_selected: >-

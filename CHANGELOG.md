@@ -47,6 +47,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Lab profiles from cpu-patch-tests (`make lab-profile`, passed by `make lab-run` as `-e @file`):
+  `wls_engineering` takes the SPB file names per version from `wls_spb`; `db19_engineering`
+  asserts that the target home carries the target RU, so a new profile against old tfvars stops
+  instead of patching into the previous quarter's home
 - **cpu-patch-wls** (`terraform/envs/cpu-patch-wls`): one WebLogic host on the shared core (OL9,
   4 OCPU / 32 GB), inventory group `cpu_wls_hosts`
 - Role `wls_engineering` and playbook `lab-wls-patch.yml`: WebLogic 12.2.1.4 / 14.1.1 / 14.1.2 /

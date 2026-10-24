@@ -39,6 +39,19 @@
       {{ db_target_ru }}. Releases are 19 and 26; 26ai RU strings start with 23.
     success_msg: "Release {{ db_release }}, RUs {{ db_base_ru }} -> {{ db_target_ru }}."
 
+# The RUs may come from cpu-patch-tests' lab profile (-e @file) while the homes
+# still come from the Terraform inventory. A new profile against old tfvars would
+# patch into the previous quarter's home without a word.
+- name: Assert the target home fits the target Release Update
+  ansible.builtin.assert:
+    that:
+      - (db_target_ru | string) in oracle_home_target
+    fail_msg: >-
+      oracle_home_target {{ oracle_home_target }} does not carry the target RU
+      {{ db_target_ru }}. Update db_target_ru / db_oracle_home_target in the
+      Terraform tfvars and apply (inventory only), or pass -e oracle_home_target=...
+    success_msg: "Target home {{ oracle_home_target }} fits RU {{ db_target_ru }}."
+
 - name: Assert the base and target Release Updates differ
   ansible.builtin.assert:
     that:
