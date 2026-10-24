@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/create_db.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.2.0
+# Date.......: 2026.10.24
+# Version....: v0.3.0
 # Purpose....: Create the lab database and its Oracle Net configuration.
 # Notes......: A default seeded-template database is enough for a CPU test; the
 #              database NAME is a per-lab parameter (oracle_sid). Created as a
@@ -158,6 +158,11 @@
 # NOT point oratab back at the base home - that would make the autostart unit
 # open the database from the old ORACLE_HOME and break verify. patch.yml owns
 # the oratab entry from the move onwards.
+- name: Open the PDBs and save the state
+  ansible.builtin.include_tasks: pdbs_open.yml
+  vars:
+    db19_pdbs_home: "{{ oracle_home_base }}"
+
 - name: Ensure the database is registered in oratab for autostart
   become: true
   ansible.builtin.lineinfile:

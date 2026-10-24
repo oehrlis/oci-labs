@@ -156,6 +156,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `db19_engineering`: every PDB is opened and its state saved after dbca and again before a patch
+  (`tasks/pdbs_open.yml`). dbca saves no state, so after an instance restart PDB1 sat MOUNTED and
+  AutoUpgrade failed in PREFIXUPS / PRE_FIXED_OBJECTS with ORA-20011 / ORA-01219 (26ai, 2026-10-24,
+  before the downtime - the database stayed untouched)
 - **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
   `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
   (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed

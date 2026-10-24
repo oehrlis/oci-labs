@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/patch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.2.0
+# Date.......: 2026.10.24
+# Version....: v0.3.0
 # Purpose....: Quarterly CPU test - patch out-of-place from the base RU to the
 #              target RU using AutoUpgrade.
 # Notes......: Three steps, all AutoUpgrade:
@@ -42,6 +42,13 @@
 # patch history are only meaningful as a delta: an object that was already
 # invalid is not a patch defect, and "zero invalid objects" is not a realistic
 # pass criterion on a real database.
+
+# A PDB that came up MOUNTED makes AutoUpgrade's PRE_FIXED_OBJECTS fixup fail
+# (ORA-01219) - open everything before the baseline is recorded.
+- name: Open all PDBs before the patch
+  ansible.builtin.include_tasks: pdbs_open.yml
+  vars:
+    db19_pdbs_home: "{{ oracle_home_base }}"
 
 - name: Capture the pre-patch baseline
   ansible.builtin.include_tasks: db_snapshot.yml
