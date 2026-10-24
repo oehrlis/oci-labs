@@ -18,7 +18,7 @@ Lab-Reports liegen nur lokal (git-ignored) unter `oci-labs/ansible/reports/oradb
 | 4 | `ansible/reports/oradb01/cputest-CPU26-23_26_3-to-23_26_4-20261023.md` | Beleg 26ai | 5 min |
 | 5 | `ansible/roles/db19_engineering/defaults/main.yml` - Block `db_release_profiles` | was 19 von 26 unterscheidet, an einer Stelle | 10 min |
 | 6 | `ansible/roles/db19_engineering/tasks/patch.yml` | DB-Ablauf: Baseline, Home, analyze, deploy, Listener, oratab | 15 min |
-| 7 | `ansible/roles/wls_engineering/tasks/patch.yml` | WLS-Swap am selben Pfad - **die kritischste Entscheidung, noch nie gelaufen** | 15 min |
+| 7 | `ansible/roles/wls_engineering/tasks/patch.yml`, `rollback.yml` | WLS in place + `opatch nrollback` (2026-10-24) - **noch nie gelaufen** | 15 min |
 | 8 | `ansible/roles/wls_engineering/tasks/servers.yml`, `spb.yml` | Start/Stop ueber REST, SPBAT | 10 min |
 | 9 | `cpu-patch-tests/patches/test_results_2026-10.csv` (Zeilen db19, db26) | was im Report landet | 5 min |
 | 10 | `oci-labs/CHANGELOG.md` - `[Unreleased]` | alles Geaenderte in einem Blick | 10 min |
@@ -32,7 +32,6 @@ Fragen, die beim Review entschieden werden sollten:
 - **from_version:** 19c-Basis ist `19.32.0.0.261020` (MRP mit 19.33 erschienen), 26ai-Basis
   traegt die MRP-Fixes vom Download-Tag. Akzeptiert, oder Basis-MRP kuenftig pinnen?
 - **PDB$SEED READ WRITE nach dem Deploy** - bei 19c und 26ai reproduziert. warn oder Note?
-- **WLS-Swap** (Punkt 7): Oracle dokumentiert das so nicht. Fuer den Report tragbar?
 - **Public IP am 19c-Host** (`assign_public_ip = true`): die datasafe-demo-Baseline ist
   ohne. Beim naechsten Neubau auf den Core ohne Public IP?
 
