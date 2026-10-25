@@ -14,6 +14,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **oracle_db_native**: open all PDBs and save their state after creation - the dbca PDB had no saved state,
+  stayed MOUNTED after the scheduled restart and its Data Safe target went NEEDS_ATTENTION (ORA-01109)
 - **datasafe-demo**: `tunnel.sh` 0.2.0 restarts ssh while a new Bastion session key propagates - before, ssh
   exited once with "Permission denied (publickey)" and the tunnel failed until rerun (`DSDEMO_TUNNEL_ATTEMPTS`)
 - **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an

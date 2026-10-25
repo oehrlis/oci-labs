@@ -92,3 +92,18 @@
   register: oradb_pdb_create
   changed_when: "'created' in oradb_pdb_create.stdout"
   become: true
+
+# dbca opens its PDB but saves no state - after a reboot it stays MOUNTED and
+# the Data Safe target goes NEEDS_ATTENTION (ORA-01109, 2026-10-25)
+- name: Open all PDBs and save their state - {{ oradb_db.sid }}
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      /usr/local/bin/dsdemo-sql {{ oradb_db.sid }} <<'SQL'
+      whenever sqlerror exit failure
+      alter pluggable database all open;
+      alter pluggable database all save state;
+      SQL
+    executable: /bin/bash
+  changed_when: false
+  become: true
