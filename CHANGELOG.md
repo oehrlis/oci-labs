@@ -163,6 +163,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `db19_engineering`: the evidence after a patch is collected - the include in `main.yml` carried
+  the tags only itself, so `--tags patch` skipped every task inside (`apply: tags`). The 26ai run of
+  2026-10-25 has the evidence of its rollback only; the datapatch logs of its patch are still on
+  the host
 - `db19_engineering`: with a gold image of the target staged, the deploy runs `download=no` too.
   With `download=yes` it asked the Update Advisor to build the gold image again - 5 GB more on
   2026-10-23, and on 2026-10-25 a rejected request (UPD-02008 Invalid Authorization) that failed

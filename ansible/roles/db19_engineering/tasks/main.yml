@@ -133,8 +133,15 @@
     - patch
     - verify
 
+# include_tasks tags only the include itself - "apply" hands the tags to the
+# tasks inside, otherwise --tags patch skips every one of them (2026-10-25).
 - name: Collect and fetch the evidence of the run
-  ansible.builtin.include_tasks: evidence.yml
+  ansible.builtin.include_tasks:
+    file: evidence.yml
+    apply:
+      tags:
+        - patch
+        - verify
   vars:
     db19_evidence_phase: after
   tags:
