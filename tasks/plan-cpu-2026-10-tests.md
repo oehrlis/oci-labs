@@ -164,7 +164,14 @@ Weg - kein Umbau am 19c-Stack, kein Plan auf Host 01:
   Image (40014644), nicht ein vom Update Advisor generiertes mit GI RU 40007731. Stefan klaert mit
   dem AutoUpgrade-PM, wie AutoUpgrade die DB-Variante laedt; parallel pruefen, ob AU die
   Patch-Nummer direkt annimmt (`patch=RU:23.26.4,40014644` bzw. `GOLDIMAGE:`). Bis dahin kein Import
-  der db26-Zeilen. Lauf 2026-10-25 (lab-run) PASSED, Evidence des Rollbacks in
+  der db26-Zeilen.
+  **Probe 2026-10-25 (AU 26.6, download-Modus):** `RU:23.26.4` -> "DATABASE RELEASE UPDATE
+  23.26.4.0.0" = p40007731; `patch=40002013` -> "GI RELEASE UPDATE 23.26.4.0.0" = p40002013;
+  `patch=40014644` abgelehnt ("RU patches are not allowed to be specified individually"). MOS-
+  Metadaten und Home-Inventory sagen also 40007731 = DB RU - die Patch-Doku (und
+  `data/2026-10.yaml`) nennen es umgekehrt. AutoUpgrade hat das DB RU genommen; die Frage an
+  den PM ist jetzt Doku vs. MOS, und wie das veroeffentlichte DB-Gold-Image 40014644 zu nutzen ist
+  (nur `GOLDIMAGE:<datei>` mit der MOS-Datei) Lauf 2026-10-25 (lab-run) PASSED, Evidence des Rollbacks in
   `reports/oradb01/CPU26-23.26.3-to-23.26.4-20261025-0724/`; Manifest 23.26.4 auf dem Host veraltet
   (soft FAIL "missing 39578879") - vor dem naechsten Lauf loeschen
 - [x] 19c importiert 2026-10-25: from `19.32.0.0.261020`, Note Seed READ WRITE + Basis-MRP +
