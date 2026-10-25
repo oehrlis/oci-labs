@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
+# Date.......: 2026.10.25
 # Version....: v0.1.0
 # Purpose....: Entry point for the db19_engineering role.
 # Notes......: Two phases, split by tag.
@@ -129,6 +129,14 @@
 
 - name: Verify the patched database
   ansible.builtin.import_tasks: verify.yml
+  tags:
+    - patch
+    - verify
+
+- name: Collect and fetch the evidence of the run
+  ansible.builtin.include_tasks: evidence.yml
+  vars:
+    db19_evidence_phase: after
   tags:
     - patch
     - verify

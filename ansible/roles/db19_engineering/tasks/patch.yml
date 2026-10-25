@@ -50,6 +50,11 @@
   vars:
     db19_pdbs_home: "{{ oracle_home_base }}"
 
+- name: Start the evidence of this run
+  ansible.builtin.include_tasks: evidence.yml
+  vars:
+    db19_evidence_phase: before
+
 - name: Capture the pre-patch baseline
   ansible.builtin.include_tasks: db_snapshot.yml
   vars:

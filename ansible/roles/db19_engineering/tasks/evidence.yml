@@ -1,0 +1,156 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/evidence.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.24
+# Version....: v0.1.0
+# Purpose....: Collect the evidence of one run for the analysis and fetch it to
+#              ansible/reports/<host>/<run>/ (db19_evidence_phase: before | after).
+# Notes......: before  run marker, opatch lspatches + lsinventory of every home
+#              after   the same again, the AutoUpgrade job logs, the sqlpatch /
+#                      datapatch logs and the alert log since the marker, the
+#                      cputest report and snapshots - then everything is fetched
+#              The report (cputest-*.md) stays the summary; this directory is the
+#              detail behind it, and the only copy once the lab is destroyed.
+#              A run without a before marker (verify on its own) still gets the
+#              patch levels and the report, and says that the logs are not scoped.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Name the evidence directory of this run
+  ansible.builtin.set_fact:
+    db19_evidence_run: >-
+      {{ oracle_sid }}-{{ db_base_ru }}-to-{{ db_target_ru }}-{{ now().strftime('%Y%m%d-%H%M') }}
+  when: db19_evidence_run is not defined
+
+- name: Set the evidence paths
+  ansible.builtin.set_fact:
+    db19_evidence_dir: "{{ db19_stage_dir }}/evidence/{{ db19_evidence_run | trim }}"
+    db19_evidence_homes: >-
+      {{ [oracle_home_base, oracle_home_target] | unique | list }}
+
+- name: Create the evidence directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_evidence_dir }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+
+- name: Set the run marker
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: "date -u +%Y-%m-%dT%H:%M:%S > {{ db19_evidence_dir }}/.run-start"
+    executable: /bin/bash
+  when: db19_evidence_phase == 'before'
+  changed_when: true
+
+- name: Record the patch level of every home ({{ db19_evidence_phase }})
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      h="{{ item }}"; tag="$(basename "$(dirname "$h")")"
+      [[ -x "$h/OPatch/opatch" ]] || { echo "absent: $h"; exit 0; }
+      out="{{ db19_evidence_dir }}/{{ db19_evidence_phase }}-$tag"
+      "$h/OPatch/opatch" lspatches -oh "$h" > "$out-lspatches.txt" 2>&1 || true
+      "$h/OPatch/opatch" lsinventory -oh "$h" > "$out-lsinventory.txt" 2>&1 || true
+      echo "recorded: $h"
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ item }}"
+  loop: "{{ db19_evidence_homes }}"
+  register: db19_evidence_lsp
+  changed_when: false
+
+- name: Collect the logs of the run
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      d="{{ db19_evidence_dir }}"
+      if [[ -f "$d/.run-start" ]]; then
+        since="$(cat "$d/.run-start")"
+        # AutoUpgrade: the whole job directory of this run's log dir
+        if [[ -d "{{ db19_autoupgrade_log_dir }}" ]]; then
+          tar -czf "$d/autoupgrade-logs.tgz" -C "$(dirname "{{ db19_autoupgrade_log_dir }}")" \
+            "$(basename "{{ db19_autoupgrade_log_dir }}")" 2>/dev/null || true
+        fi
+        # datapatch / sqlpatch: everything written since the marker
+        sq="{{ oracle_base }}/cfgtoollogs/sqlpatch"
+        if [[ -d "$sq" ]]; then
+          find "$sq" -mindepth 1 -maxdepth 1 -newer "$d/.run-start" -print0 \
+            | tar -czf "$d/sqlpatch-logs.tgz" --null -T - 2>/dev/null || true
+        fi
+        # alert log from the marker on (timestamps are ISO in 19c and 26ai)
+        alert="$(ls {{ oracle_base }}/diag/rdbms/*/{{ oracle_sid }}/trace/alert_{{ oracle_sid }}.log 2>/dev/null | head -1)"
+        if [[ -n "$alert" ]]; then
+          awk -v s="$since" 'substr($1,1,19) >= s {p=1} p' "$alert" > "$d/alert-excerpt.log" || true
+        fi
+        echo "logs since $since"
+      else
+        echo "no run marker - patch levels and report only, logs not scoped to a run" \
+          > "$d/NO-RUN-MARKER.txt"
+        echo "no run marker"
+      fi
+      cp -f {{ db19_stage_dir }}/cputest-*.md {{ db19_stage_dir }}/cputest-*.json \
+        {{ db19_stage_dir }}/snapshot-*.json {{ db19_stage_dir }}/patchset-*.txt "$d/" 2>/dev/null || true
+      chown -R {{ oracle_os_user }}:{{ oracle_os_group_install }} "$d"
+    executable: /bin/bash
+  when: db19_evidence_phase == 'after'
+  register: db19_evidence_logs
+  changed_when: true
+
+- name: Write the index of the evidence
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      d="{{ db19_evidence_dir }}"
+      {
+        echo "# Evidence {{ db19_evidence_run | trim }}"
+        echo
+        echo "- Host: {{ inventory_hostname }}, database {{ oracle_sid }}"
+        echo "- Run start (UTC): $(cat "$d/.run-start" 2>/dev/null || echo 'not recorded')"
+        echo "- Homes: {{ db19_evidence_homes | join(', ') }}"
+        echo
+        echo "## Files"
+        echo
+        ls -1 "$d" | grep -v '^index.md$' | sed 's/^/- /'
+      } > "$d/index.md"
+    executable: /bin/bash
+  when: db19_evidence_phase == 'after'
+  changed_when: true
+
+- name: Find the evidence files
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_evidence_dir }}"
+    hidden: false
+  register: db19_evidence_files
+  when: db19_evidence_phase == 'after'
+
+- name: Fetch the evidence to the control node
+  become: true
+  ansible.builtin.fetch:
+    src: "{{ item.path }}"
+    dest: "{{ db19_report_dir }}/{{ inventory_hostname }}/{{ db19_evidence_run | trim }}/"
+    flat: true
+  loop: "{{ db19_evidence_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: db19_evidence_phase == 'after'
+
+- name: Report where the evidence landed
+  ansible.builtin.debug:
+    msg: >-
+      {{ db19_evidence_files.files | default([]) | length }} file(s) in
+      {{ db19_report_dir }}/{{ inventory_hostname }}/{{ db19_evidence_run | trim }}/
+  when: db19_evidence_phase == 'after'

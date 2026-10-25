@@ -366,10 +366,18 @@ cpu-lab-show: guard-terraform ## Show the saved tfplan in human-readable form
 # The values reach python3 through the environment rather than argv for the same
 # reason; /proc/<pid>/environ and "ps -E" are owner-restricted, argv is not.
 # The trap removes the file on success, error and Ctrl-C alike.
+# LAB_MOS_USER / LAB_MOS_PASS in the environment skip the op read: cpu-patch-tests'
+# lab-run reads 1Password once at its start, so a long run needs nobody at the
+# keyboard later (an unanswered prompt times out and fails the step).
 define cpu_lab_ansible_secrets
 umask 077; \
-mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
-mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+if [[ -n "$${LAB_MOS_USER:-}" && -n "$${LAB_MOS_PASS:-}" ]]; then \
+  mos_user="$$LAB_MOS_USER"; mos_pass="$$LAB_MOS_PASS"; \
+else \
+  echo "🔐 1Password: confirm the prompt now (MOS credentials)"; \
+  mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+  mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+fi; \
 sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password 2>/dev/null || echo '')"; \
 ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password 2>/dev/null || echo '')"; \
 patch_url="$$(cat "$(PATCH_PAR_FILE)" 2>/dev/null || true)"; \

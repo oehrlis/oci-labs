@@ -47,6 +47,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `db19_engineering` evidence per run (`tasks/evidence.yml`): before the patch / rollback a run
+  marker plus `opatch lspatches` and `lsinventory` of every home; after verify / rollback the same
+  again, the AutoUpgrade job logs, the sqlpatch / datapatch logs and the alert log since the marker,
+  report and snapshots - fetched to `ansible/reports/<host>/<SID>-<base>-to-<target>-<time>/` with
+  an `index.md`. Not yet run on a host
+- `make` secrets helper takes `LAB_MOS_USER` / `LAB_MOS_PASS` from the environment when set - the
+  cpu-patch-tests `lab-run` reads 1Password once at its start, so a run needs nobody later
 - Lab profiles from cpu-patch-tests (`make lab-profile`, passed by `make lab-run` as `-e @file`):
   `wls_engineering` takes the SPB file names per version from `wls_spb`; `db19_engineering`
   asserts that the target home carries the target RU, so a new profile against old tfvars stops

@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/rollback.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.21
+# Date.......: 2026.10.25
 # Version....: v0.1.0
 # Purpose....: Roll the lab database back to its pre-patch state.
 # Notes......: Deliberately NOT part of the standard quarterly run (decided
@@ -31,6 +31,11 @@
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
+
+- name: Start the evidence of the rollback
+  ansible.builtin.include_tasks: evidence.yml
+  vars:
+    db19_evidence_phase: before
 
 - name: Find the guaranteed restore point
   become: true
@@ -170,3 +175,8 @@
   ansible.builtin.command: "grep -E '^{{ oracle_sid }}:.*:Y$' /etc/oratab"
   register: db19_rollback_oratab
   changed_when: false
+
+- name: Collect and fetch the evidence of the rollback
+  ansible.builtin.include_tasks: evidence.yml
+  vars:
+    db19_evidence_phase: after
