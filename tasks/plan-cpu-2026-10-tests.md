@@ -171,7 +171,12 @@ Weg - kein Umbau am 19c-Stack, kein Plan auf Host 01:
   Metadaten und Home-Inventory sagen also 40007731 = DB RU - die Patch-Doku (und
   `data/2026-10.yaml`) nennen es umgekehrt. AutoUpgrade hat das DB RU genommen; die Frage an
   den PM ist jetzt Doku vs. MOS, und wie das veroeffentlichte DB-Gold-Image 40014644 zu nutzen ist
-  (nur `GOLDIMAGE:<datei>` mit der MOS-Datei) Lauf 2026-10-25 (lab-run) PASSED, Evidence des Rollbacks in
+  (nur `GOLDIMAGE:<datei>` mit der MOS-Datei)
+  Paket fuer den PM (2026-10-25, lokal, git-ignored):
+  `ansible/reports/oradb01/au-pm-20261025/au-pm-bundle.tgz` - AU-Version, alle Lab-Configs, die drei
+  Proben mit Output und Logs, AU-Support-Zips (`-zip`) zu download-gold / create-home / deploy 23.26.4,
+  `lspatches` + `lsinventory` des Ziel-Homes, `patches_info.json`. Keine Passwoerter gefunden; enthaelt
+  den MOS-Usernamen - vor dem Versand durchsehen Lauf 2026-10-25 (lab-run) PASSED, Evidence des Rollbacks in
   `reports/oradb01/CPU26-23.26.3-to-23.26.4-20261025-0724/`; Manifest 23.26.4 auf dem Host veraltet
   (soft FAIL "missing 39578879") - vor dem naechsten Lauf loeschen
 - [x] 19c importiert 2026-10-25: from `19.32.0.0.261020`, Note Seed READ WRITE + Basis-MRP +
