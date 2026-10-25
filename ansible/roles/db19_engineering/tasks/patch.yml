@@ -115,9 +115,13 @@
     patterns: "db_goldimage_{{ db_target_ru | replace('.', '_') }}*.zip"
   register: db19_deploy_gold_found
 
+# download=no as well: with download=yes the deploy asked the Update Advisor to
+# build the gold image again - 5 GB more on 2026-10-23, and on 2026-10-25 a
+# rejected request (UPD-02008 Invalid Authorization) that failed the analyze.
 - name: Deploy against the gold image when the target home came from one
   ansible.builtin.set_fact:
     db19_deploy_gold_image: "YES"
+    db19_deploy_download: "no"
   when: db19_deploy_gold_found.files | length > 0
 
 - name: Render the AutoUpgrade deploy config

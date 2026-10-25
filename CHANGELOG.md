@@ -163,6 +163,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `db19_engineering`: with a gold image of the target staged, the deploy runs `download=no` too.
+  With `download=yes` it asked the Update Advisor to build the gold image again - 5 GB more on
+  2026-10-23, and on 2026-10-25 a rejected request (UPD-02008 Invalid Authorization) that failed
+  the analyze
 - `db19_engineering`: every PDB is opened and its state saved after dbca and again before a patch
   (`tasks/pdbs_open.yml`). dbca saves no state, so after an instance restart PDB1 sat MOUNTED and
   AutoUpgrade failed in PREFIXUPS / PRE_FIXED_OBJECTS with ORA-20011 / ORA-01219 (26ai, 2026-10-24,
