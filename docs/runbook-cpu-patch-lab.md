@@ -1,40 +1,42 @@
 # Runbook: cpu-patch-test - Oracle CPU Patch Test Lab
 
-Throw-away Oracle Database 19c lab on OCI for quarterly **Critical Patch Update
-(CPU)** testing. Terraform builds the network and the Oracle Linux 8 hosts,
-Ansible installs Oracle at a base Release Update, and AutoUpgrade patches
-out-of-place to the target RU.
+Throw-away labs on OCI for quarterly **Critical Patch Update (CPU)** testing -
+Oracle Database 19c and 26ai (AutoUpgrade out-of-place) and WebLogic (Stack Patch
+Bundle in place). Terraform builds the hosts on a shared core, Ansible installs the
+baseline and runs the patch, verify and rollback.
 
 This lab is the **infrastructure layer**. Reporting stays in
 [`cpu-patch-tests`](https://github.com/oehrlis/cpu-patch-tests), which is not
 modified from here.
 
-- Stack code: `cpupt` - resources are named `chzh-l-cpupt-01`
+- Stack codes: `cpupt` (19c), `cpu26` (26ai), `cpuwl` (WebLogic) - resources are named `chzh-l-<code>-01`
 - Filesystem roots: `/u00` binaries, `/u01` data, `/u02` archive
 - Tenancy: `<namespace>`, OCI profile `<oci_profile>`, compartment `<compartment_name>`
-- OS: Oracle Linux 8 - OL9 cannot run the 19.3.0 base release
+- OS: Oracle Linux 8 for 19c (19.3.0 base image), Oracle Linux 9 for 26ai and WebLogic
 - Lifecycle: build, install, patch, verify, destroy
 
 ## Architecture
 
 ```text
-Workstation (macOS)                        OCI - compartment <compartment_name>
-+---------------------------+              +-----------------------------------+
-| terraform                 |  API         | VCN 10.29.0.0/16                  |
-|   envs/cpu-patch-test     |------------->|   public  10.29.10.0/24           |
-|                           |              |   private 10.29.20.0/24           |
-| ansible-playbook          |  SSH 22      |   db      10.29.30.0/24           |
-|   lab-cpu-patch.yml       |------------->|                                   |
-|                           |              |  ci-chzh-l-cpupt-01-db-01         |
-| op read (1Password)       |              |    OL8, E4.Flex 2 OCPU / 16 GB    |
-|   MOS credentials         |              |    200 GB boot volume             |
-+---------------------------+              |    NSG: SSH from your IP only     |
-                                           +-----------------------------------+
-                                                        |
-                                                        | AutoUpgrade
-                                                        v
-                                              updates.oracle.com (MOS)
+Workstation (macOS)                       OCI - compartment <compartment_name>
++--------------------------+              +--------------------------------------------+
+| cpu-patch-tests          |              | envs/core: VCN 10.29.0.0/16, DB subnet,    |
+|   lab-profile, lab-run,  |              |   NAT, Bastion, bucket orarepo             |
+|   import-lab             |              |   +-- cpu-patch-26ai  26ai host, OL9        |
+|        | make -C         |              |   +-- cpu-patch-wls   WebLogic host, OL9    |
+| oci-labs                 |  API         |                                            |
+|   terraform envs/...     |------------->| envs/cpu-patch-test: 19c host, OL8, own    |
+|   ansible-playbook       |  Bastion SSH |   VCN + Bastion (moves to the core with    |
+|     lab-cpu-patch.yml    |------------->|   the next rebuild)                        |
+|     lab-wls-patch.yml    |              +--------------------------------------------+
+| op read (1Password)      |                        | AutoUpgrade        | PAR
++--------------------------+                        v                    v
+                                          updates.oracle.com (MOS)   orarepo (WLS media)
 ```
+
+What is tested and why - the cycle, the lab profiles, the evidence and the import into the
+report - is documented in `cpu-patch-tests/docs/lab-integration.md`. This runbook covers the
+lab: stacks, roles, make targets.
 
 Ansible runs **from the workstation** over SSH. Cloud-init only does the minimum
 needed for Ansible to take over: hostname, `python3`, `git`, `unzip`, `tmux`, the
