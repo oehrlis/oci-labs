@@ -160,6 +160,16 @@ Weg - kein Umbau am 19c-Stack, kein Plan auf Host 01:
   `OVERWRITE=1` haette die GI-Zeile als getestet markiert. Erst Patch-IDs klaeren, dann
   `make import-lab PERIOD=2026-10 LAB_DIR=<nur der CPU26-Report> OS_LABEL="Oracle Linux 9.8"`
 
+- [ ] **26ai offen (Stefan, 2026-10-25):** getestet werden soll das DB RU als fertiges Gold
+  Image (40014644), nicht ein vom Update Advisor generiertes mit GI RU 40007731. Stefan klaert mit
+  dem AutoUpgrade-PM, wie AutoUpgrade die DB-Variante laedt; parallel pruefen, ob AU die
+  Patch-Nummer direkt annimmt (`patch=RU:23.26.4,40014644` bzw. `GOLDIMAGE:`). Bis dahin kein Import
+  der db26-Zeilen. Lauf 2026-10-25 (lab-run) PASSED, Evidence des Rollbacks in
+  `reports/oradb01/CPU26-23.26.3-to-23.26.4-20261025-0724/`; Manifest 23.26.4 auf dem Host veraltet
+  (soft FAIL "missing 39578879") - vor dem naechsten Lauf loeschen
+- [x] 19c importiert 2026-10-25: from `19.32.0.0.261020`, Note Seed READ WRITE + Basis-MRP +
+  Rollback 1.5 min (Stefan: MRP-Basis akzeptiert mit Hinweis, Seed nur Note)
+
 Issues 26ai fuer den Report: PDB$SEED nach dem Deploy READ WRITE (17:07:11 RO, 17:07:12 RW) -
 wie bei 19c, also AutoUpgrade-Verhalten ueber beide Releases; Basis enthaelt die MRP-Fixes vom
 Download-Tag (Gold Image); Deploy laedt das Gold Image ein zweites Mal (ca. 5 GB).
