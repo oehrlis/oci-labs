@@ -14,6 +14,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **datasafe-demo**: `tunnel.sh` 0.2.0 restarts ssh while a new Bastion session key propagates - before, ssh
+  exited once with "Permission denied (publickey)" and the tunnel failed until rerun (`DSDEMO_TUNNEL_ATTEMPTS`)
 - **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
   `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
   (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
