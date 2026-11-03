@@ -27,7 +27,7 @@ locals {
   host_keys = toset([for i in range(1, var.host_count + 1) : format("%02d", i)])
 
   # hostname_label must be alphanumeric only (OCI DNS label restriction)
-  hostname_prefix = "oradb"
+  hostname_prefix = var.hostname_prefix
 }
 
 # ------------------------------------------------------------------------------

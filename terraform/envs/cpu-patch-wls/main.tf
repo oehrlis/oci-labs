@@ -297,6 +297,9 @@ module "oracle_db_host" {
 
   host_count          = var.lab_count
   instance_image_ocid = local.ol_image_id
+  # The core DB subnet is shared with cpu-patch-26ai, whose host is oradb01 -
+  # OCI rejects a second VNIC with the same hostname label in one subnet.
+  hostname_prefix = "wls"
 
   shape                = var.db_host_shape
   ocpus                = var.db_host_ocpus

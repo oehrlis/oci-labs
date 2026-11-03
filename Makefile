@@ -341,11 +341,12 @@ cpu-lab-apply: guard-terraform ## Build the lab infra - applies a saved tfplan, 
 	    echo "A saved plan applies WITHOUT a confirmation prompt."; \
 	    echo "Review it first with : make cpu-lab-show"; \
 	    echo "Plan again instead   : make cpu-lab-apply REPLAN=1"; \
-	    "$(TERRAFORM)" apply -input=false "$(CPU_PLAN_FILE)"; \
+	    rc=0; "$(TERRAFORM)" apply -input=false "$(CPU_PLAN_FILE)" || rc=$$?; \
 	    rm -f "$(CPU_PLAN_FILE)"; \
+	    if [[ $$rc -ne 0 ]]; then echo "❌ terraform apply failed (rc=$$rc) - the saved plan is spent, run: make cpu-lab-apply CPU_ENV=$(CPU_ENV) REPLAN=1"; exit $$rc; fi; \
 	  else \
 	    echo "No saved plan - Terraform will plan now and ask for confirmation."; \
-	    "$(TERRAFORM)" apply -input=false; \
+	    "$(TERRAFORM)" apply -input=false || { rc=$$?; echo "❌ terraform apply failed (rc=$$rc)"; exit $$rc; }; \
 	  fi
 	@echo "✅ Infrastructure ready - inventory: $(CPU_INVENTORY_ABS)"
 
