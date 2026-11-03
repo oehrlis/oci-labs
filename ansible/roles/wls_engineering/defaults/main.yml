@@ -60,6 +60,9 @@ wls_cycle: "2026-10"
 # whose files are all named in wls_versions.
 wls_only: ""
 
+# OCI helper that grows partition, LVM and filesystem to the boot volume size.
+wls_growfs_command: /usr/libexec/oci-growfs
+
 # --- Software repository --------------------------------------------------------
 # Read-by-name PAR on orarepo, passed by make in the 0600 vars file
 # (make cpu-lab-repo-par CPU_ENV=cpu-patch-wls). Ends with "/o/".

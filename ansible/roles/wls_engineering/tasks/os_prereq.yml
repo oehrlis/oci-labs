@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/os_prereq.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.1.0
+# Date.......: 2026.11.03
+# Version....: v0.2.0
 # Purpose....: OS user, packages and directories for WebLogic on OL8/OL9.
 # Notes......: No preinstall RPM for WebLogic - user and group are created here
 #              with the same IDs the database preinstall RPM uses, so a later
@@ -23,6 +23,33 @@
       wls_engineering targets Oracle Linux 8/9, detected
       {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
     success_msg: "Oracle Linux {{ ansible_facts['distribution_version'] }} detected."
+
+# The OCI Oracle Linux image sizes its root partition at ~45 GB whatever the
+# boot volume size. Grow it before anything is staged: four installers, eight
+# SPBs and their unpacked trees filled the 30 GB root on 2026-11-03 and spbat
+# failed mid-way with "No space left on device". Same step as db19_engineering.
+- name: Check for the OCI growfs helper
+  become: true
+  ansible.builtin.stat:
+    path: "{{ wls_growfs_command }}"
+  register: wls_growfs_stat
+
+- name: Grow the root filesystem to fill the boot volume
+  become: true
+  ansible.builtin.command: "{{ wls_growfs_command }} -y"
+  register: wls_growfs
+  changed_when: "'CHANGED: partition' in (wls_growfs.stdout | default(''))"
+  failed_when:
+    - wls_growfs.rc != 0
+    - "'no space left to grow' not in (wls_growfs.stdout | default('') | lower)"
+  when: wls_growfs_stat.stat.exists
+
+- name: Report that the root filesystem could not be grown
+  ansible.builtin.debug:
+    msg: >-
+      {{ wls_growfs_command }} not found - the root filesystem keeps the image
+      size; staging all versions needs about 60 GB.
+  when: not wls_growfs_stat.stat.exists
 
 - name: Install the packages WebLogic requires
   become: true
