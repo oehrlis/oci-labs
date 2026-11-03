@@ -49,7 +49,7 @@ wls_versions:
     # domain template - no RCU (Stefan, 2026-10-23).
     installer_zip: "fmw_12.2.1.4.0_infrastructure_Disk1_1of1.zip"
     installer_jar: "fmw_12.2.1.4.0_infrastructure.jar"
-    jdk_file: "jdk-8u511-linux-x64.tar.gz"
+    jdk_file: "jdk-8u511-b34-linux-x64.tar.gz"  # alert 114820, MOS 40199083
     spb_base: ""                      # SPB 2026-07 for 12.2.1.4
     spb_target: ""                    # SPB 2026-10, patch 40129641
 
@@ -58,6 +58,6 @@ wls_versions:
     # Already in orarepo.
     installer_zip: "fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip"
     installer_jar: "fmw_14.1.1.0.0_wls_lite_generic.jar"
-    jdk_file: "jdk-11.0.20_linux-x64_bin.tar.gz"
+    jdk_file: "jdk-11.0.33.0.3_linux-x64_bin.tar.gz"  # alert 114820, MOS 40199065
     spb_base: ""                      # SPB 2026-07 for 14.1.1
     spb_target: ""                    # SPB 2026-10, patch 40129124
