@@ -22,6 +22,7 @@ install1.patch=GOLDIMAGE:{{ db19_gold_image_file }}
 {% else %}
 install1.patch={{ db19_patch_list }}
 {% endif %}
+{% set staged_gold = (db19_gold_image_file | length == 0) and (db19_gold_image_staged | default('') | length > 0) %}
 {% if db19_gold_image_create | bool %}
 {# Produces the gold image in install1.folder after the home is built. #}
 install1.create_gold_image={{ db19_gold_image_name }}
@@ -30,9 +31,16 @@ install1.folder={{ db19_stage_dir }}
 install1.target_home={{ db19_home_path }}
 install1.target_version={{ db19_major_release }}
 install1.platform={{ db19_autoupgrade_platform }}
+{% if staged_gold %}
+{# Gold image {{ db19_gold_image_staged }} and the one-off patches are all in
+   the folder - download=no, or AutoUpgrade asks the Update Advisor again. #}
+install1.download=no
+install1.gold_image=YES
+{% else %}
 install1.download={{ db19_autoupgrade_download }}
 {% if db19_gold_image_file | length == 0 and db19_autoupgrade_gold_image | length > 0 %}
 install1.gold_image={{ db19_autoupgrade_gold_image }}
+{% endif %}
 {% endif %}
 install1.patch_node=localhost
 

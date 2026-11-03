@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/create_home.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.3.0
+# Date.......: 2026.11.03
+# Version....: v0.4.0
 # Purpose....: Create an ORACLE_HOME at a given RU via AutoUpgrade create_home.
 # Notes......: Reused for both homes - the caller sets db19_home_ru and
 #              db19_home_path. No runInstaller, no response file: AutoUpgrade
@@ -24,6 +24,8 @@
   ansible.builtin.set_fact:
     db19_home_ru: "{{ db19_home_ru | default(db_base_ru) }}"
     db19_home_path: "{{ db19_home_path | default(oracle_home_base) }}"
+    # Per call: a gold image found for the previous home must not carry over.
+    db19_gold_image_staged: ""
 
 - name: Check whether a central inventory is already registered
   become: true
@@ -65,9 +67,16 @@
     - db19_gold_image_file | length == 0
     - db19_try_gold_image | bool
 
-- name: Build from the downloaded gold image
+# A downloaded gold image carries RU + OCW only. OPatch, DPBP, OJVM and the JDK
+# patch come down as separate files next to it, so the home is built from the
+# patch list with gold_image=YES - AutoUpgrade takes the gold image from the
+# folder and applies the rest on top. GOLDIMAGE:<file> would install the image
+# alone and silently drop them (2026-11-03: a 19.33 home without OJVM, DPBP,
+# JDK 40192005 and OPatch 55; probe on 26ai: list + gold_image=YES applied
+# JDK 40192148 and OPatch 55). GOLDIMAGE: stays for db19_gold_image_file.
+- name: Build from the downloaded gold image plus the patch list
   ansible.builtin.set_fact:
-    db19_gold_image_file: >-
+    db19_gold_image_staged: >-
       {{ (db19_gold_image_downloaded.files | sort(attribute='mtime') | last).path | basename }}
   when:
     - db19_gold_image_downloaded.files | default([]) | length > 0
@@ -80,12 +89,13 @@
   when:
     - not db19_home_stat.stat.exists
     - db19_gold_image_file | length == 0
+    - db19_gold_image_staged | default('') | length == 0
     - db_release | string == '19'
 
 - name: Fail when release 26 has no gold image to build from
   ansible.builtin.assert:
     that:
-      - db19_gold_image_file | length > 0
+      - (db19_gold_image_file | length > 0) or (db19_gold_image_staged | default('') | length > 0)
     fail_msg: >-
       No {{ db19_gold_image_pattern }} in {{ db19_stage_dir }}. Release 26 builds
       its homes from a gold image only - check the gold-image download in the
