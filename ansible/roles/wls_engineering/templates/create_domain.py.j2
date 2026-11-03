@@ -9,12 +9,15 @@ import os
 
 readTemplate('{{ wv_home }}/wlserver/common/templates/wls/wls.jar')
 
-cd('/')
-cmo.setName('wls{{ wv_tag }}')
-
+# Admin user first: the security realm is addressed by the domain name, and
+# '/Security/base_domain' no longer exists once the domain is renamed
+# ("Security instance name incorrect", all versions, 2026-11-03).
 cd('/Security/base_domain/User/weblogic')
 cmo.setName('{{ wls_admin_user }}')
 cmo.setPassword(os.environ['WLS_ADMIN_PW'])
+
+cd('/')
+cmo.setName('wls{{ wv_tag }}')
 
 cd('/')
 set('AdministrationPortEnabled', 'true')
