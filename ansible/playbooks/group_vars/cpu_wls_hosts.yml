@@ -18,6 +18,7 @@
 #              installer_zip  eDelivery zip that contains installer_jar
 #              installer_jar  the jar inside, relative to the zip root
 #              jdk_file       JDK tar.gz (linux-x64), unpacked per major version
+#                             source: MOS KA961 "Supported Java SE Downloads on MOS"
 #              spb_base       Stack Patch Bundle of the previous quarter (baseline)
 #              spb_target     Stack Patch Bundle under test (2026-10)
 # Reference..: https://github.com/oehrlis/oci-labs
@@ -30,6 +31,7 @@ wls_versions:
     jdk_major: "17"
     installer_zip: "V1045131-01.zip"  # eDelivery, WLS 14.1.2 generic
     installer_jar: "fmw_14.1.2.0.0_wls.jar"
+    # 17.0.9 is below the 17.0.12 the runbook names for 14.1.2 - replace it
     jdk_file: "jdk-17.0.9_linux-x64_bin.tar.gz"
     spb_base: ""                      # SPB 2026-07 for 14.1.2
     spb_target: ""                    # SPB 2026-10, patch 40125898

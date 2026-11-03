@@ -102,6 +102,11 @@ left out and named in the run output.
 
 The installer jar is found inside the zip by name, or as the only `fmw_*.jar`.
 
+JDK downloads come from MOS KA961 "Supported Java SE Downloads on MOS" (copy in
+`references/oracle/mos/mos-ka961-supported-java-se-downloads.mhtml`). Take the
+build of the current Java SE CPU or Security Alert - the report recommends that
+level, a test on an older JDK only documents the test environment.
+
 ### Run
 
 ```bash
