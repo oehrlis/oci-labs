@@ -28,11 +28,10 @@
 # Order is the test order (plan-cpu-2026-10-tests.md, package C).
 wls_versions:
   - version: "14.1.2.0.0"
-    jdk_major: "17"
+    jdk_major: "21"
     installer_zip: "V1045131-01.zip"  # eDelivery, WLS 14.1.2 generic
     installer_jar: "fmw_14.1.2.0.0_wls.jar"
-    # 17.0.9 is below the 17.0.12 the runbook names for 14.1.2 - replace it
-    jdk_file: "jdk-17.0.9_linux-x64_bin.tar.gz"
+    jdk_file: "jdk-21.0.13.0.3_linux-x64_bin.tar.gz"  # 21.0.4+ supported
     spb_base: ""                      # SPB 2026-07 for 14.1.2
     spb_target: ""                    # SPB 2026-10, patch 40125898
 
@@ -40,7 +39,7 @@ wls_versions:
     jdk_major: "21"
     installer_zip: "fmw_15.1.1.0.0_wls_generic.zip"
     installer_jar: "fmw_15.1.1.0.0_wls_generic.jar"
-    jdk_file: ""                      # JDK 21, linux-x64 tar.gz
+    jdk_file: "jdk-21.0.13.0.3_linux-x64_bin.tar.gz"
     spb_base: ""                      # SPB 2026-07 for 15.1.1
     spb_target: ""                    # SPB 2026-10, patch 40128310
 
@@ -50,7 +49,7 @@ wls_versions:
     # domain template - no RCU (Stefan, 2026-10-23).
     installer_zip: "fmw_12.2.1.4.0_infrastructure_Disk1_1of1.zip"
     installer_jar: "fmw_12.2.1.4.0_infrastructure.jar"
-    jdk_file: ""                      # JDK 8, linux-x64 tar.gz
+    jdk_file: "jdk-8u511-linux-x64.tar.gz"
     spb_base: ""                      # SPB 2026-07 for 12.2.1.4
     spb_target: ""                    # SPB 2026-10, patch 40129641
 
