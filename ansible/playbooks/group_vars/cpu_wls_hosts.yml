@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: group_vars/cpu_wls_hosts.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.1.0
+# Date.......: 2026.11.03
+# Version....: v0.2.0
 # Purpose....: The WebLogic versions of the CPU lab and the files each one needs
 #              from the orarepo bucket.
 # Notes......: orarepo is flat - every entry is an object name in the bucket
@@ -28,16 +28,16 @@
 wls_versions:
   - version: "14.1.2.0.0"
     jdk_major: "17"
-    installer_zip: ""                 # eDelivery, WLS 14.1.2 generic
+    installer_zip: "V1045131-01.zip"  # eDelivery, WLS 14.1.2 generic
     installer_jar: "fmw_14.1.2.0.0_wls.jar"
-    jdk_file: ""                      # JDK 17 or 21, linux-x64 tar.gz
+    jdk_file: "jdk-17.0.9_linux-x64_bin.tar.gz"
     spb_base: ""                      # SPB 2026-07 for 14.1.2
     spb_target: ""                    # SPB 2026-10, patch 40125898
 
   - version: "15.1.1.0.0"
     jdk_major: "21"
-    installer_zip: ""                 # eDelivery, WLS 15.1.1 generic
-    installer_jar: "fmw_15.1.1.0.0_wls.jar"
+    installer_zip: "fmw_15.1.1.0.0_wls_generic.zip"
+    installer_jar: "fmw_15.1.1.0.0_wls_generic.jar"
     jdk_file: ""                      # JDK 21, linux-x64 tar.gz
     spb_base: ""                      # SPB 2026-07 for 15.1.1
     spb_target: ""                    # SPB 2026-10, patch 40128310
@@ -57,6 +57,6 @@ wls_versions:
     # Already in orarepo.
     installer_zip: "fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip"
     installer_jar: "fmw_14.1.1.0.0_wls_lite_generic.jar"
-    jdk_file: ""                      # JDK 11 (or 8), linux-x64 tar.gz
+    jdk_file: "jdk-11.0.20_linux-x64_bin.tar.gz"
     spb_base: ""                      # SPB 2026-07 for 14.1.1
     spb_target: ""                    # SPB 2026-10, patch 40129124
