@@ -403,8 +403,15 @@ cpu-lab-patch: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Run the Au
 	    --tags patch -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-verify
+# WebLogic needs the admin password and the repository PAR in every step (the role
+# asserts both first) - verify and rollback included. The database steps do not, so
+# they keep running without a 1Password prompt (2026-11-03: WLS verify failed on it).
+CPU_LAB_WLS_SECRETS = $(if $(filter cpu-patch-wls,$(CPU_ENV)),$(cpu_lab_ansible_secrets);,vars_file="";)
+
 cpu-lab-verify: $(BASTION_DEP) guard-ansible guard-cpu-env ## Verify the post-patch state (read-only)
-	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" --tags verify $(ANSIBLE_EXTRA)
+	$(Q)$(CPU_LAB_WLS_SECRETS) \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" --tags verify \
+	    $${vars_file:+-e @"$$vars_file"} $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-step
 cpu-lab-step: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Run a single tag: make cpu-lab-step TAG=create_home
@@ -689,8 +696,9 @@ cpu-lab-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Roll the databas
 	@if [[ "$(YES)" != "1" ]]; then \
 	  read -r -p "    Continue? [y/N] " a; [[ "$$a" == "y" ]] || { echo "aborted"; exit 1; }; \
 	fi
-	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
-	  --tags rollback $(ANSIBLE_EXTRA)
+	$(Q)$(CPU_LAB_WLS_SECRETS) \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
+	  --tags rollback $${vars_file:+-e @"$$vars_file"} $(ANSIBLE_EXTRA)
 	@echo "✅ Rollback done - the lab runs from the base home again"
 
 # ==============================================================================
