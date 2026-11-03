@@ -1,5 +1,10 @@
 # Plan: CPU 2026-10 - Patch-Tests fuer den Report
 
+> **Stand 2026-11-03:** Tests werden ab jetzt aus cpu-patch-tests gestartet (`make lab-run`,
+> `tools/lab_run.sh`), Resultate liegen dort in `patches/2026-10/lab/` (Index:
+> `make lab-results PERIOD=2026-10`). Ablauf: `cpu-patch-tests/docs/lab-integration.md`,
+> Lab-Seite: `docs/runbook-cpu-patch-lab.md`. Neustand: `tasks/state-2026-11-03.md`.
+>
 > Stand 2026-10-22. Ersetzt den Fokus von `plan-cpu-2026-10.md`: dort stand die
 > oradba.automation-Collection im Vordergrund, fuer den Report zaehlt nur der Patch.
 > Ziel: belegte Testresultate pro Patch-ID in `cpu-patch-tests/patches/test_results_2026-10.csv`.
@@ -90,7 +95,10 @@ Ergebnis: `cputest-*.json` / `.md` (macht die Lab-Rolle heute schon), importiert
 - [x] `make import-lab` (OVERWRITE=1, nur der 19.33-Report als LAB_DIR): RU, OJVM, JDK
   `ok`/`tested`, from 19.32, to 19.33.0.0.0, OL 8.10, Laufzeit aufgeteilt. Ersetzt die
   unbelegten `ok`-Platzhalter
-- [ ] Notes in `test_results_2026-10.csv` ergaenzen - **Stefan / cpu-patch-tests-Session**
+- [x] Notes in `test_results_2026-10.csv` ergaenzen (2026-10-25)
+- [x] **Nachtest 2026-11-03** mit JDK 40192005 (MOS CPU359, Alert CVE-2026-114820) und OPatch
+  12.2.0.1.55: PASSED, Downtime 47 s, importiert (RU, OJVM, JDK). Neues Home `19.33-1103`,
+  Stage `/opt/stage-20261103`, Basis-Image-Weg (`db19_try_gold_image=false`)
   (import-lab kann es nicht): from `19.32.0.0.261020` statt `19.32`; PDB$SEED nach dem
   Deploy READ WRITE (manueller Schritt); Rollback per GRP in 1.5 min belegt
 
@@ -154,13 +162,17 @@ Weg - kein Umbau am 19c-Stack, kein Plan auf Host 01:
 - [x] Rollback 17:11-17:12 (1 min): Flashback auf `AU_PATCHING_9212_CPU262326300`, 23.26.3, 0
   invalid, oratab `:Y`, sqlpatch nur 39578879, PDB$SEED READ ONLY. **GRP noch da** - vor dem
   naechsten Lauf droppen. Instanz STOPPED
-- [ ] Import nach `cpu-patch-tests` - **blockiert, Stefan**: die Periodendaten fuehren 40002013
+- [x] Import nach `cpu-patch-tests` - erledigt 2026-11-03 (CPU359 bestaetigt 40007731 = DB RU);
+  urspruenglich blockiert: die Periodendaten fuehrten 40002013
   als "Database RU" und **40007731 als "GI RU"**, im DB-Home meldet `opatch` 40007731 als "Database
   Release Update : 23.26.4.0.0". `import-lab` (Dry-Run) fuellt deshalb keine Zeile, ein
   `OVERWRITE=1` haette die GI-Zeile als getestet markiert. Erst Patch-IDs klaeren, dann
   `make import-lab PERIOD=2026-10 LAB_DIR=<nur der CPU26-Report> OS_LABEL="Oracle Linux 9.8"`
 
-- [ ] **26ai offen (Stefan, 2026-10-25):** getestet werden soll das DB RU als fertiges Gold
+- [x] **Test 2026-11-03** mit dem Kundenprofil `RU:23.26.4,OPATCH,DPBP,40192148`: PASSED,
+  Downtime 10 s, importiert (RU 40007731, JDK 40192148). Rollen-Fix `01ed3a1` (Gold Image plus
+  Einzelpatches). Gold Image 40014644 nicht getestet - AutoUpgrade baut sein eigenes
+- [x] **26ai offen (Stefan, 2026-10-25), erledigt:** getestet werden soll das DB RU als fertiges Gold
   Image (40014644), nicht ein vom Update Advisor generiertes mit GI RU 40007731. Stefan klaert mit
   dem AutoUpgrade-PM, wie AutoUpgrade die DB-Variante laedt; parallel pruefen, ob AU die
   Patch-Nummer direkt annimmt (`patch=RU:23.26.4,40014644` bzw. `GOLDIMAGE:`). Bis dahin kein Import
@@ -211,10 +223,13 @@ Weg:
    Archiv als Netz (`-e wls_rollback_restore=true`). Das SPB-Zip bringt alle Einzelpatches
 5. Reihenfolge 14.1.2, 15.1.1, 12.2.1.4, 14.1.1
 
-- [ ] 1-3 bauen, offline pruefen
-- [ ] Stefan: Uploads nach `orarepo` (Liste im Runbook), Dateinamen in `group_vars/all.yml`
-- [ ] plan/apply `cpu-patch-wls` - **Stefan**
-- [ ] Je Version: install, patch, verify, rollback; Import nach `cpu-patch-tests`
+- [x] 1-3 bauen, offline pruefen
+- [x] Uploads nach `orarepo` (2026-11-03): 8 SPBs, Installer 14.1.2 / 15.1.1, JDK 21.0.13.0.3,
+  8u511-b34, 11.0.33.0.3 (Alert-Builds); Namen in `playbooks/group_vars/cpu_wls_hosts.yml`
+- [x] plan/apply `cpu-patch-wls` - Stefan (2. Anlauf nach Hostname-Fix `63dca5e`)
+- [-] Je Version: install, patch, verify, rollback; Import nach `cpu-patch-tests` - laeuft
+  2026-11-03. Fixes unterwegs: growfs (`380ab1a`), WLST-Reihenfolge (`7072dc1`), Secrets fuer
+  verify/rollback (`255560a`). 14.1.2: Patch ok, verify + rollback nachzuholen
 
 ### D - Infrastruktur und Ablauf (parallel, nur was die Tests braucht)
 
