@@ -794,6 +794,11 @@ cpu-lab-coll-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Collection 
 
 BASTION_LOCAL_PORT ?= $(or $(CPU_TUNNEL_PORT_$(CPU_ENV)),2222)
 BASTION_SESSION_TTL ?= 10800
+# A step starts on a session with at least this much life left. The tunnel probe
+# alone passed on 2026-11-03 seconds before the session expired - the WLS step
+# then died with "Connection refused" (and an earlier one hung with the servers
+# stopped). Longest step: AutoUpgrade patch, ~40 min.
+BASTION_RENEW_MARGIN ?= 3600
 
 .PHONY: cpu-lab-bastion-session
 cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forwarding session and print the tunnel command
@@ -852,7 +857,15 @@ cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the
 	  key="$$("$(TERRAFORM)" output -raw lab_private_key_path 2>/dev/null)"; \
 	  probe() { ssh -i "$$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 \
 	            -o StrictHostKeyChecking=no -p $(BASTION_LOCAL_PORT) opc@127.0.0.1 true 2>/dev/null; }; \
-	  if probe; then echo "✅ Tunnel already usable on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
+	  renew=0; \
+	  if [[ -f .bastion-tunnel.cmd ]]; then \
+	    age=$$(( $$(date +%s) - $$(stat -f %m .bastion-tunnel.cmd 2>/dev/null || stat -c %Y .bastion-tunnel.cmd) )); \
+	    if [[ $$age -gt $$(( $(BASTION_SESSION_TTL) - $(BASTION_RENEW_MARGIN) )) ]]; then \
+	      echo "Bastion session is $$((age / 60)) min old (TTL $$(( $(BASTION_SESSION_TTL) / 60 )) min) - renewing before the step"; \
+	      renew=1; rm -f .bastion-tunnel.cmd; \
+	    fi; \
+	  fi; \
+	  if [[ $$renew -eq 0 ]] && probe; then echo "✅ Tunnel already usable on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
 	  pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
 	  for attempt in 1 2 3; do \
 	    if [[ ! -f .bastion-tunnel.cmd ]] || [[ $$attempt -gt 1 ]]; then \
