@@ -1,0 +1,36 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: terraform.tfvars.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Editor.....: Stefan Oehrli
+# Date.......: 2026.11.05
+# Version....: v0.1.0
+# Purpose....: Example inputs - copy to terraform.tfvars (git-ignored).
+# Notes......: Example: one Oracle DB 19c host in the DB subnet.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+oci_config_profile = "<oci profile>"
+region             = "eu-zurich-1"
+compartment_ocid   = "<compartment OCID>"
+
+core_state = {
+  bucket    = "bucket-zrh-lab-<stack>-tfstate-01"
+  namespace = "<object storage namespace>"
+  key       = "<target>/core/terraform.tfstate"
+}
+
+component       = "db"
+hostname_prefix = "db19"
+ol_version      = "8"
+
+ingress_rules = {
+  listener = { protocol = "tcp", port_min = 1521, description = "Oracle Net listener (intra-VCN)" }
+  icmp     = { protocol = "icmp", description = "ICMP inside the VCN" }
+}
+
+ssh_public_key_files = ["~/.ssh/id_ed25519.pub"]
+
+# --- EOF ----------------------------------------------------------------------

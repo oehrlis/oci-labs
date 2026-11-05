@@ -1,0 +1,22 @@
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: backend.hcl.example
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Editor.....: Stefan Oehrli
+# Date.......: 2026.11.05
+# Version....: v0.1.0
+# Purpose....: Backend settings per target - copy to backend.hcl (git-ignored).
+# Notes......: One state bucket per target, one key per layer. The native oci
+#              backend authenticates with the API key profile - no S3 key.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+bucket              = "bucket-zrh-lab-<stack>-tfstate-01"
+namespace           = "<object storage namespace>"
+key                 = "<target>/core/terraform.tfstate"
+region              = "eu-zurich-1"
+config_file_profile = "<oci profile>"
+
+# --- EOF ----------------------------------------------------------------------

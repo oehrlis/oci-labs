@@ -51,6 +51,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **templates** `terraform/templates/core` and `host-on-core`: core layer per target and host layers on top,
+  state in the target's OCI bucket via the native `oci` backend (partial config `backend.hcl`, no S3 key),
+  host layer reads the core by remote state, OCI naming rule, `orarepo` never in a state. Core plan against
+  the CPU target: 19 resources, names `vcn-zrh-lab-cpu-net-01` ...; `lint-terraform` validates templates too;
+  `backend.hcl` and `.ssh/` git-ignored
 - **naming** v0.2.0: `name_scheme = "oci"` for the OCI naming rule `{resource}-{region}-{env}-{stack}-{component}-{nn}`
   - region code (`eu-zurich-1` -> `zrh`), env `lab|dev|test|prod`, `lab_name_core` without the instance
   (`zrh-lab-cpu`); validations reject what the rule does not allow. Default `legacy` keeps every existing name;

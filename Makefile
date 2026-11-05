@@ -194,11 +194,11 @@ fmt-terraform: guard-terraform ## Format Terraform files in-place
 	@echo "✅ Terraform files formatted"
 
 .PHONY: lint-terraform
-lint-terraform: guard-terraform ## Check Terraform formatting and validate every env
+lint-terraform: guard-terraform ## Check Terraform formatting and validate every env and template
 	@echo -e "$(COLOR_BOLD)terraform fmt -check$(COLOR_RESET)"
 	$(Q)"$(TERRAFORM)" fmt -check -recursive "$(TF_DIR)"
-	@echo -e "$(COLOR_BOLD)terraform validate per env$(COLOR_RESET)"
-	@for env in $(TF_DIR)/envs/*/; do \
+	@echo -e "$(COLOR_BOLD)terraform validate per env and template$(COLOR_RESET)"
+	@for env in $(TF_DIR)/envs/*/ $(TF_DIR)/templates/*/; do \
 	  [[ -f "$$env/provider.tf" ]] || { echo "--- $$env SKIPPED: no provider.tf, nothing to validate"; continue; }; \
 	  echo "--- $$env"; \
 	  ( cd "$$env" && "$(TERRAFORM)" init -backend=false -input=false >/dev/null && "$(TERRAFORM)" validate ); \
