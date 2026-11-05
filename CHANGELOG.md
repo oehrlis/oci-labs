@@ -51,6 +51,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **naming** v0.2.0: `name_scheme = "oci"` for the OCI naming rule `{resource}-{region}-{env}-{stack}-{component}-{nn}`
+  - region code (`eu-zurich-1` -> `zrh`), env `lab|dev|test|prod`, `lab_name_core` without the instance
+  (`zrh-lab-cpu`); validations reject what the rule does not allow. Default `legacy` keeps every existing name;
+  module requires Terraform >= 1.9
 - **compute_host** module: N identical hosts on an existing subnet - instance NSG with caller-defined
   `ingress_rules`, per-host cloud-init from a template, optional data volume, IMDSv2 and PV encryption in
   transit enforced. The building block for product hosts (DB, WebLogic) in the lab kit
