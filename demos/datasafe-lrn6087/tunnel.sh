@@ -6,7 +6,7 @@
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
 # Date.......: 2026-10-19
-# Version....: 0.1.0
+# Version....: 0.2.0
 # Purpose....: Open an OCI Bastion port-forwarding tunnel to the LRN6087 demo
 #              host (SSH on 127.0.0.1:<port>).
 # Notes......: Reads bastion_id, db_private_ip and lab_private_key_path from
@@ -19,6 +19,7 @@
 # ------------------------------------------------------------------------------
 # CHANGE LOG:
 # 2026-10-19 oes Initial release 0.1.0
+# 2026-10-25 oes 0.2.0 restart ssh while the session key propagates
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
@@ -27,10 +28,11 @@
 set -euo pipefail
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="0.1.0"
+VERSION="0.2.0"
 ENV_DIR="${DSDEMO_ENV_DIR:-${SCRIPT_DIR}/../../terraform/envs/datasafe-demo}"
 LOCAL_PORT="${DSDEMO_LOCAL_PORT:-2222}"
 SESSION_TTL="${DSDEMO_SESSION_TTL:-10800}"
+TUNNEL_ATTEMPTS="${DSDEMO_TUNNEL_ATTEMPTS:-40}"
 DRY_RUN="FALSE"
 ACTION="open"
 
@@ -155,18 +157,25 @@ main() {
     cmd="${cmd//<localPort>/${LOCAL_PORT}}"
 
     pkill -f "L ${LOCAL_PORT}:" 2> /dev/null || true
-    nohup bash -c "${cmd} -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes" \
-        > "${ENV_DIR}/.bastion-tunnel.log" 2>&1 &
 
-    local i
-    for i in $(seq 1 20); do
+    # A new session is ACTIVE before its key has reached the Bastion host - ssh
+    # then exits with "Permission denied (publickey)". Restart ssh until it holds.
+    local i starts=0
+    for i in $(seq 1 "${TUNNEL_ATTEMPTS}"); do
+        if ! pgrep -f "L ${LOCAL_PORT}:" > /dev/null 2>&1; then
+            starts=$((starts + 1))
+            [[ ${starts} -gt 1 ]] && log_info "ssh to the Bastion exited ($(tail -1 "${ENV_DIR}/.bastion-tunnel.log" 2> /dev/null | sed 's/.*: //')) - start ${starts}"
+            nohup bash -c "${cmd} -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes" \
+                > "${ENV_DIR}/.bastion-tunnel.log" 2>&1 &
+        fi
+        sleep 6
         if probe "${key}"; then
-            log_info "Tunnel up on 127.0.0.1:${LOCAL_PORT} (attempt ${i})"
+            log_info "Tunnel up on 127.0.0.1:${LOCAL_PORT} (check ${i}, ssh start ${starts})"
             return 0
         fi
-        sleep 4
     done
-    log_error "Tunnel did not come up - see ${ENV_DIR}/.bastion-tunnel.log"
+    log_error "Tunnel did not come up after $((TUNNEL_ATTEMPTS * 6)) s and ${starts} ssh starts - see ${ENV_DIR}/.bastion-tunnel.log"
+    log_error "The session ${sid} stays valid for ${SESSION_TTL} s - rerun to try again"
     exit 1
 }
 

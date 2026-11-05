@@ -163,6 +163,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **oracle_db_native**: open all PDBs and save their state after creation - the dbca PDB had no saved state,
+  stayed MOUNTED after the scheduled restart and its Data Safe target went NEEDS_ATTENTION (ORA-01109)
+- **datasafe-demo**: `tunnel.sh` 0.2.0 restarts ssh while a new Bastion session key propagates - before, ssh
+  exited once with "Permission denied (publickey)" and the tunnel failed until rerun (`DSDEMO_TUNNEL_ATTEMPTS`)
+- **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
+  `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
+  (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
+- **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
+  26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
+  installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch
+  (`--alias`, stdin)
 - `db19_engineering`: the evidence after a patch is collected - the include in `main.yml` carried
   the tags only itself, so `--tags patch` skipped every task inside (`apply: tags`). The 26ai run of
   2026-10-25 has the evidence of its rollback only; the datapatch logs of its patch are still on
