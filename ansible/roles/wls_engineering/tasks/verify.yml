@@ -5,10 +5,13 @@
 # Name.......: tasks/verify.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.10.23
-# Version....: v0.1.0
-# Purpose....: Read-only look at one version: servers, smoke, patch level.
-# Notes......: Starts nothing - a version whose servers are down is reported as
-#              such. The smoke test redeploys nothing either when the
+# Version....: v0.2.0
+# Purpose....: Look at one version: servers, smoke, patch level - changes
+#              nothing but the server state.
+# Notes......: Starts AdminServer and managed server when they are down (since
+#              v0.2.0, log review 2026-11-04: a stopped host made verify fail
+#              although the patch was fine). It changes no home, no domain
+#              setting and no patch; the smoke test redeploys nothing when the
 #              application is already there.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
@@ -26,6 +29,14 @@
     group: "{{ oracle_os_group_install }}"
     mode: "0600"
   no_log: true
+
+# A host that was stopped overnight has no running server, and the smoke test
+# then fails although nothing is wrong with the patch (14.1.2, 2026-11-04).
+# servers.yml only starts what is not RUNNING - on a running domain a no-op.
+- name: Start the servers that are not running
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: start
 
 - name: Smoke test
   ansible.builtin.include_tasks: smoke.yml
