@@ -1,0 +1,138 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/rollback.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.24
+# Version....: v0.2.0
+# Purpose....: Roll the SPB under test back from one version.
+# Notes......: SPBAT has no rollback phase. The SPB README's way is OPatch:
+#              "opatch nrollback -idFile rollback_patchlist.txt" from the bundle's
+#              binary_patches directory - that is what this proves. OPatch stays
+#              at the version the SPB brought, which is expected.
+#              -e wls_rollback_restore=true restores the archive patch.yml took
+#              instead (home + inventory) - the safety net when nrollback fails.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Derive the layout
+  ansible.builtin.include_tasks: vars.yml
+
+- name: Check that the target SPB was applied - {{ wls.version }}
+  become: true
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ wv_stage }}/.spb-target-applied"
+    - "{{ wv_backup_tgz }}"
+  register: wv_rb_pre
+
+- name: Assert there is something to roll back
+  ansible.builtin.assert:
+    that:
+      - wv_rb_pre.results[0].stat.exists
+      - (not wls_rollback_restore | bool) or wv_rb_pre.results[1].stat.exists
+    fail_msg: >-
+      WebLogic {{ wls.version }}: the target SPB is not applied
+      ({{ wv_stage }}/.spb-target-applied missing){{ ', and there is no archive '
+      ~ wv_backup_tgz ~ ' to restore' if wls_rollback_restore | bool else '' }}.
+
+- name: Find the rollback list of the target SPB
+  become: true
+  ansible.builtin.find:
+    paths: "{{ wv_stage }}/spb-target"
+    patterns: rollback_patchlist.txt
+    recurse: true
+  register: wv_rb_list
+  when: not wls_rollback_restore | bool
+
+- name: Assert the bundle carries a rollback list
+  ansible.builtin.assert:
+    that:
+      - wv_rb_list.files | length > 0
+    fail_msg: >-
+      No rollback_patchlist.txt below {{ wv_stage }}/spb-target - roll back with the
+      archive instead: -e wls_rollback_restore=true
+  when: not wls_rollback_restore | bool
+
+- name: Rollback begins
+  ansible.builtin.set_fact:
+    wv_rb_start: "{{ now(utc=true).timestamp() | int }}"
+
+- name: Stop the servers
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: stop
+
+- name: Roll the SPB back with OPatch
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ wv_home }}/OPatch/opatch nrollback -silent -oh {{ wv_home }}
+      -idFile {{ wv_rb_list.files[0].path }}
+    chdir: "{{ wv_rb_list.files[0].path | dirname }}"
+  environment:
+    JAVA_HOME: "{{ wv_jdk }}"
+    CLASSPATH: ""
+  register: wv_nrollback
+  changed_when: wv_nrollback.rc == 0
+  async: "{{ wls_async_timeout }}"
+  poll: "{{ wls_async_poll }}"
+  when: not wls_rollback_restore | bool
+
+- name: Report the OPatch rollback
+  ansible.builtin.debug:
+    msg: "{{ ['rc=' ~ wv_nrollback.rc ~ ', ' ~ wv_nrollback.delta] + wv_nrollback.stdout_lines[-20:] }}"
+  when: not wls_rollback_restore | bool
+
+- name: Restore the archive taken before the SPB
+  when: wls_rollback_restore | bool
+  block:
+    - name: Remove the patched home and its inventory
+      become: true
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ wv_home }}"
+        - "{{ wv_inv_dir_base }}"
+
+    - name: Unpack the archive
+      become: true
+      ansible.builtin.command:  # noqa: command-instead-of-module - absolute paths, owners and modes kept
+        cmd: "tar -xzpf {{ wv_backup_tgz }} -C /"
+      register: wv_restore
+      changed_when: true
+      async: "{{ wls_async_timeout }}"
+      poll: "{{ wls_async_poll }}"
+
+- name: Start the servers after the rollback
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: start
+
+- name: Rollback ends
+  ansible.builtin.set_fact:
+    wv_rb_end: "{{ now(utc=true).timestamp() | int }}"
+
+- name: Forget that the target SPB was applied
+  become: true
+  ansible.builtin.file:
+    path: "{{ wv_stage }}/.spb-target-applied"
+    state: absent
+
+- name: Smoke test after the rollback
+  ansible.builtin.include_tasks: smoke.yml
+
+- name: Record the patch level after the rollback
+  ansible.builtin.include_tasks: snapshot.yml
+  vars:
+    wv_snap: rolledback
+
+- name: Write the report
+  ansible.builtin.include_tasks: report.yml
+  vars:
+    wv_phase: rollback

@@ -108,7 +108,7 @@
       ansible.builtin.debug:
         msg:
           - "Host.........: {{ inventory_hostname }} ({{ ansible_host | default('n/a') }})"
-          - "Database.....: {{ oracle_sid }}"
+          - "Database.....: {{ oracle_sid }} (release {{ db_release | default('19') }})"
           - "Base RU......: {{ db_base_ru }} -> {{ oracle_home_base }}"
           - "Target RU....: {{ db_target_ru }} -> {{ oracle_home_target }}"
       tags:

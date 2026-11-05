@@ -1,0 +1,45 @@
+# terraform.tfvars - cpu-patch-26ai - copy to terraform.tfvars
+# Network and Bastion come from envs/core - no network variables here.
+
+oci_config_profile = "TRIVADIS"
+# compartment_ocid = "ocid1.compartment.oc1..."
+region_key       = "chzh"
+environment_code = "l"
+stack_code       = "cpu26"
+lab_instance     = 1
+
+common_freeform_tags = {
+  project = "oradba-labs"
+  owner   = "oehrlis"
+  stack   = "cpu26"
+}
+
+# Same sizing as the 19c host (Stefan, 2026-10-23); OL9.
+lab_count                    = 1
+ol_version                   = "9"
+db_host_shape                = "VM.Standard.E4.Flex"
+db_host_ocpus                = 8
+db_host_memory_gbs           = 32
+db_host_boot_volume_size_gbs = 200
+
+attach_data_volume   = false
+data_volume_size_gbs = 100
+
+# Off by default: a STOP_RESOURCE mid-AutoUpgrade wrecks the patch run.
+enable_auto_stop = false
+
+# Oracle AI Database 26ai - release 26, RU strings start with 23.
+db_release   = "26"
+oracle_sid   = "CPU26"
+db_base_ru   = "23.26.3"
+db_target_ru = "23.26.4"
+
+db_oracle_root = "/u00"
+db_oracle_data = "/u01"
+db_oracle_arch = "/u02"
+
+db_oracle_base        = ""
+db_oracle_home_base   = ""
+db_oracle_home_target = ""
+
+core_state_path = "../core/terraform.tfstate"

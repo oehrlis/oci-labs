@@ -1,40 +1,54 @@
 # Runbook: cpu-patch-test - Oracle CPU Patch Test Lab
 
-Throw-away Oracle Database 19c lab on OCI for quarterly **Critical Patch Update
-(CPU)** testing. Terraform builds the network and the Oracle Linux 8 hosts,
-Ansible installs Oracle at a base Release Update, and AutoUpgrade patches
-out-of-place to the target RU.
+Throw-away labs on OCI for quarterly **Critical Patch Update (CPU)** testing -
+Oracle Database 19c and 26ai (AutoUpgrade out-of-place) and WebLogic (Stack Patch
+Bundle in place). Terraform builds the hosts on a shared core, Ansible installs the
+baseline and runs the patch, verify and rollback.
 
-This lab is the **infrastructure layer**. Reporting stays in
-[`cpu-patch-tests`](https://github.com/oehrlis/cpu-patch-tests), which is not
-modified from here.
+This lab is the **infrastructure layer**: Terraform stacks, the Ansible roles and the
+`cpu-lab-*` make targets. Tests are **started from**
+[`cpu-patch-tests`](https://github.com/oehrlis/cpu-patch-tests) (`make lab-run`), and
+the results for review and import land there as well - in
+`cpu-patch-tests/patches/<PERIOD>/lab/`, one directory per run with a `full-log/` and an
+index. `ansible/reports/` in this repo is only the raw drop a run collects from; nothing
+is analysed or kept here. cpu-patch-tests is not modified from here.
 
-- Stack code: `cpupt` - resources are named `chzh-l-cpupt-01`
+| What | Where | Who |
+| --- | --- | --- |
+| Hosts on and off, plan, apply, destroy | this repo, `make cpu-lab-*` | apply/destroy: Stefan |
+| Media into `orarepo` (SPBs, installers, JDKs) | cpu-patch-tests `make lab-media UPLOAD=1`, or `oci os object put` | Stefan downloads, the session uploads |
+| A test run (install, patch, verify, rollback) | cpu-patch-tests `make lab-run PERIOD=... PRODUCT=...` | session, 1Password once per run |
+| Evidence for manual review | `cpu-patch-tests/patches/<PERIOD>/lab/` | written by the run |
+| Results into the report | cpu-patch-tests `make import-lab`, then `import-tests` | report session |
+
+- Stack codes: `cpupt` (19c), `cpu26` (26ai), `cpuwl` (WebLogic) - resources are named `chzh-l-<code>-01`
 - Filesystem roots: `/u00` binaries, `/u01` data, `/u02` archive
 - Tenancy: `<namespace>`, OCI profile `<oci_profile>`, compartment `<compartment_name>`
-- OS: Oracle Linux 8 - OL9 cannot run the 19.3.0 base release
+- OS: Oracle Linux 8 for 19c (19.3.0 base image), Oracle Linux 9 for 26ai and WebLogic
 - Lifecycle: build, install, patch, verify, destroy
 
 ## Architecture
 
 ```text
-Workstation (macOS)                        OCI - compartment <compartment_name>
-+---------------------------+              +-----------------------------------+
-| terraform                 |  API         | VCN 10.29.0.0/16                  |
-|   envs/cpu-patch-test     |------------->|   public  10.29.10.0/24           |
-|                           |              |   private 10.29.20.0/24           |
-| ansible-playbook          |  SSH 22      |   db      10.29.30.0/24           |
-|   lab-cpu-patch.yml       |------------->|                                   |
-|                           |              |  ci-chzh-l-cpupt-01-db-01         |
-| op read (1Password)       |              |    OL8, E4.Flex 2 OCPU / 16 GB    |
-|   MOS credentials         |              |    200 GB boot volume             |
-+---------------------------+              |    NSG: SSH from your IP only     |
-                                           +-----------------------------------+
-                                                        |
-                                                        | AutoUpgrade
-                                                        v
-                                              updates.oracle.com (MOS)
+Workstation (macOS)                       OCI - compartment <compartment_name>
++--------------------------+              +--------------------------------------------+
+| cpu-patch-tests          |              | envs/core: VCN 10.29.0.0/16, DB subnet,    |
+|   lab-profile, lab-run,  |              |   NAT, Bastion, bucket orarepo             |
+|   import-lab             |              |   +-- cpu-patch-26ai  26ai host, OL9        |
+|        | make -C         |              |   +-- cpu-patch-wls   WebLogic host, OL9    |
+| oci-labs                 |  API         |                                            |
+|   terraform envs/...     |------------->| envs/cpu-patch-test: 19c host, OL8, own    |
+|   ansible-playbook       |  Bastion SSH |   VCN + Bastion (moves to the core with    |
+|     lab-cpu-patch.yml    |------------->|   the next rebuild)                        |
+|     lab-wls-patch.yml    |              +--------------------------------------------+
+| op read (1Password)      |                        | AutoUpgrade        | PAR
++--------------------------+                        v                    v
+                                          updates.oracle.com (MOS)   orarepo (WLS media)
 ```
+
+What is tested and why - the cycle, the lab profiles, the evidence and the import into the
+report - is documented in `cpu-patch-tests/docs/lab-integration.md`. This runbook covers the
+lab: stacks, roles, make targets.
 
 Ansible runs **from the workstation** over SSH. Cloud-init only does the minimum
 needed for Ansible to take over: hostname, `python3`, `git`, `unzip`, `tmux`, the
@@ -43,6 +57,168 @@ oradba clone, and a marker file at `/var/log/oradba-cloudinit-complete`.
 Nothing sensitive goes into cloud-init: `user_data` is readable by any user on
 the instance through the metadata service. MOS credentials and the SYS password
 are passed per run via `-e`.
+
+## Layout - one CPU network, one stack per product
+
+Since 2026-10-23 the CPU tests grow towards one shared network and one stack per
+product or release on top of it:
+
+```text
+envs/core            VCN 10.29.0.0/16, DB subnet, NAT, Bastion, bucket orarepo
+  |                  core_owner = "core" - outlives every lab, never destroyed by one
+  +-- envs/cpu-patch-26ai   26ai host (OL9), reads core via terraform_remote_state
+  +-- envs/cpu-patch-wls    WebLogic host wls01 (OL9), same pattern
+
+envs/cpu-patch-test  19c host - still with its own VCN and Bastion, moves onto
+                     the core with the next rebuild (gold image, OL9)
+```
+
+Every `cpu-lab-*` target takes `CPU_ENV=<stack>` (default `cpu-patch-test`).
+Each stack has its own Bastion tunnel port - `cpu-patch-test` 2222,
+`cpu-patch-26ai` 2224, `cpu-patch-wls` 2225 (2223 belongs to the datasafe-demo tunnel) -
+so several labs can be driven at the same time:
+
+```bash
+make cpu-lab-plan CPU_ENV=cpu-patch-26ai
+make cpu-lab-apply CPU_ENV=cpu-patch-26ai
+make cpu-lab-install CPU_ENV=cpu-patch-26ai BASTION=1
+make cpu-lab-patch CPU_ENV=cpu-patch-26ai BASTION=1
+make cpu-lab-stop CPU_ENV=cpu-patch-26ai
+```
+
+A host stack never creates or destroys a network resource; its destroy removes
+host, NSG, keys and inventory.
+
+**Hostnames are per subnet.** The module names host 01 `<hostname_prefix>01`, default
+`oradb`. Stacks that share the core DB subnet need their own prefix - OCI refuses a
+second VNIC with the same hostname label ("Hostname oradb01 is already used in subnet",
+2026-11-03). `cpu-patch-26ai` keeps `oradb01`, `cpu-patch-wls` sets `hostname_prefix =
+"wls"`. A failed `cpu-lab-apply` now exits non-zero and says so; before 2026-11-03 it
+printed "Infrastructure ready" after a Terraform error. The role is the same for both releases -
+`db_release` 19 | 26 in the inventory selects the release profile
+(`db_release_profiles` in the role defaults).
+
+## WebLogic - cpu-patch-wls
+
+One host (OL9, 4 OCPU / 32 GB) carries every WebLogic version side by side, role
+`wls_engineering`, playbook `lab-wls-patch.yml`. Versions and their files are listed
+in `ansible/playbooks/group_vars/cpu_wls_hosts.yml`.
+
+### Upload to orarepo first
+
+`orarepo` is flat - upload into the bucket root and put the exact object name into
+`cpu_wls_hosts.yml`. eDelivery V-numbers are fine. A version with an empty name is
+left out and named in the run output.
+
+<!-- markdownlint-disable MD013 MD060 -->
+| Version | Installer (object in orarepo) | JDK (supported / used 2026-10) | Baseline SPB | SPB under test |
+| --- | --- | --- | --- | --- |
+| 14.1.2.0.0 | `V1045131-01.zip` (`fmw_14.1.2.0.0_wls.jar`) | 17.0.12+ or 21.0.4+ / `jdk-21.0.13.0.3_linux-x64_bin.tar.gz` | 39925660 | 40125898 |
+| 15.1.1.0.0 | `fmw_15.1.1.0.0_wls_generic.zip` (`fmw_15.1.1.0.0_wls_generic.jar`) | 17.0.16+ or 21.0.8+ / `jdk-21.0.13.0.3_linux-x64_bin.tar.gz` | 39944162 | 40128310 |
+| 12.2.1.4.0 | `fmw_12.2.1.4.0_infrastructure_Disk1_1of1.zip` | 8 (1.8.0_211+) / `jdk-8u511-b34-linux-x64.tar.gz` | 39976103 | 40129641 |
+| 14.1.1.0.0 | `fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip` | 11.0.6+ (or 8) / `jdk-11.0.33.0.3_linux-x64_bin.tar.gz` | 39925652 | 40129124 |
+<!-- markdownlint-restore -->
+
+The installer jar is found inside the zip by name, or as the only `fmw_*.jar`.
+
+Media sources:
+
+- SPBs: MOS patch pages, IDs from the FMW PAD (October 2026: MOS CPU360); the lab profile
+  of cpu-patch-tests names them, `make lab-media UPLOAD=1` puts them into orarepo
+- Installers: Oracle Software Delivery Cloud (eDelivery V-numbers are fine as object names)
+- JDKs: MOS KA961 "Supported Java SE Downloads on MOS" (copy in
+  `references/oracle/mos/mos-ka961-supported-java-se-downloads.mhtml`), or the public
+  Java download page for the free releases. Take the build of the current Java SE CPU or
+  Security Alert - the report recommends that level, a test on an older JDK only documents
+  the test environment. Put the build into the object name when it differs from the
+  public file: `jdk-8u511-b34-linux-x64.tar.gz` (alert 114820, MOS patch 40199083) sits
+  next to the public `jdk-8u511-linux-x64.tar.gz` (b33) - an upload that skips existing
+  objects would otherwise keep the wrong one in silence
+
+The role grows the root filesystem first (`oci-growfs`). The OL9 image comes with a 30 GB
+root on a 200 GB boot volume, and staging all four versions filled it on 2026-11-03.
+
+### Run
+
+```bash
+make cpu-lab-plan CPU_ENV=cpu-patch-wls
+make cpu-lab-apply CPU_ENV=cpu-patch-wls        # Stefan
+make cpu-lab-repo-par CPU_ENV=cpu-patch-wls REPO_CHECK=<one uploaded file name>
+make cpu-lab-install CPU_ENV=cpu-patch-wls BASTION=1 ANSIBLE_EXTRA="-e wls_only=14.1.2.0.0"
+make cpu-lab-patch CPU_ENV=cpu-patch-wls BASTION=1 ANSIBLE_EXTRA="-e wls_only=14.1.2.0.0"
+make cpu-lab-verify CPU_ENV=cpu-patch-wls BASTION=1
+make cpu-lab-rollback CPU_ENV=cpu-patch-wls BASTION=1 ANSIBLE_EXTRA="-e wls_only=14.1.2.0.0"
+make cpu-lab-stop CPU_ENV=cpu-patch-wls
+```
+
+Every step prints the full Ansible output. Long steps (installer, SPBAT,
+copyBinary/pasteBinary) run async - their output appears when the step ends.
+
+### What the patch does
+
+In place, the way the SPB README documents it (decided 2026-10-24 over an
+out-of-place swap at the same path - fewer moving parts, the way customers patch
+WebLogic, and the downtime measured is the real one):
+
+1. Archive home and inventory of the version (`backup-home-pre-<cycle>.tgz` in the
+   stage) - the servers keep running
+2. Stop both servers, `spbat.sh -phase precheck`, `spbat.sh -phase apply`, start -
+   this is the downtime that is measured
+3. Smoke test and `opatch lspatches`
+
+SPBAT has no rollback phase. `make cpu-lab-rollback` runs `opatch nrollback` with the
+bundle's `rollback_patchlist.txt` - Oracle's documented way back; OPatch stays at
+the version the SPB brought. `ANSIBLE_EXTRA="-e wls_rollback_restore=true"` restores
+the archive instead. 14.1.2 and 15.1.1 run in secured production mode (no Admin
+Console): every domain gets a domain-wide administration port and SSL with demo
+certificates; checks, deployment and shutdown go through the REST management API.
+
+Ports per version (base + 100 x position in `wls_versions`): administration port
+9002 / 9102 / 9202 / 9302, managed server SSL 8002 / 8102 / ...
+
+Reports: `ansible/reports/<host>/cputest-WLS-<version>-<date>-<phase>.json|md`.
+
+## Costs
+
+OCI list prices in USD, checked 2026-10-23. Compute E4.Flex: 0.025 per OCPU-hour,
+0.0015 per GB-hour of memory ([Oracle E4 announcement][e4-price]). Block Volume
+Balanced (10 VPU): 0.0255 per GB-month storage plus 0.0170 per GB-month
+performance = 0.0425 per GB-month ([OCI price list][oci-price]). Object Storage
+Standard: 0.0255 per GB-month. A third-party calculator showed a higher E4 OCPU
+rate (0.0328) - check the [OCI cost estimator][oci-estimator] before a budget
+decision.
+
+Free: VCN, NAT gateway, Internet gateway, Bastion, egress up to 10 TB a month,
+Logging (flow logs) within the free 10 GB a month.
+
+<!-- markdownlint-disable MD013 MD060 -->
+| Item | Sizing | Running | Stopped |
+| --- | --- | --- | --- |
+| db19 host (`cpu-patch-test`) | 8 OCPU / 32 GB | 0.248 per hour | 0 |
+| db26 host (`cpu-patch-26ai`) | 8 OCPU / 32 GB | 0.248 per hour | 0 |
+| WLS host (planned) | 4 OCPU / 32 GB | 0.148 per hour | 0 |
+| Boot volume per host | 200 GB, Balanced | included below | 8.50 per month (0.28 per day) |
+| Bucket `orarepo` | 314 GB, 594 objects (2026-10-23) | 8.00 per month | 8.00 per month |
+<!-- markdownlint-restore -->
+
+What that means:
+
+- **Two DB hosts running at the same time cost 0.50 per hour** - the budget of
+  0.5 per hour. A third host on top (WLS) goes to 0.64 per hour: run WLS with one
+  DB host stopped, or size it at 4 OCPU / 16 GB (0.124 per hour)
+- Compute is only charged while a host runs; `make cpu-lab-stop` after every run
+- **Storage runs all the time.** Three hosts parked: 3 x 8.50 = 25.50 per month
+  for boot volumes, plus 8.00 for the bucket - about 34 per month without a single
+  running hour. The biggest levers are a destroy after the report and a cleanup of
+  old media in `orarepo`
+- A CPU cycle as run in 2026-10: 19c about 3 h of host time (baseline, patch,
+  rollback, retries), 26ai about 3 h, WLS about 4 h per version - roughly
+  0.75 + 0.75 + 4 x 0.6 = 3.90 compute, plus about 34 per month storage while
+  the hosts are parked
+
+[e4-price]: https://www.dbta.com/Editorial/News-Flashes/Oracle-Announces-Cloud-Compute-E4-Platform-on-Third-Gen-AMD-EPYC-Processors-146040.aspx
+[oci-price]: https://www.oracle.com/cloud/price-list/
+[oci-estimator]: https://www.oracle.com/cloud/costestimator.html
 
 ## Two phases
 
@@ -185,6 +361,7 @@ The two homes answer two different questions, so they are requested differently.
 | --- | --- | --- | --- |
 | base (control) | `db19_patch_list_base` | `RU:<base_ru>,JDK,OPATCH,OJVM,DPBP` | every component named - the control group must be reproducible. OJVM is included on purpose: without it the base keeps the 2019 OJVM from the base image and the test measures a six-year OJVM jump on top of the quarterly delta |
 | target (test) | `db19_patch_list_target` | `RECOMMENDED:<target_ru>,JDK` | what Oracle actually recommends for the quarter: RU set alone in a plain quarter, RU plus MRP when there is one |
+| 26ai target | `db19_patch_list_target` | `RU:<target_ru>,OPATCH,DPBP,<JDK patch number>` | the customer profile. The `JDK` keyword does **not** work for 26ai - see below |
 
 <!-- markdownlint-restore -->
 
@@ -217,6 +394,25 @@ not. That is why every download writes its resolved set out:
 /opt/stage/patchset-<RU>.json   verbatim manifest incl. SHA-1 / SHA-256
 /opt/stage/patchset-<RU>.txt    one line per patch, plus MRP yes/no
 ```
+
+Measured on 2026-11-03 (AutoUpgrade 26.6.260925, download mode against MOS):
+
+```text
+19c  RU:19.33,OPATCH,JDK              -> RU 39915792, OPatch 12.2.0.1.55, JDK 40192005
+19c  RU:19.33,OJVM:19.33,OPATCH,DPBP,40192005
+                                      -> + OJVM 39803650, DPBP 40057600
+21c  RU:21.24,OPATCH,40192133         -> RU 40017330, OPatch 55, JDK 40192133
+26ai RU:23.26.4,OPATCH,DPBP,JDK       -> RU 40007731, OPatch 55, DPBP 40089368, NO JDK:
+     "Skipping standalone JDK patch for RU 23.26.4 ... because JDK patches are included in the RU"
+26ai RU:23.26.4,OPATCH,DPBP,40192148  -> + JDK 40192148 (JDK BUNDLE PATCH 23.26.4.0.261023)
+ARM  platform is ARM.X64 (LINUX.ARM64 is rejected); RU 19.33 "unavailable" until its
+     ETA 2026-11-06 (MOS CPU359 section 2.2)
+```
+
+The Database PAD (MOS CPU359) says the opposite of AutoUpgrade for 26ai: "DB and GI RUs
+include the previous JDK", the current one is a separate patch. A JDK patch released
+for a Security Alert therefore has to be requested **by number** on 26ai. The keyword
+is fine on 19c and 21c.
 
 The summary is also printed during the run. It is scoped to the RU of that job -
 AutoUpgrade accumulates `patches_info.json` when several download jobs share one
@@ -433,7 +629,22 @@ make cpu-lab-install ANSIBLE_EXTRA="\
 ```
 
 The role stages the artifact like the base image and hands AutoUpgrade
-`patch=GOLDIMAGE:<file>` instead of a patch list.
+`patch=GOLDIMAGE:<file>` instead of a patch list. That form installs the image **only** -
+use it for a self-made image that already holds everything.
+
+### A gold image AutoUpgrade downloads
+
+The download step (`try_gold_image`, on for 19 and 26) asks AutoUpgrade for a gold image
+of the RU. It contains RU + OCW only; OPatch, OJVM, DPBP and the JDK patch come down as
+separate files next to it. create_home therefore gets the **patch list** plus
+`gold_image=YES` and `download=no`: AutoUpgrade takes the image from the folder and
+applies the rest on top (verified 2026-11-03: 26ai home with RU 40007731, OCW, DPBP,
+JDK 40192148, OPatch 55).
+
+Until 2026-11-03 (`01ed3a1`) the role used `GOLDIMAGE:` for a downloaded image as well.
+That built a 19.33 home without OJVM, DPBP, JDK and OPatch; `binary patch set complete`
+would have failed it later, but only after the move. The runs of 2026-10-23 and
+2026-10-25 were not affected (19c used the base image, 26ai had no one-off patches).
 
 ## Release Update availability
 
@@ -446,6 +657,28 @@ RU:19.31, RU:19.32    ->  resolved
 
 The lab therefore runs **previous RU -> current RU**, which is self-maintaining:
 each quarter shift `db_base_ru` and `db_target_ru` by one.
+
+## Repeating a test on a host that already ran it
+
+The role skips what is there: a staged RU (`.download-complete-<RU>` stamp) is not
+downloaded again, an existing target home is not rebuilt. A repeat with a changed patch
+set - 2026-11-03, JDK 40192005 instead of 39902051 - therefore needs a fresh target
+home and stage directory, or it re-tests the old home:
+
+```bash
+-e oracle_home_target=/u00/app/oracle/product/<RU>-<MMDD>/dbhome_1
+-e db19_stage_dir=/opt/stage-<YYYYMMDD>     # link the base image in: ln -s /opt/stage/LINUX.X64_193000_db_home.zip
+-e db19_try_gold_image=false                # 19c only, to keep the base-image path
+```
+
+Before the run, drop the guaranteed restore point a previous run left (it marks the
+state the rollback returned to, so nothing is lost) - AutoUpgrade creates one with the
+same name. cpu-patch-tests `make lab-run` passes these overrides as `TARGET_HOME`,
+`STAGE_DIR` and `PATCH_LIST`.
+
+A Bastion session lives three hours. A run started through `BASTION=1` rebuilds the
+tunnel per step; a manual SSH session after a long run needs
+`make cpu-lab-bastion-tunnel CPU_ENV=...` again.
 
 ## Step 1 - Configure
 
@@ -543,6 +776,44 @@ AutoUpgrade does **not** move the listener - the role stops it from the old home
 and starts it from the new one, and repoints `/etc/oratab`.
 
 The old ORACLE_HOME is deliberately left in place for rollback testing.
+
+On a host that has been patched before, give the run its own AutoUpgrade log
+directory, so an open deploy job of the previous run cannot be resumed by
+mistake (see "A pending deploy job blocks every later AutoUpgrade job"):
+
+```bash
+make cpu-lab-patch BASTION=1 ANSIBLE_EXTRA="-e db19_autoupgrade_log_dir=/u00/app/oracle/cfgtoollogs/autoupgrade-2026-10"
+```
+
+### Fallback - target RU from the bucket instead of MOS
+
+The default stays the MOS download on the host. When that is not wanted or not
+possible, `cpu-patch-tests` downloads the patch set (`au-download`) and uploads it
+below a prefix of the `orarepo` bucket (`make upload OCI_OBJECT_PREFIX=patches/2026-10/`).
+The lab then gets a read PAR on exactly that prefix:
+
+```bash
+make cpu-lab-patch-par PATCH_PREFIX=patches/2026-10/   # lists the objects it will stage
+make cpu-lab-patch BASTION=1 ANSIBLE_EXTRA="-e db19_autoupgrade_log_dir=/u00/app/oracle/cfgtoollogs/autoupgrade-2026-10"
+make cpu-lab-par-revoke                                # after the run
+```
+
+- The URL is kept in `terraform/envs/cpu-patch-test/.patch-par` (0600, git-ignored)
+  and reaches Ansible in the 0600 vars file of the make targets - no Terraform
+  apply, no inventory change. Every make target that uses it prints a line saying so
+- The host lists the prefix and pulls the objects itself into `/opt/stage`,
+  region-internal; nothing travels through the controller. Sizes are checked
+  against the listing
+- AutoUpgrade then runs with `download=no` for `create_home` and `deploy`. Only the
+  target RU uses the PAR - a `cpu-lab-install` with the file present still builds
+  the base RU as before
+- The PAR covers only the prefix: an object outside it answers HTTP 401
+  (verified 2026-10-22)
+- **Not yet proven:** the target list is `RECOMMENDED`. Whether AutoUpgrade
+  resolves it from a staged folder without MOS - and whether it needs the
+  `patches_info.json` / `bug-map.json` that `make upload` (only `*.zip`) leaves
+  out - is checked on the first run. If it refuses, upload those JSON files too,
+  or fall back to MOS by revoking the PAR
 
 ## Step 5 - Verify
 

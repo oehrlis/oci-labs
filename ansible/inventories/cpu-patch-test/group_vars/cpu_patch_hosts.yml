@@ -1,0 +1,74 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: cpu_patch_hosts.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.15
+# Version....: v0.1.0
+# Purpose....: Map the cpu-patch-test lab onto the oradba.automation collection
+#              for the collection lab test (playbooks/lab-oradba-automation.yml).
+# Notes......: Loaded only by the cpu-lab-coll-* make targets, which add this
+#              directory as a second inventory source next to the Terraform
+#              generated hosts.yml. lab-cpu-patch.yml never sees these values.
+#              Only collection variables (oradba_*, <role>_*) live here - no
+#              db19_* overrides, so both scenarios stay independent.
+#              Secrets are not stored here: the make targets pass mos_username,
+#              mos_password and db19_autoupgrade_keystore_password in a 0600
+#              vars file, mapped to the keystore role below.
+# Reference..: https://github.com/oehrlis/oradba-ansible/blob/v0.2.0/docs/patch-apply.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Same reason as the play vars in lab-cpu-patch.yml: every lab host answers on
+# the reused tunnel port 127.0.0.1:2222, so a pinned host key is always stale.
+# Set here because the collection plays are imported and carry no play vars.
+ansible_ssh_common_args: >-
+  -o ServerAliveInterval=60 -o ServerAliveCountMax=30
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+  -o LogLevel=ERROR
+
+# -- Engine -------------------------------------------------------------------
+# Collection v0.2.0 defaults to engine 0.6.0. 0.6.1 carries the three fixes the
+# collection's own molecule run found (#5 gettext/expect, #6 dry-run output,
+# #7 --groups-standard) - test the pair that goes into the USZ window.
+odb_autoupgrade_install_version: "0.6.1"
+odb_autoupgrade_install_sha256: 198fbc48fe56d53920aae6e5f5954f26f214f42343409a091efce4bfad37bc8b
+
+# -- Download host and profile -------------------------------------------------
+# A single-host lab is its own download host; no patch_stage needed.
+oradba_download_host: true
+
+# Profile data belongs to cpu-patch-tests (rule 5). 2026-09_db19_linux is
+# RU 19.32 + MRP - a level the lab has run before, so a failure points at the
+# collection and not at a new RU. Override CPU_PATCH_TESTS_DIR for another
+# checkout location; the default is the sibling repository.
+oradba_lab_profiles_dir: >-
+  {{ lookup('ansible.builtin.env', 'CPU_PATCH_TESTS_DIR',
+            default=playbook_dir ~ '/../../../cpu-patch-tests') }}/profiles
+oradba_patch_profile: 2026-09_db19_linux
+patch_download_profiles:
+  - "{{ oradba_lab_profiles_dir }}/{{ oradba_patch_profile }}.profile"
+
+# -- Keystore -----------------------------------------------------------------
+# Mapped from the vars file the make targets write (cpu_lab_ansible_secrets).
+# Evaluated lazily: steps without the keystore role need no op signin.
+autoupgrade_keystore_mos_user: "{{ mos_username }}"
+autoupgrade_keystore_mos_password: "{{ mos_password }}"
+autoupgrade_keystore_password: "{{ db19_autoupgrade_keystore_password }}"
+
+# -- Database -----------------------------------------------------------------
+# CPUDB runs from the lab's base home. source_home is explicit so the rollback
+# finds the previous home even if the switch record is lost. The collection
+# names its target home itself (product/19.32.0.0) - it cannot collide with the
+# lab role's product/<RU>/dbhome_1 homes.
+oradba_patch_databases:
+  - sid: "{{ oracle_sid }}"
+    source_home: "{{ oracle_home_base }}"
+
+# The lab keeps listener.ora and tnsnames.ora in <home>/network/admin (no
+# central TNS_ADMIN), so the switch exercises the network file copy path.
+oracle_home_switch_listeners: [LISTENER]
+oracle_home_switch_tns_admin: ""
+oracle_home_rollback_listeners: [LISTENER]
+oracle_home_rollback_tns_admin: ""

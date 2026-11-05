@@ -1,0 +1,36 @@
+# CPU Patch Test WebLogic {{ wv_evidence.version }} - {{ wv_evidence.phase }}
+
+- Cycle: {{ wv_evidence.cycle }}
+- Host: {{ wv_evidence.host }} ({{ wv_evidence.os }})
+- JDK: {{ wv_evidence.jdk }}
+- Oracle home: `{{ wv_evidence.home }}`
+- SPB baseline: `{{ wv_evidence.spb_base }}`
+- SPB under test: `{{ wv_evidence.spb_target }}`
+- Method: SPB in place with SPBAT (servers stopped), home and inventory
+  archived before; rollback with OPatch nrollback (rollback_patchlist.txt)
+
+## Durations
+
+- Archive of home and inventory (no downtime): {{ wv_evidence.durations.backup or '-' }}
+- SPBAT apply: {{ wv_evidence.durations.spb_apply or '-' }}
+- OPatch nrollback: {{ wv_evidence.durations.nrollback or '-' }}
+- Downtime (stop to RUNNING): {{ (wv_evidence.durations.downtime_s ~ ' s') if wv_evidence.durations.downtime_s else '-' }}
+- Rollback (stop to RUNNING): {{ (wv_evidence.durations.rollback_s ~ ' s') if wv_evidence.durations.rollback_s else '-' }}{{ (' - ' ~ wv_evidence.rollback_method) if wv_evidence.rollback_method else '' }}
+
+## Smoke test
+
+- AdminServer RUNNING: {{ wv_evidence.smoke.admin_running | default('-') }}
+- {{ wls_managed_server }} RUNNING: {{ wv_evidence.smoke.ms_running | default('-') }}
+- Deploy of {{ wls_smoke_app }}: {{ wv_evidence.smoke.deploy | default('-') }}
+- Page served over SSL: {{ wv_evidence.smoke.page | default('-') }}
+- SPBAT precheck rc: {{ wv_evidence.spb_precheck_rc or '-' }}
+
+## Patch level
+{% for snap, lines in wv_evidence.patches.items() %}
+
+### {{ snap }}
+
+```text
+{{ lines | join('\n') }}
+```
+{% endfor %}

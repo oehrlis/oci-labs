@@ -12,22 +12,16 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   WireGuard, yet every public subnet had UDP 51820 open to the internet. Opt-in like `allowed_ssh_cidrs`; the next
   `apply` of core, cpu-lab and datasafe-demo removes the rule
 
-### Fixed
-
-- **oracle_db_native**: open all PDBs and save their state after creation - the dbca PDB had no saved state,
-  stayed MOUNTED after the scheduled restart and its Data Safe target went NEEDS_ATTENTION (ORA-01109)
-- **datasafe-demo**: `tunnel.sh` 0.2.0 restarts ssh while a new Bastion session key propagates - before, ssh
-  exited once with "Permission denied (publickey)" and the tunnel failed until rerun (`DSDEMO_TUNNEL_ATTEMPTS`)
-- **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
-  `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
-  (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
-- **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
-  26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
-  installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch
-  (`--alias`, stdin)
-
 ### Changed
 
+- `db19_engineering`: `db_release` 19 | 26 with `db_release_profiles` - OS check, preinstall RPM,
+  AutoUpgrade `target_version` (26ai: 23, the tool's value), gold image, patch lists, dbca schema,
+  `CV_ASSUME_DISTID` and `binopt.uniaud` per release; the `db19_*` names stay, so `oracle_db_native`
+  keeps working. A guard rejects a release that does not fit the RU strings
+- `db19_engineering`: both releases try the gold image first (`db19_try_gold_image` true,
+  `gold_image=YES`) instead of the 19.3.0 base image plus patches - AutoUpgrade 26.6 serves 19c gold
+  images again (Lauf A). 19c not yet run on this path; without a gold image it falls back to the
+  base image. Also affects the 19c home of `oracle_db_native` (datasafe-demo)
 - **datasafe-demo**: odb_datasafe default 1.3.1 (first release with `ds_target_register.sh --type onprem`),
   sha256 from the release asset.
 - **lint-shell** also checks `demos/`.
@@ -52,6 +46,52 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   migration roadmap added to `tasks/roadmap-cpu-lab.md`.
 
 ### Added
+
+- `db19_engineering` evidence per run (`tasks/evidence.yml`): before the patch / rollback a run
+  marker plus `opatch lspatches` and `lsinventory` of every home; after verify / rollback the same
+  again, the AutoUpgrade job logs, the sqlpatch / datapatch logs and the alert log since the marker,
+  report and snapshots - fetched to `ansible/reports/<host>/<SID>-<base>-to-<target>-<time>/` with
+  an `index.md`. Not yet run on a host
+- `make` secrets helper takes `LAB_MOS_USER` / `LAB_MOS_PASS` from the environment when set - the
+  cpu-patch-tests `lab-run` reads 1Password once at its start, so a run needs nobody later
+- Lab profiles from cpu-patch-tests (`make lab-profile`, passed by `make lab-run` as `-e @file`):
+  `wls_engineering` takes the SPB file names per version from `wls_spb`; `db19_engineering`
+  asserts that the target home carries the target RU, so a new profile against old tfvars stops
+  instead of patching into the previous quarter's home
+- **cpu-patch-wls** (`terraform/envs/cpu-patch-wls`): one WebLogic host on the shared core (OL9,
+  4 OCPU / 32 GB), inventory group `cpu_wls_hosts`
+- Role `wls_engineering` and playbook `lab-wls-patch.yml`: WebLogic 12.2.1.4 / 14.1.1 / 14.1.2 /
+  15.1.1 side by side - JDK, Oracle home, baseline SPB via SPBAT, domain (AdminServer + ms1,
+  administration port, SSL), REST smoke test with a static WAR, the SPB under test in place
+  (home and inventory archived first) and its rollback with `opatch nrollback` - the swap at the
+  same path from the first draft was dropped on 2026-10-24. Not yet run on a host
+- `make cpu-lab-repo-par`: read-by-name PAR on the flat `orarepo` bucket, no listing; passed to
+  Ansible as `lab_repo_url` in the 0600 vars file
+- **cpu-patch-26ai** (`terraform/envs/cpu-patch-26ai`): 26ai host for the CPU tests on the shared
+  core - VCN, DB subnet and Bastion are read from `envs/core` via `terraform_remote_state`, the stack
+  creates only host, NSG, keys and inventory (OL9, 8 OCPU / 32 GB, no public IP). First stack of the
+  layout "one CPU network, one stack per product/release"
+- `make cpu-lab-* CPU_ENV=<stack>`: every CPU lab target works on the chosen stack (default
+  `cpu-patch-test`), with its own Bastion tunnel port (2222 / 2224 / 2225 - 2223 is the
+  datasafe-demo tunnel)
+- **Patch PAR fallback for the target RU**: `make cpu-lab-patch-par PATCH_PREFIX=...`
+  mints a read PAR (AnyObjectRead + ListObjects) on a prefix of the `orarepo`
+  bucket, where `cpu-patch-tests` uploads its downloaded patch set. With it,
+  `db19_engineering` stages the target RU from the bucket into `/opt/stage`
+  and runs AutoUpgrade with `download=no`; MOS on the host stays the default.
+  The URL travels in the 0600 vars file, not through Terraform.
+  `cpu-lab-par-revoke` now revokes it together with the base-image PAR (and no
+  longer stops early when no base-image PAR exists). Runbook: "Fallback - target
+  RU from the bucket instead of MOS".
+- **oradba.automation lab test**: `ansible/playbooks/lab-oradba-automation.yml`
+  runs the collection's `site_setup`, `patch_download`, `home_create`,
+  `patch_apply` and `patch_rollback` against the real `CPUDB` of the
+  cpu-patch-test lab, one tag per step, rollback only by tag. Collection
+  variables live in `ansible/inventories/cpu-patch-test/group_vars/`, loaded only
+  by the new targets `make cpu-lab-coll-install` (v0.2.0, sha256-pinned, into
+  `ansible/collections`), `cpu-lab-coll-check` (offline), `cpu-lab-coll STEP=...`
+  and `cpu-lab-coll-rollback MODE=restore|home`. Engine pinned to 0.6.1.
+  Runbook: `docs/runbook-oradba-automation-lab.md`.
 
 - **datasafe-demo**: new stack `terraform/envs/datasafe-demo` for the LRN6087 Data Safe demo (Oracle AI
   World 2026) - own core (VCN, Bastion), one OL8 x86 host (4 OCPU, 32 GB) with a data volume on `/u01`,
@@ -122,6 +162,76 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   explicitly and is unaffected.
 
 ### Fixed
+
+- **oracle_db_native**: open all PDBs and save their state after creation - the dbca PDB had no saved state,
+  stayed MOUNTED after the scheduled restart and its Data Safe target went NEEDS_ATTENTION (ORA-01109)
+- **datasafe-demo**: `tunnel.sh` 0.2.0 restarts ssh while a new Bastion session key propagates - before, ssh
+  exited once with "Permission denied (publickey)" and the tunnel failed until rerun (`DSDEMO_TUNNEL_ATTEMPTS`)
+- **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
+  `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
+  (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
+- **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
+  26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
+  installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch
+  (`--alias`, stdin)
+- `db19_engineering`: the evidence after a patch is collected - the include in `main.yml` carried
+  the tags only itself, so `--tags patch` skipped every task inside (`apply: tags`). The 26ai run of
+  2026-10-25 has the evidence of its rollback only; the datapatch logs of its patch are still on
+  the host
+- `db19_engineering`: with a gold image of the target staged, the deploy runs `download=no` too.
+  With `download=yes` it asked the Update Advisor to build the gold image again - 5 GB more on
+  2026-10-23, and on 2026-10-25 a rejected request (UPD-02008 Invalid Authorization) that failed
+  the analyze
+- `db19_engineering`: every PDB is opened and its state saved after dbca and again before a patch
+  (`tasks/pdbs_open.yml`). dbca saves no state, so after an instance restart PDB1 sat MOUNTED and
+  AutoUpgrade failed in PREFIXUPS / PRE_FIXED_OBJECTS with ORA-20011 / ORA-01219 (26ai, 2026-10-24,
+  before the downtime - the database stayed untouched)
+- **datasafe-demo**: IAM resources (scheduler policy, instance-principal dynamic group and policy) via an
+  `oci.home` provider and `home_region` - tenancies whose home region differs from the deployment region
+  (Trivadis: FRA vs. ZRH) rejected them with 403 NotAllowed
+- **datasafe-demo** fresh-host install (2026-10-22/23): `getent` result from `ansible_facts` (ansible-core 2.21),
+  26ai gold image downloaded before `create_home`, connector `setup.py` with `JAVA_HOME`, `oracle_cman_home` as the
+  installed marker, the CMAN started by `setup.py` stopped before systemd takes over, OraDBA registration batch
+  (`--alias`, stdin)
+- `db19_engineering`: the deploy job switches to `gold_image=YES` when a gold image of the target RU
+  is staged. With `NO` and no base image in the folder, analyze stopped with "A usable base image
+  file is not found" (26ai 2026-10-23, Lauf A finding 7). The patch-set manifest reads the gold
+  download on the gold path - it listed the base RU's patches and verify reported a false
+  "missing 39578879"; fix not yet run on a host. Known: the deploy downloads the gold image a
+  second time (about 5 GB)
+- `db19_engineering`: the oracle-user check read `getent_passwd`, which current ansible-core no
+  longer injects as a variable - it failed on every fresh host although the preinstall RPM had
+  created the user. Reads `ansible_facts['getent_passwd']` now (affects 19c too)
+- `db19_engineering`: the gold-image path works end to end. The download template lacked
+  `dl1.gold_image=YES` (AutoUpgrade then fetches individual patches only), and create_home never
+  used the downloaded image. create_home now builds from the newest `db_goldimage_<RU>_*.zip` via
+  `GOLDIMAGE:`; 19c falls back to `gold_image=AUTO` plus the base image when none came down. The
+  download stamp has its own name on the gold path. Verified on the 26ai host 2026-10-23: gold image
+  23.26.3 (RU + OCW + MRP fixes) downloaded, home built, CDB created in 12.5 min
+- `db19_engineering` smoke test: asserts first that oratab points at the target home
+  (new `tasks/target_home_active.yml`, shared with `verify.yml`). Before, `cpu-lab-verify`
+  against a database still on the base home ran `expdp` from the target home and hung for
+  more than 10 minutes (2026-10-23, 19.32 tools against CPUDB on 19.31)
+- `db19_engineering` smoke test: the `CPUSMOKE` password no longer shows up in `ps`. The
+  schema SQL goes to sqlplus on stdin, the Data Pump parfile is written by Ansible (0600)
+  and removed even when the round trip fails. Before, both heredocs sat in the argv of the
+  `/bin/bash -c` that Ansible spawns
+- `db19_engineering` test report: the base line now lists the patches the base home
+  actually carries (`opatch lspatches`). It printed `db19_patch_list_base` - wrong for a
+  base home built with another list (2026-10-23: `RECOMMENDED:19.32,JDK` shown as
+  `RU:19.32,JDK,OPATCH,OJVM,DPBP`). The AutoUpgrade line shows the build instead of the
+  raw command result, the host line no longer breaks
+
+- **`make cpu-lab-bastion-tunnel` failed three times in a row** on a fresh
+  session: the Bastion refuses the key for a few seconds after the session is
+  ACTIVE, ssh exits at once, and the loop kept probing a dead tunnel. The loop now
+  restarts a dead ssh within the same session; the first attempt succeeds.
+- **`terraform plan` replaced the lab instance** when the workstation key in
+  `ssh_public_key_files` changed - the database would have been destroyed for a
+  value cloud-init reads on first boot only. `modules/oracle_db_host` now ignores
+  `metadata["ssh_authorized_keys"]`; rolling keys is an explicit `-replace`.
+- **`BASTION=1` with a command-line `ANSIBLE_EXTRA`** dropped the tunnel host and
+  port, and Ansible went to the public IP. The append is now `override`.
 
 - **docs/runbook-ad-cmu-lab.md** carried the real compartment and DRG OCID in
   its `terraform.tfvars` example - replaced by `<compartment_ocid>` and

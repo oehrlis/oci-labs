@@ -1,0 +1,169 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/servers.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Start or stop AdminServer and the managed server of one version
+#              (wv_action: start | stop).
+# Notes......: Start with the domain scripts and boot.properties - no password on
+#              a command line. State and shutdown through the REST management
+#              API over the administration port, credentials from a 0600 curl
+#              config. A stop that does not finish in wls_stop_timeout kills the
+#              Java processes of this domain, so a swap never runs against a live
+#              home.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Write the REST credentials for curl
+  become: true
+  ansible.builtin.template:
+    src: curl.cfg.j2
+    dest: "{{ wv_curl_cfg }}"
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0600"
+  no_log: true
+
+- name: Read the server states
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+    cmd: >-
+      curl -K {{ wv_curl_cfg }} --max-time 20
+      '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes?fields=name,state&links=none'
+      || echo '{"items": []}'
+    executable: /bin/bash
+  register: wv_states_raw
+  changed_when: false
+
+- name: Parse the server states
+  ansible.builtin.set_fact:
+    wv_states: >-
+      {{ dict((wv_states_raw.stdout | from_json).get('items', [])
+              | map(attribute='name') | zip((wv_states_raw.stdout | from_json).get('items', [])
+              | map(attribute='state'))) }}
+
+# --- start -------------------------------------------------------------------------
+- name: Start the servers of WebLogic {{ wls.version }}
+  when: wv_action == 'start'
+  block:
+    - name: Start the AdminServer
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.shell:
+        cmd: >-
+          nohup setsid {{ wv_domain }}/bin/startWebLogic.sh
+          > {{ wv_domain }}/servers/AdminServer/logs/AdminServer.out 2>&1 < /dev/null &
+        executable: /bin/bash
+      environment:
+        JAVA_HOME: "{{ wv_jdk }}"
+      when: wv_states.AdminServer | default('') != 'RUNNING'
+      changed_when: true
+
+    - name: Wait for the AdminServer to report RUNNING
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+        cmd: >-
+          curl -K {{ wv_curl_cfg }} --max-time 10
+          '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes/AdminServer?fields=state&links=none'
+        executable: /bin/bash
+      register: wv_as_state
+      until: "'RUNNING' in wv_as_state.stdout"
+      retries: "{{ (wls_start_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+      failed_when: "'RUNNING' not in wv_as_state.stdout"
+
+    - name: Start the managed server
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.shell:
+        cmd: >-
+          nohup setsid {{ wv_domain }}/bin/startManagedWebLogic.sh {{ wls_managed_server }} {{ wv_t3s_url }}
+          > {{ wv_domain }}/servers/{{ wls_managed_server }}/logs/{{ wls_managed_server }}.out 2>&1 < /dev/null &
+        executable: /bin/bash
+      environment:
+        JAVA_HOME: "{{ wv_jdk }}"
+        JAVA_OPTIONS: "{{ wls_client_java_options }}"
+      when: wv_states[wls_managed_server] | default('') != 'RUNNING'
+      changed_when: true
+
+    - name: Wait for the managed server to report RUNNING
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+        cmd: >-
+          curl -K {{ wv_curl_cfg }} --max-time 10
+          '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes/{{ wls_managed_server }}?fields=state&links=none'
+        executable: /bin/bash
+      register: wv_ms_state
+      until: "'RUNNING' in wv_ms_state.stdout"
+      retries: "{{ (wls_start_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+      failed_when: "'RUNNING' not in wv_ms_state.stdout"
+
+# --- stop --------------------------------------------------------------------------
+- name: Stop the servers of WebLogic {{ wls.version }}
+  when: wv_action == 'stop'
+  block:
+    - name: Shut the servers down through REST
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
+        cmd: >-
+          curl -K {{ wv_curl_cfg }} --max-time {{ wls_stop_timeout }} -X POST
+          -H 'Content-Type: application/json' -d '{}'
+          '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes/{{ item }}/forceShutdown'
+        executable: /bin/bash
+      loop:
+        - "{{ wls_managed_server }}"
+        - AdminServer
+      when: wv_states[item] | default('') == 'RUNNING'
+      register: wv_shutdown
+      changed_when: true
+      failed_when: false
+
+    # "[w]eblogic" matches the servers but not this task's own shell, whose
+    # command line carries the pattern literally. The home path is in every
+    # server command line (-Dwls.home=<home>/wlserver/server).
+    - name: Wait until no server of this version is left
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          pgrep -af '[w]eblogic[.]Server' | grep -F '{{ wv_home }}/wlserver' || true
+        executable: /bin/bash
+      register: wv_left
+      until: wv_left.stdout | length == 0
+      retries: "{{ (wls_stop_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+      failed_when: false
+
+    - name: Kill what the shutdown left behind
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          pgrep -af '[w]eblogic[.]Server' | grep -F '{{ wv_home }}/wlserver' \
+            | awk '{print $1}' | xargs -r kill -9
+        executable: /bin/bash
+      when: wv_left.stdout | length > 0
+      changed_when: true
+
+    - name: Assert no server runs from the Oracle home
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          pgrep -af '[w]eblogic[.]Server' | grep -F '{{ wv_home }}/wlserver' || true
+        executable: /bin/bash
+      register: wv_home_procs
+      changed_when: false
+      failed_when: wv_home_procs.stdout | length > 0

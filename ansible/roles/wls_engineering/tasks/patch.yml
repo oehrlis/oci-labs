@@ -1,0 +1,112 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/patch.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.24
+# Version....: v0.2.0
+# Purpose....: Apply the Stack Patch Bundle under test to one version, in place.
+# Notes......: The documented way (SPB README): stop everything that runs from
+#              the home, SPBAT apply, start. Decided 2026-10-24 over the
+#              out-of-place swap at the same path - fewer moving parts, the way
+#              customers patch WebLogic, and the downtime measured is the real
+#              one. Before the downtime the home and its inventory are archived;
+#              rollback.yml rolls back with OPatch (nrollback with the bundle's
+#              rollback_patchlist.txt) and keeps the archive as the safety net.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Derive the layout
+  ansible.builtin.include_tasks: vars.yml
+
+- name: Stage the software
+  ansible.builtin.include_tasks: fetch.yml
+
+- name: Check the state of the version - {{ wls.version }}
+  become: true
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ wv_home }}/wlserver"
+    - "{{ wv_domain }}/config/config.xml"
+    - "{{ wv_stage }}/.spb-target-applied"
+  register: wv_patch_pre
+
+- name: Assert the baseline exists and the target SPB is not applied yet
+  ansible.builtin.assert:
+    that:
+      - wv_patch_pre.results[0].stat.exists
+      - wv_patch_pre.results[1].stat.exists
+      - not wv_patch_pre.results[2].stat.exists
+    fail_msg: >-
+      WebLogic {{ wls.version }}: needs an installed home and domain (make cpu-lab-install)
+      and the target SPB not applied yet - {{ wv_stage }}/.spb-target-applied says it
+      is; roll it back first (make cpu-lab-rollback).
+
+- name: Start the servers if they are down
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: start
+
+- name: Record the patch level before the SPB
+  ansible.builtin.include_tasks: snapshot.yml
+  vars:
+    wv_snap: base
+
+# --- safety net, no downtime ------------------------------------------------------
+# The home is static while the servers run (logs and state live in the domain),
+# so the archive is taken before the downtime starts.
+- name: Archive the home and its inventory before the SPB
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:  # noqa: command-instead-of-module - one archive of home, inventory and pointer
+    cmd: >-
+      tar -czf {{ wv_backup_tgz }}
+      -C / {{ wv_home | regex_replace('^/', '') }} {{ wv_inv_dir_base | regex_replace('^/', '') }}
+      {{ wv_inv_base | regex_replace('^/', '') }}
+    creates: "{{ wv_backup_tgz }}"
+  register: wv_t_backup
+  async: "{{ wls_async_timeout }}"
+  poll: "{{ wls_async_poll }}"
+
+# --- the patch - downtime ---------------------------------------------------------
+- name: Downtime begins
+  ansible.builtin.set_fact:
+    wv_down_start: "{{ now(utc=true).timestamp() | int }}"
+
+- name: Stop the servers
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: stop
+
+- name: Apply the target SPB in place
+  ansible.builtin.include_tasks: spb.yml
+  vars:
+    wv_spb_zip: "{{ wls.spb_target }}"
+    wv_spb_home: "{{ wv_home }}"
+    wv_spb_role: target
+
+- name: Start the servers from the patched home
+  ansible.builtin.include_tasks: servers.yml
+  vars:
+    wv_action: start
+
+- name: Downtime ends
+  ansible.builtin.set_fact:
+    wv_down_end: "{{ now(utc=true).timestamp() | int }}"
+
+# --- evidence ---------------------------------------------------------------------
+- name: Smoke test the patched home
+  ansible.builtin.include_tasks: smoke.yml
+
+- name: Record the patched patch level
+  ansible.builtin.include_tasks: snapshot.yml
+  vars:
+    wv_snap: patched
+
+- name: Write the report
+  ansible.builtin.include_tasks: report.yml
+  vars:
+    wv_phase: patch

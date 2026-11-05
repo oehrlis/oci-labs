@@ -60,6 +60,17 @@ variable "freeform_tags" {
 # Instance sizing and image
 # -----------------------------------------------------------------------------
 
+variable "hostname_prefix" {
+  type        = string
+  description = "Hostname and DNS label prefix, the host key is appended (oradb01). Must be unique per subnet: envs that share the core DB subnet need their own."
+  default     = "oradb"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9]{0,12}$", var.hostname_prefix))
+    error_message = "hostname_prefix must start with a letter, lowercase alphanumeric, at most 13 characters (OCI DNS label limit with the two-digit key)."
+  }
+}
+
 variable "host_count" {
   type        = number
   description = "Number of identical Oracle DB hosts to create (workshops: > 1)."

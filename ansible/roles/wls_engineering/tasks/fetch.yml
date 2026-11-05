@@ -1,0 +1,60 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/fetch.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Stage the files of one version from orarepo through the PAR.
+# Notes......: The PAR URL is a bearer credential. It reaches curl through the
+#              task environment and a config on stdin - never argv (ps), never
+#              the task result - so the file name can be logged and a failure
+#              names the file. Files already staged are not fetched again.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Create the stage directory of WebLogic {{ wls.version }}
+  become: true
+  ansible.builtin.file:
+    path: "{{ wv_stage }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0750"
+
+- name: Stage the files of WebLogic from orarepo - {{ wls.version }}
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      dest="{{ wv_stage }}/{{ item }}"
+      if [[ -s "$dest" ]]; then echo "present"; exit 0; fi
+      printf 'url = "%s%s"\n' "$REPO_URL" "{{ item }}" \
+        | curl -fsS --retry 3 --max-time 3600 -K - -o "$dest.part"
+      mv -f "$dest.part" "$dest"
+      echo "fetched $(du -h "$dest" | cut -f1)"
+    executable: /bin/bash
+  environment:
+    REPO_URL: "{{ lab_repo_url }}"
+  loop: "{{ ['installer_zip', 'jdk_file', 'spb_base', 'spb_target'] | map('extract', wls) | list }}"
+  register: wv_fetch
+  changed_when: "'fetched' in wv_fetch.stdout"
+  failed_when: false
+
+- name: Assert every file of WebLogic came down - {{ wls.version }}
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: >-
+      {{ item.item }} could not be fetched from orarepo
+      ({{ item.stderr | default('') | regex_replace('https?://\S+', '<url>') | trim }}).
+      Check the object name in group_vars/cpu_wls_hosts.yml against the bucket,
+      and that the repository PAR has not expired
+      (make cpu-lab-repo-par CPU_ENV=cpu-patch-wls).
+    success_msg: "{{ item.item }}: {{ item.stdout }}"
+  loop: "{{ wv_fetch.results }}"
+  loop_control:
+    label: "{{ item.item }}"

@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/report_patchset.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.21
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.1.1
 # Purpose....: Record which patches AutoUpgrade actually resolved for one RU.
 # Notes......: A CPU test is only worth its report. The base home is defined by
 #              an explicit patch list, the target home by RECOMMENDED - so for
@@ -52,10 +52,14 @@
 # folder - after the target RU the manifest also lists the base RU's patches. The
 # job's own stdout is the authoritative per-RU set: every patch it resolved is
 # printed as a description line followed by "    File: <name> ... VALIDATED".
+# On the gold path that job is the gold-image download - reading the skipped
+# individual-patch job left the 23.26.4 manifest with the 23.26.3 entries
+# (2026-10-23), and verify then reported the base RU as missing.
 - name: Determine which files this download job resolved
   ansible.builtin.set_fact:
     db19_patchset_job_files: >-
-      {{ db19_download.stdout_lines | default([])
+      {{ ((db19_gold_download if (db19_gold_image_used | default(false) | bool) else db19_download)
+          .stdout_lines | default([]))
          | map('regex_search', '^\s+File:\s+(\S+)', '\1')
          | select('truthy') | flatten | list }}
 

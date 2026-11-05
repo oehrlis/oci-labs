@@ -1,0 +1,45 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/pdbs_open.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.24
+# Version....: v0.1.0
+# Purpose....: Open every PDB and save the state, from db19_pdbs_home.
+# Notes......: dbca leaves a new PDB open but without a saved state, so after the
+#              next instance restart it sits MOUNTED. AutoUpgrade's PREFIXUPS then
+#              fails in PRE_FIXED_OBJECTS: GATHER_FIXED_OBJECTS_STATS raises
+#              ORA-20011 / ORA-01219 "Database or pluggable database not open"
+#              (26ai, 2026-10-24; the 19c lab had a MOUNTED PDB1 in August too).
+#              Idempotent - an open PDB stays open, save state is harmless.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Open all PDBs and save the state
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      {{ db19_pdbs_home }}/bin/sqlplus -s / as sysdba <<'SQL'
+      set echo off feedback off pagesize 0 lines 200
+      whenever sqlerror exit failure
+      select 'BEFORE ' || name || ' ' || open_mode from v$pdbs where name <> 'PDB$SEED';
+      alter pluggable database all except pdb$seed open;
+      alter pluggable database all except pdb$seed save state;
+      select 'AFTER ' || name || ' ' || open_mode from v$pdbs where name <> 'PDB$SEED';
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ db19_pdbs_home }}"
+    ORACLE_BASE: "{{ oracle_base }}"
+    ORACLE_SID: "{{ oracle_sid }}"
+  register: db19_pdbs_open
+  changed_when: "'MOUNTED' in db19_pdbs_open.stdout"
+
+- name: Report the PDB states
+  ansible.builtin.debug:
+    msg: "{{ db19_pdbs_open.stdout_lines }}"

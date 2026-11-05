@@ -1,0 +1,43 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/vars.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.24
+# Version....: v0.2.0
+# Purpose....: Derive paths and ports of one version (loop var "wls").
+# Notes......: Every version has its own inventory (pointer in wls_etc_dir), so
+#              the archive patch.yml takes covers home and inventory of exactly
+#              that version, and a restore touches nothing else.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Derive the layout of WebLogic {{ wls.version }}
+  ansible.builtin.set_fact:
+    wv_short: "{{ wls.version.split('.')[:4] | join('.') }}"
+    wv_tag: "{{ wls.version.split('.')[:4] | join('') }}"
+    wv_home: "{{ wls_product_root }}/wls-{{ wls.version.split('.')[:4] | join('.') }}"
+    wv_jdk: "{{ wls_product_root }}/jdk-{{ wls.jdk_major }}"
+    wv_stage: "{{ wls_stage_root }}/{{ wls.version }}"
+    wv_domain: "{{ wls_domain_root }}/wls{{ wls.version.split('.')[:4] | join('') }}"
+    wv_ports:
+      admin_listen: "{{ wls_port_admin_listen + wls_port_step * wls.index }}"
+      admin_ssl: "{{ wls_port_admin_ssl + wls_port_step * wls.index }}"
+      admin_port: "{{ wls_port_admin_port + wls_port_step * wls.index }}"
+      ms_listen: "{{ wls_port_ms_listen + wls_port_step * wls.index }}"
+      ms_ssl: "{{ wls_port_ms_ssl + wls_port_step * wls.index }}"
+      ms_admin: "{{ wls_port_ms_admin + wls_port_step * wls.index }}"
+    # 14.1.2 and later: secured production mode, no Admin Console.
+    wv_secured: "{{ wls.version is version('14.1.2', '>=') }}"
+
+- name: Derive the inventory pointers of WebLogic {{ wls.version }}
+  ansible.builtin.set_fact:
+    wv_inv_base: "{{ wls_etc_dir }}/oraInst-{{ wv_tag }}-base.loc"
+    wv_inv_dir_base: "{{ wls_inventory_root }}/wls-{{ wv_tag }}-base"
+    wv_backup_tgz: "{{ wv_stage }}/backup-home-pre-{{ wls_cycle }}.tgz"
+    wv_admin_url: "https://localhost:{{ wv_ports.admin_port }}"
+    wv_t3s_url: "t3s://localhost:{{ wv_ports.admin_port }}"
+    wv_curl_cfg: "{{ wls_etc_dir }}/curl-{{ wv_tag }}.cfg"
+    wv_report_stem: "cputest-WLS-{{ wv_short | replace('.', '_') }}-{{ ansible_facts['date_time']['date'] | replace('-', '') }}"

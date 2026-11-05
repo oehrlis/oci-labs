@@ -20,6 +20,7 @@ No customer data, no long-lived access.
 - [Architecture overview](docs/architecture-overview.md)
 - [Naming concept](docs/namingconcept.md)
 - Runbooks: [CPU patch lab](docs/runbook-cpu-patch-lab.md),
+  [oradba.automation lab test](docs/runbook-oradba-automation-lab.md),
   [AD / CMU lab](docs/runbook-ad-cmu-lab.md), [MFA with OMA](docs/runbook-mfa-oma.md)
 - `make help` lists all targets; `make lint` runs every check
 

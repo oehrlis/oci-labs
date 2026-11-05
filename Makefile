@@ -44,12 +44,21 @@ ANSIBLE_DIR := ansible
 DOC_DIR     := docs
 TOOLS_DIR   := tools
 
-# -- cpu-patch-test lab --------------------------------------------------------
-CPU_ENV_DIR   := $(TF_DIR)/envs/cpu-patch-test
+# -- CPU patch labs ------------------------------------------------------------
+# One stack per product/release on the shared CPU network. CPU_ENV picks the
+# stack every cpu-lab-* target works on - cpu-patch-test (19c) by default,
+# CPU_ENV=cpu-patch-26ai for 26ai. Each stack has its own tunnel port, so two
+# labs can be driven at the same time.
+CPU_ENV       ?= cpu-patch-test
+CPU_ENV_DIR   := $(TF_DIR)/envs/$(CPU_ENV)
 CPU_ENV_FILE  := $(CPU_ENV_DIR)/.env
 CPU_PLAN_FILE := tfplan
-CPU_INVENTORY := inventories/generated/cpu-patch-test/hosts.yml
-CPU_PLAYBOOK  := playbooks/lab-cpu-patch.yml
+CPU_INVENTORY := inventories/generated/$(CPU_ENV)/hosts.yml
+CPU_TUNNEL_PORT_cpu-patch-test := 2222
+CPU_TUNNEL_PORT_cpu-patch-26ai := 2224
+CPU_TUNNEL_PORT_cpu-patch-wls := 2225
+CPU_PLAYBOOK_cpu-patch-wls := playbooks/lab-wls-patch.yml
+CPU_PLAYBOOK  := $(or $(CPU_PLAYBOOK_$(CPU_ENV)),playbooks/lab-cpu-patch.yml)
 
 # 1Password references. Read inside recipe bodies only - never at parse time,
 # because a $(shell op read ...) would run before any 'op signin'.
@@ -65,8 +74,12 @@ ANSIBLE_EXTRA ?=
 # it is up first. Without it the host/port override had to be repeated on every
 # single call, and a tunnel that died mid-session produced UNREACHABLE rather
 # than a retry. See the Bastion section for why a listening port is not proof.
+#
+# 'override' is required: without it a command-line ANSIBLE_EXTRA="-e ..."
+# replaces this append wholesale, and Ansible silently goes to the public IP
+# from the inventory instead of the tunnel.
 ifeq ($(BASTION),1)
-ANSIBLE_EXTRA += -e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)
+override ANSIBLE_EXTRA += -e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)
 BASTION_DEP := cpu-lab-bastion-tunnel
 else
 BASTION_DEP :=
@@ -304,12 +317,12 @@ core-destroy: guard-terraform ## Tear the shared core down (asks, YES=1 to skip)
 	$(Q)cd "$(CORE_ENV_DIR)" && "$(TERRAFORM)" destroy -input=false $(if $(YES),-auto-approve,)
 
 .PHONY: cpu-lab-init
-cpu-lab-init: guard-terraform ## Init Terraform for the cpu-patch-test env
+cpu-lab-init: guard-terraform ## Init Terraform for the CPU_ENV stack (default cpu-patch-test)
 	$(Q)cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" init -input=false
-	@echo "✅ cpu-patch-test initialised"
+	@echo "✅ $(CPU_ENV) initialised"
 
 .PHONY: cpu-lab-plan
-cpu-lab-plan: guard-terraform ## Plan cpu-patch-test (dry-run, writes tfplan)
+cpu-lab-plan: guard-terraform ## Plan the CPU_ENV stack (dry-run, writes tfplan)
 	$(Q)cd "$(CPU_ENV_DIR)" && \
 	  set -a; [[ -f .env ]] && . ./.env; set +a; \
 	  "$(TERRAFORM)" plan -input=false -out="$(CPU_PLAN_FILE)"
@@ -328,11 +341,12 @@ cpu-lab-apply: guard-terraform ## Build the lab infra - applies a saved tfplan, 
 	    echo "A saved plan applies WITHOUT a confirmation prompt."; \
 	    echo "Review it first with : make cpu-lab-show"; \
 	    echo "Plan again instead   : make cpu-lab-apply REPLAN=1"; \
-	    "$(TERRAFORM)" apply -input=false "$(CPU_PLAN_FILE)"; \
+	    rc=0; "$(TERRAFORM)" apply -input=false "$(CPU_PLAN_FILE)" || rc=$$?; \
 	    rm -f "$(CPU_PLAN_FILE)"; \
+	    if [[ $$rc -ne 0 ]]; then echo "❌ terraform apply failed (rc=$$rc) - the saved plan is spent, run: make cpu-lab-apply CPU_ENV=$(CPU_ENV) REPLAN=1"; exit $$rc; fi; \
 	  else \
 	    echo "No saved plan - Terraform will plan now and ask for confirmation."; \
-	    "$(TERRAFORM)" apply -input=false; \
+	    "$(TERRAFORM)" apply -input=false || { rc=$$?; echo "❌ terraform apply failed (rc=$$rc)"; exit $$rc; }; \
 	  fi
 	@echo "✅ Infrastructure ready - inventory: $(CPU_INVENTORY_ABS)"
 
@@ -353,16 +367,27 @@ cpu-lab-show: guard-terraform ## Show the saved tfplan in human-readable form
 # The values reach python3 through the environment rather than argv for the same
 # reason; /proc/<pid>/environ and "ps -E" are owner-restricted, argv is not.
 # The trap removes the file on success, error and Ctrl-C alike.
+# LAB_MOS_USER / LAB_MOS_PASS in the environment skip the op read: cpu-patch-tests'
+# lab-run reads 1Password once at its start, so a long run needs nobody at the
+# keyboard later (an unanswered prompt times out and fails the step).
 define cpu_lab_ansible_secrets
 umask 077; \
-mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
-mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+if [[ -n "$${LAB_MOS_USER:-}" && -n "$${LAB_MOS_PASS:-}" ]]; then \
+  mos_user="$$LAB_MOS_USER"; mos_pass="$$LAB_MOS_PASS"; \
+else \
+  echo "🔐 1Password: confirm the prompt now (MOS credentials)"; \
+  mos_user="$$("$(OP)" read '$(OP_MOS_USER)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+  mos_pass="$$("$(OP)" read '$(OP_MOS_PASS)')" || { echo "❌ op read failed - run: eval \$$(op signin)"; exit 1; }; \
+fi; \
 sys_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw db_sys_password 2>/dev/null || echo '')"; \
 ks_pass="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -raw autoupgrade_keystore_password 2>/dev/null || echo '')"; \
+patch_url="$$(cat "$(PATCH_PAR_FILE)" 2>/dev/null || true)"; \
+repo_url="$$(cat "$(REPO_PAR_FILE)" 2>/dev/null || true)"; \
+if [[ -n "$$patch_url" ]]; then echo "ℹ️  Target RU from the bucket PAR in $(PATCH_PAR_FILE) - not from MOS (make cpu-lab-par-revoke to undo)"; fi; \
 vars_file="$$(mktemp "$${TMPDIR:-/tmp}/cpu-lab-vars.XXXXXX")"; \
 trap 'rm -f "$$vars_file"' EXIT INT TERM; \
-MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" \
-  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"]}, open(sys.argv[1], "w"))' "$$vars_file"
+MOS_USER="$$mos_user" MOS_PASS="$$mos_pass" SYS_PASS="$$sys_pass" KS_PASS="$$ks_pass" PATCH_URL="$$patch_url" REPO_URL="$$repo_url" \
+  python3 -c 'import json, os, sys; json.dump({"mos_username": os.environ["MOS_USER"], "mos_password": os.environ["MOS_PASS"], "db19_sys_password": os.environ["SYS_PASS"], "db19_autoupgrade_keystore_password": os.environ["KS_PASS"], "db19_patch_url": os.environ["PATCH_URL"], "lab_repo_url": os.environ["REPO_URL"]}, open(sys.argv[1], "w"))' "$$vars_file"
 endef
 
 .PHONY: cpu-lab-install
@@ -378,8 +403,15 @@ cpu-lab-patch: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Run the Au
 	    --tags patch -e @"$$vars_file" $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-verify
+# WebLogic needs the admin password and the repository PAR in every step (the role
+# asserts both first) - verify and rollback included. The database steps do not, so
+# they keep running without a 1Password prompt (2026-11-03: WLS verify failed on it).
+CPU_LAB_WLS_SECRETS = $(if $(filter cpu-patch-wls,$(CPU_ENV)),$(cpu_lab_ansible_secrets);,vars_file="";)
+
 cpu-lab-verify: $(BASTION_DEP) guard-ansible guard-cpu-env ## Verify the post-patch state (read-only)
-	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" --tags verify $(ANSIBLE_EXTRA)
+	$(Q)$(CPU_LAB_WLS_SECRETS) \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" --tags verify \
+	    $${vars_file:+-e @"$$vars_file"} $(ANSIBLE_EXTRA)
 
 .PHONY: cpu-lab-step
 cpu-lab-step: $(BASTION_DEP) guard-ansible guard-op guard-cpu-env ## Run a single tag: make cpu-lab-step TAG=create_home
@@ -439,14 +471,14 @@ cpu-lab-start: guard-oci guard-terraform ## Start the stopped lab instance(s)
 .PHONY: cpu-lab-destroy
 cpu-lab-destroy: guard-terraform ## Tear down the lab (asks for confirmation, YES=1 to skip)
 	@if [[ "$(YES)" != "1" ]]; then \
-	  echo -e "$(COLOR_YELLOW)This destroys the whole cpu-patch-test stack.$(COLOR_RESET)"; \
+	  echo -e "$(COLOR_YELLOW)This destroys the whole $(CPU_ENV) stack.$(COLOR_RESET)"; \
 	  read -r -p "Type 'destroy' to confirm: " answer; \
 	  [[ "$$answer" == "destroy" ]] || { echo "Aborted."; exit 1; }; \
 	fi
 	$(Q)cd "$(CPU_ENV_DIR)" && \
 	  set -a; [[ -f .env ]] && . ./.env; set +a; \
 	  "$(TERRAFORM)" destroy -input=false -auto-approve
-	@echo "✅ cpu-patch-test destroyed"
+	@echo "✅ $(CPU_ENV) destroyed"
 
 .PHONY: cpu-lab-cycle
 cpu-lab-cycle: ## Full cycle: apply -> install -> patch -> verify (leaves the lab running)
@@ -517,18 +549,94 @@ cpu-lab-par-list: guard-oci ## List existing PARs on the base image bucket
 	    --output table
 
 .PHONY: cpu-lab-par-revoke
-cpu-lab-par-revoke: guard-oci ## Revoke the base-image PARs on the bucket and clear the .env entry
+cpu-lab-par-revoke: guard-oci ## Revoke the base-image and patch PARs on the bucket and clear their local copies
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  profile="$${profile:-DEFAULT}"; \
-	  ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
-	      --query 'data[?name==`$(PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
-	  if [[ -z "$$ids" ]]; then echo "No PAR named $(PAR_NAME) found."; exit 0; fi; \
-	  for id in $$ids; do \
-	    echo "Revoking $$id"; \
-	    "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
+	  for name in $(PAR_NAME) $(PATCH_PAR_NAME) $(REPO_PAR_NAME); do \
+	    ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
+	        --query "data[?name=='$$name'].id" --raw-output | tr -d '[]", ' | grep . || true)"; \
+	    if [[ -z "$$ids" ]]; then echo "No PAR named $$name found."; continue; fi; \
+	    for id in $$ids; do \
+	      echo "Revoking $$name $$id"; \
+	      "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
+	    done; \
 	  done; \
-	  $(drop_base_image_url)
-	@echo "✅ PAR(s) revoked and removed from $(CPU_ENV_FILE)"
+	  $(drop_base_image_url); \
+	  rm -f "$(PATCH_PAR_FILE)" "$(REPO_PAR_FILE)"
+	@echo "✅ PAR(s) revoked; $(CPU_ENV_FILE) entry, $(PATCH_PAR_FILE) and $(REPO_PAR_FILE) removed"
+
+# Fallback patch source for the target RU (MOS on the host stays the default).
+# cpu-patch-tests downloads the patch set and uploads it below PATCH_PREFIX in
+# the same bucket (make upload OCI_OBJECT_PREFIX=...). This read PAR covers that
+# prefix only; the host lists and pulls the objects itself. The URL lands in a
+# 0600 file the make targets pass on in their vars file - no Terraform apply.
+PATCH_PAR_NAME := cpu-lab-patches
+PATCH_PAR_FILE := $(CPU_ENV_DIR)/.patch-par
+PATCH_PREFIX   ?=
+
+.PHONY: cpu-lab-patch-par
+cpu-lab-patch-par: guard-oci ## Mint a read PAR on PATCH_PREFIX in the orarepo bucket for the target RU (PAR_DAYS=7)
+	@[[ -n "$(PATCH_PREFIX)" ]] || { echo "❌ PATCH_PREFIX is required, e.g. PATCH_PREFIX=patches/2026-10/"; exit 1; }
+	@[[ "$(PATCH_PREFIX)" == */ ]] || echo "⚠️  PATCH_PREFIX does not end with / - it matches every object name starting with '$(PATCH_PREFIX)'"
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  profile="$${profile:-DEFAULT}"; \
+	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
+	  echo -e "$(COLOR_BOLD)Minting a pre-authenticated request for the patch set$(COLOR_RESET)"; \
+	  echo "  profile : $$profile"; \
+	  echo "  bucket  : $(PAR_BUCKET)"; \
+	  echo "  prefix  : $(PATCH_PREFIX)"; \
+	  echo "  access  : AnyObjectRead + ListObjects, this prefix only"; \
+	  echo "  expires : $$expires  ($(PAR_DAYS) days)"; \
+	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
+	      --bucket-name "$(PAR_BUCKET)" \
+	      --name "$(PATCH_PAR_NAME)" \
+	      --object-name "$(PATCH_PREFIX)" \
+	      --access-type AnyObjectRead \
+	      --bucket-listing-action ListObjects \
+	      --time-expires "$$expires" \
+	      --query 'data."full-path"' --raw-output)"; \
+	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
+	  list="$$(curl -fsS --max-time 30 "$$uri?fields=name,size")" || { echo "❌ PAR does not list the prefix"; exit 1; }; \
+	  echo "$$list" | python3 -c 'import json,sys; o=[x for x in json.load(sys.stdin).get("objects",[]) if not x["name"].endswith("/")]; print("  objects : %d, %.1f GB" % (len(o), sum(x.get("size",0) for x in o)/1e9)); [print("    " + x["name"]) for x in o]'; \
+	  ( umask 077; printf '%s\n' "$$uri" > "$(PATCH_PAR_FILE)" ); \
+	  echo "  written : $(PATCH_PAR_FILE) (git-ignored, 0600; token not echoed)"
+	@echo "✅ Patch PAR ready - cpu-lab-patch now stages the target RU from it (zero objects fails the run)"
+
+# ------------------------------------------------------------------------------
+# Software repository PAR - installers and patches by name from the flat bucket
+# ------------------------------------------------------------------------------
+# orarepo has no folders, so a prefix PAR does not fit. This one reads any object
+# of the bucket by name but cannot LIST it: whoever holds the URL still has to
+# know the file names, and the 590-odd objects stay out of sight. The roles name
+# every file they fetch (wls_versions in the WLS inventory group_vars).
+REPO_PAR_NAME := cpu-lab-repo
+REPO_PAR_FILE := $(CPU_ENV_DIR)/.repo-par
+
+.PHONY: cpu-lab-repo-par
+cpu-lab-repo-par: guard-oci ## Mint a read-by-name PAR on the whole orarepo bucket, no listing (PAR_DAYS=7, REPO_CHECK=<file> to probe)
+	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
+	  [[ -n "$$profile" ]] || { echo "❌ No TF_VAR_oci_config_profile in $(CPU_ENV_FILE) - refusing to fall back to DEFAULT (wrong tenancy)"; exit 1; }; \
+	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
+	  echo -e "$(COLOR_BOLD)Minting a read-by-name PAR on the software repository$(COLOR_RESET)"; \
+	  echo "  profile : $$profile"; \
+	  echo "  bucket  : $(PAR_BUCKET)"; \
+	  echo "  access  : AnyObjectRead, no listing"; \
+	  echo "  expires : $$expires  ($(PAR_DAYS) days)"; \
+	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
+	      --bucket-name "$(PAR_BUCKET)" \
+	      --name "$(REPO_PAR_NAME)" \
+	      --access-type AnyObjectRead \
+	      --time-expires "$$expires" \
+	      --query 'data."full-path"' --raw-output)"; \
+	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
+	  if [[ -n "$(REPO_CHECK)" ]]; then \
+	    curl -fsSI --max-time 30 "$${uri}$(REPO_CHECK)" >/dev/null \
+	      && echo "  probe   : $(REPO_CHECK) readable" \
+	      || { echo "❌ $(REPO_CHECK) not readable through the PAR"; exit 1; }; \
+	  fi; \
+	  ( umask 077; printf '%s\n' "$$uri" > "$(REPO_PAR_FILE)" ); \
+	  echo "  written : $(REPO_PAR_FILE) (git-ignored, 0600; token not echoed)"
+	@echo "✅ Repository PAR ready - the WLS role fetches every file it names through it"
 
 # ==============================================================================
 # Gold images
@@ -588,9 +696,84 @@ cpu-lab-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Roll the databas
 	@if [[ "$(YES)" != "1" ]]; then \
 	  read -r -p "    Continue? [y/N] " a; [[ "$$a" == "y" ]] || { echo "aborted"; exit 1; }; \
 	fi
-	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
-	  --tags rollback $(ANSIBLE_EXTRA)
+	$(Q)$(CPU_LAB_WLS_SECRETS) \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
+	  --tags rollback $${vars_file:+-e @"$$vars_file"} $(ANSIBLE_EXTRA)
 	@echo "✅ Rollback done - the lab runs from the base home again"
+
+# ==============================================================================
+# oradba.automation collection lab test
+# ==============================================================================
+# Runs the oradba-ansible collection against the real CPUDB database of the
+# cpu-patch-test lab - the switch and rollback roles of v0.2.0 have only seen
+# molecule stubs so far. Same host, same tunnel, same secrets as the lab role;
+# the collection installs into its own tree (odb_autoupgrade engine under
+# ORACLE_BASE/local, homes as product/<RU>.0.0), so it does not disturb the
+# lab role's /opt/autoupgrade and product/<RU>/dbhome_1 homes.
+# Runbook: docs/runbook-oradba-automation-lab.md
+
+COLL_VERSION  ?= 0.2.0
+COLL_SHA256   ?= d20a9ea976a10e81def958d8b3bcd10ddc9bb38820242cf5ba42be9da5da54ef
+COLL_TARBALL  := oradba-automation-$(COLL_VERSION).tar.gz
+COLL_URL      := https://github.com/oehrlis/oradba-ansible/releases/download/v$(COLL_VERSION)/$(COLL_TARBALL)
+COLL_DIST_DIR := $(ANSIBLE_DIR)/collections/.dist
+COLL_PLAYBOOK := playbooks/lab-oradba-automation.yml
+# Second inventory source: only the collection variables, see its header.
+COLL_INVENTORY_VARS := inventories/cpu-patch-test
+COLL_INVENTORY_ARGS := -i "$(CPU_INVENTORY)" -i "$(COLL_INVENTORY_VARS)"
+COLL_STEPS    := setup download home apply verify
+# Profiles come from the sibling cpu-patch-tests checkout (read-only). Exported
+# so the group_vars lookup resolves the same path for playbook and ad-hoc runs.
+CPU_PATCH_TESTS_DIR ?= $(abspath $(CURDIR)/../cpu-patch-tests)
+export CPU_PATCH_TESTS_DIR
+
+.PHONY: cpu-lab-coll-install
+cpu-lab-coll-install: guard-ansible ## Install oradba.automation COLL_VERSION into ansible/collections (sha256-pinned)
+	$(Q)mkdir -p "$(COLL_DIST_DIR)" && cd "$(COLL_DIST_DIR)" && \
+	  { curl -fsSLo "$(COLL_TARBALL)" "$(COLL_URL)" || { echo "❌ download failed: $(COLL_URL)"; exit 1; }; } && \
+	  { echo "$(COLL_SHA256)  $(COLL_TARBALL)" | shasum -a 256 -c - || \
+	    { echo "❌ $(COLL_TARBALL) does not match COLL_SHA256 - not installed"; rm -f "$(COLL_TARBALL)"; exit 1; }; }
+	$(Q)cd "$(ANSIBLE_DIR)" && ansible-galaxy collection install --force \
+	  -p collections "collections/.dist/$(COLL_TARBALL)"
+	@echo "✅ oradba.automation $(COLL_VERSION) in $(ANSIBLE_DIR)/collections"
+
+.PHONY: cpu-lab-coll-check
+cpu-lab-coll-check: guard-ansible guard-cpu-env ## Offline check of the collection test: syntax and resolved variables, no host contact
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" $(COLL_INVENTORY_ARGS) \
+	  "$(COLL_PLAYBOOK)" --syntax-check
+	$(Q)cd "$(ANSIBLE_DIR)" && ansible $(COLL_INVENTORY_ARGS) cpu_patch_hosts \
+	  -c local -m ansible.builtin.debug -e ansible_python_interpreter=python3 -a "msg={{ { \
+	    'engine': odb_autoupgrade_install_version, \
+	    'profile': oradba_patch_profile, \
+	    'profile_file': patch_download_profiles[0], \
+	    'profile_file_exists': patch_download_profiles[0] is file, \
+	    'databases': oradba_patch_databases, \
+	    'listeners': oracle_home_switch_listeners } }}"
+
+.PHONY: cpu-lab-coll
+cpu-lab-coll: $(BASTION_DEP) guard-ansible guard-cpu-env ## Run one collection step: make cpu-lab-coll STEP=setup|download|home|apply|verify
+	@[[ " $(COLL_STEPS) " == *" $(STEP) "* ]] || \
+	  { echo "❌ STEP must be one of: $(COLL_STEPS)"; exit 1; }
+	$(Q)if [[ "$(STEP)" == "setup" || "$(STEP)" == "download" ]]; then \
+	    [[ -n "$(OP)" ]] || { echo "❌ STEP=$(STEP) needs the MOS keystore - 1Password CLI not found"; exit 1; }; \
+	    $(cpu_lab_ansible_secrets); \
+	    vars_arg=(-e @"$$vars_file"); \
+	  else \
+	    vars_arg=(); \
+	  fi; \
+	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" $(COLL_INVENTORY_ARGS) \
+	    "$(COLL_PLAYBOOK)" --tags "$(STEP)" "$${vars_arg[@]}" $(ANSIBLE_EXTRA)
+
+.PHONY: cpu-lab-coll-rollback
+cpu-lab-coll-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Collection rollback: make cpu-lab-coll-rollback MODE=restore|home
+	@[[ "$(MODE)" == "restore" || "$(MODE)" == "home" ]] || \
+	  { echo "❌ MODE is required and has no default: MODE=restore (flashback) or MODE=home (keep data)"; exit 1; }
+	@echo "⚠️  oradba.automation rollback, mode $(MODE), against CPUDB."
+	@if [[ "$(YES)" != "1" ]]; then \
+	  read -r -p "    Continue? [y/N] " a; [[ "$$a" == "y" ]] || { echo "aborted"; exit 1; }; \
+	fi
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" $(COLL_INVENTORY_ARGS) \
+	  "$(COLL_PLAYBOOK)" --tags rollback -e oracle_home_rollback_mode="$(MODE)" $(ANSIBLE_EXTRA)
 
 # ==============================================================================
 # OCI Bastion sessions
@@ -609,8 +792,13 @@ cpu-lab-rollback: $(BASTION_DEP) guard-ansible guard-cpu-env ## Roll the databas
 # Bastion drops the connection, and the tunnel fails with "Permission denied
 # (publickey)" even though -i names the correct key.
 
-BASTION_LOCAL_PORT ?= 2222
+BASTION_LOCAL_PORT ?= $(or $(CPU_TUNNEL_PORT_$(CPU_ENV)),2222)
 BASTION_SESSION_TTL ?= 10800
+# A step starts on a session with at least this much life left. The tunnel probe
+# alone passed on 2026-11-03 seconds before the session expired - the WLS step
+# then died with "Connection refused" (and an earlier one hung with the servers
+# stopped). Longest step: AutoUpgrade patch, ~40 min.
+BASTION_RENEW_MARGIN ?= 3600
 
 .PHONY: cpu-lab-bastion-session
 cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forwarding session and print the tunnel command
@@ -649,6 +837,10 @@ cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forw
 # on 2026-08-22 - and ssh keeps the local listener while the far end is gone, so
 # nc succeeds and the next Ansible run dies with UNREACHABLE. Every check here
 # therefore runs a real command on the host.
+# A fresh session can be ACTIVE and still refuse the key for a few seconds
+# ("Permission denied (publickey)", 2026-10-22), and ssh then exits at once. The
+# tunnel loop therefore restarts a dead ssh within the same session instead of
+# probing a tunnel that is already gone.
 BASTION_SSH_OPTS := -o StrictHostKeyChecking=no -o IdentitiesOnly=yes \
   -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
 
@@ -665,16 +857,30 @@ cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the
 	  key="$$("$(TERRAFORM)" output -raw lab_private_key_path 2>/dev/null)"; \
 	  probe() { ssh -i "$$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 \
 	            -o StrictHostKeyChecking=no -p $(BASTION_LOCAL_PORT) opc@127.0.0.1 true 2>/dev/null; }; \
-	  if probe; then echo "✅ Tunnel already usable on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
+	  renew=0; \
+	  if [[ -f .bastion-tunnel.cmd ]]; then \
+	    age=$$(( $$(date +%s) - $$(stat -f %m .bastion-tunnel.cmd 2>/dev/null || stat -c %Y .bastion-tunnel.cmd) )); \
+	    if [[ $$age -gt $$(( $(BASTION_SESSION_TTL) - $(BASTION_RENEW_MARGIN) )) ]]; then \
+	      echo "Bastion session is $$((age / 60)) min old (TTL $$(( $(BASTION_SESSION_TTL) / 60 )) min) - renewing before the step"; \
+	      renew=1; rm -f .bastion-tunnel.cmd; \
+	    fi; \
+	  fi; \
+	  if [[ $$renew -eq 0 ]] && probe; then echo "✅ Tunnel already usable on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
 	  pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
 	  for attempt in 1 2 3; do \
 	    if [[ ! -f .bastion-tunnel.cmd ]] || [[ $$attempt -gt 1 ]]; then \
 	      echo "Creating a Bastion session (attempt $$attempt)..."; \
 	      $(MAKE) --no-print-directory -C "$(CURDIR)" cpu-lab-bastion-session >/dev/null 2>&1 || true; \
 	    fi; \
-	    nohup bash -c "$$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS)" \
-	      >.bastion-tunnel.log 2>&1 & \
-	    for i in $$(seq 1 15); do probe && break; sleep 4; done; \
+	    pid=""; \
+	    for i in $$(seq 1 15); do \
+	      if [[ -z "$$pid" ]] || ! kill -0 "$$pid" 2>/dev/null; then \
+	        nohup bash -c "$$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS)" \
+	          >.bastion-tunnel.log 2>&1 & \
+	        pid=$$!; \
+	      fi; \
+	      sleep 4; probe && break; \
+	    done; \
 	    if probe; then echo "✅ Tunnel up on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
 	    echo "   attempt $$attempt failed: $$(tail -1 .bastion-tunnel.log 2>/dev/null)"; \
 	    pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \

@@ -1,0 +1,75 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/domain.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Create the domain of one version with WLST offline and leave the
+#              boot identity for both servers.
+# Notes......: An existing domain is kept - the patch swaps the home underneath
+#              it at the same path, the domain itself is never touched.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Check whether the domain of WebLogic exists - {{ wls.version }}
+  become: true
+  ansible.builtin.stat:
+    path: "{{ wv_domain }}/config/config.xml"
+  register: wv_domain_stat
+
+- name: Create the domain
+  when: not wv_domain_stat.stat.exists
+  block:
+    - name: Render the WLST domain script
+      become: true
+      ansible.builtin.template:
+        src: create_domain.py.j2
+        dest: "{{ wv_stage }}/create_domain.py"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0640"
+
+    - name: Run WLST offline
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: "{{ wv_home }}/oracle_common/common/bin/wlst.sh {{ wv_stage }}/create_domain.py"
+      environment:
+        JAVA_HOME: "{{ wv_jdk }}"
+        WLS_ADMIN_PW: "{{ wls_admin_password }}"
+      register: wv_wlst
+      changed_when: wv_wlst.rc == 0
+      async: 1800
+      poll: 15
+
+    - name: Report the WLST outcome
+      ansible.builtin.debug:
+        msg: "{{ wv_wlst.stdout_lines[-15:] }}"
+
+- name: Ensure the server directories exist
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.file:
+    path: "{{ wv_domain }}/servers/{{ item.0 }}/{{ item.1 }}"
+    state: directory
+    mode: "0750"
+  loop: "{{ ['AdminServer', wls_managed_server] | product(['logs', 'security']) | list }}"
+
+# boot.properties is encrypted by the server on its first start.
+- name: Write the boot identity of both servers
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.copy:
+    dest: "{{ wv_domain }}/servers/{{ item }}/security/boot.properties"
+    content: |
+      username={{ wls_admin_user }}
+      password={{ wls_admin_password }}
+    mode: "0600"
+    force: false
+  loop:
+    - AdminServer
+    - "{{ wls_managed_server }}"
+  no_log: true

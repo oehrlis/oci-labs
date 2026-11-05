@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/smoke.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.21
-# Version....: v0.1.0
+# Date.......: 2026.10.23
+# Version....: v0.1.1
 # Purpose....: Functional smoke test of the components a quarterly patch touches.
 # Notes......: Verifying that patches are registered says nothing about whether
 #              the patched code still works. One canary per patched component,
@@ -26,6 +26,9 @@
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
+
+- name: Assert the database runs from the target home
+  ansible.builtin.import_tasks: target_home_active.yml
 
 - name: Set the smoke-test parameters
   ansible.builtin.set_fact:
@@ -52,10 +55,11 @@
 - name: Create the throwaway smoke-test schema
   become: true
   become_user: "{{ oracle_os_user }}"
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
+  # The SQL goes in on stdin: a heredoc inside cmd would put the password into
+  # the argv of the /bin/bash -c that Ansible spawns, visible in ps.
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_target }}/bin/sqlplus -s / as sysdba"
+    stdin: |
       set echo off feedback on pagesize 0
       whenever sqlerror exit failure
       -- PDB1 is where a realistic application would live; the root is not the
@@ -77,8 +81,6 @@
       grant create any directory, datapump_exp_full_database,
             datapump_imp_full_database to {{ db19_smoke_schema }};
       exit
-      SQL
-    executable: /bin/bash
   environment: &smoke_env
     ORACLE_HOME: "{{ oracle_home_target }}"
     ORACLE_BASE: "{{ oracle_base }}"
@@ -164,6 +166,22 @@
 # 3. Data Pump - the Data Pump bundle patch is in every quarterly set
 # ---------------------------------------------------------------------------
 
+# The credential lives in a 0600 parfile written by Ansible, never in argv - a
+# heredoc in the shell script below would put it on the /bin/bash -c command
+# line, and a Data Pump command line is visible in ps to every user on the host.
+- name: Write the Data Pump parfile
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.copy:
+    dest: "{{ db19_smoke_dir }}/smoke.par"
+    content: |
+      userid={{ db19_smoke_schema }}/{{ db19_smoke_password }}@{{ db19_smoke_pdb }}
+      directory=smoke_dir
+      dumpfile=smoke.dmp
+      tables={{ db19_smoke_schema }}.smoke_tab
+    mode: "0600"
+  no_log: true
+
 - name: Smoke test Data Pump
   become: true
   become_user: "{{ oracle_os_user }}"
@@ -172,7 +190,7 @@
       set -o pipefail
       umask 077
       cd {{ db19_smoke_dir }}
-      rm -f smoke.dmp smoke_exp.log smoke_imp.log smoke.par
+      rm -f smoke.dmp smoke_exp.log smoke_imp.log
       {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
       set echo off feedback off pagesize 0
       whenever sqlerror exit failure
@@ -183,14 +201,6 @@
         select level as id, 'row ' || level as txt from dual connect by level <= 100;
       exit
       SQL
-      # The credential lives in a 0600 parfile, never in argv - a Data Pump
-      # command line is visible in ps to every user on the host.
-      cat > smoke.par <<PAR
-      userid={{ db19_smoke_schema }}/{{ db19_smoke_password }}@{{ db19_smoke_pdb }}
-      directory=smoke_dir
-      dumpfile=smoke.dmp
-      tables={{ db19_smoke_schema }}.smoke_tab
-      PAR
       {{ oracle_home_target }}/bin/expdp parfile=smoke.par logfile=smoke_exp.log 2>&1 | tail -5
       {{ oracle_home_target }}/bin/sqlplus -s / as sysdba <<'SQL'
       whenever sqlerror exit failure
@@ -214,6 +224,14 @@
   register: db19_smoke_datapump
   changed_when: false
   failed_when: false
+
+# The script removes the parfile itself, but not when it dies half-way - the
+# credential must not outlive the task in a directory that a failure keeps.
+- name: Remove the Data Pump parfile
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_smoke_dir }}/smoke.par"
+    state: absent
 
 # ---------------------------------------------------------------------------
 # Evaluation and cleanup

@@ -1,0 +1,121 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/spb.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.23
+# Version....: v0.1.0
+# Purpose....: Apply one Stack Patch Bundle with SPBAT to one Oracle home.
+# Notes......: Inputs: wv_spb_zip (object name), wv_spb_home (target home),
+#              wv_spb_role (base | target - names the marker and log dirs).
+#              SPBAT knows exactly two phases, precheck and apply - there is no
+#              rollback phase (SPB README). apply upgrades OPatch from the bundle
+#              itself; it does not touch the JDK. JAVA_HOME must lie outside the
+#              Oracle home, CLASSPATH must be unset, no Java process may run
+#              from the home.
+#              precheck is reported, not fatal: on an old OPatch it fails for a
+#              reason apply fixes itself.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Check whether the SPB is already applied - {{ wv_spb_role }}
+  become: true
+  ansible.builtin.stat:
+    path: "{{ wv_stage }}/.spb-{{ wv_spb_role }}-applied"
+  register: wv_spb_marker
+
+- name: Apply the SPB - {{ wv_spb_role ~ ' ' ~ wv_spb_zip }}
+  when: not wv_spb_marker.stat.exists
+  block:
+    - name: Create the SPB directory - {{ wv_spb_role }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.file:
+        path: "{{ wv_stage }}/spb-{{ wv_spb_role }}"
+        state: directory
+        mode: "0750"
+
+    - name: Unpack the SPB - {{ wv_spb_role }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.unarchive:
+        src: "{{ wv_stage }}/{{ wv_spb_zip }}"
+        dest: "{{ wv_stage }}/spb-{{ wv_spb_role }}"
+        remote_src: true
+
+    - name: Find spbat.sh in the SPB - {{ wv_spb_role }}
+      become: true
+      ansible.builtin.find:
+        paths: "{{ wv_stage }}/spb-{{ wv_spb_role }}"
+        patterns: spbat.sh
+        recurse: true
+      register: wv_spbat
+
+    - name: Assert the bundle ships SPBAT
+      ansible.builtin.assert:
+        that:
+          - wv_spbat.files | length > 0
+        fail_msg: >-
+          {{ wv_spb_zip }} contains no spbat.sh. Not every WebLogic release ships
+          an SPB (15.1.1 reportedly only a standalone PSU) - such a patch needs
+          plain OPatch, which this role does not do yet.
+
+    - name: Create the SPBAT log directory
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.file:
+        path: "{{ wv_stage }}/spbat-logs-{{ wv_spb_role }}"
+        state: directory
+        mode: "0750"
+
+    - name: SPBAT precheck - {{ wv_spb_role }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: >-
+          {{ wv_spbat.files[0].path }} -phase precheck
+          -oracle_home {{ wv_spb_home }}
+          -log_dir {{ wv_stage }}/spbat-logs-{{ wv_spb_role }}
+        chdir: "{{ wv_spbat.files[0].path | dirname }}"
+      environment: &wv_spbat_env
+        JAVA_HOME: "{{ wv_jdk }}"
+        CLASSPATH: ""
+        WEBLOGIC_CLASSPATH: ""
+      register: wv_spb_precheck
+      changed_when: false
+      failed_when: false
+      async: "{{ wls_async_timeout }}"
+      poll: "{{ wls_async_poll }}"
+
+    - name: Report the precheck - {{ wv_spb_role }}
+      ansible.builtin.debug:
+        msg: "{{ ['rc=' ~ wv_spb_precheck.rc | default('?')] + (wv_spb_precheck.stdout_lines | default([]))[-25:] }}"
+
+    - name: SPBAT apply - {{ wv_spb_role }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: >-
+          {{ wv_spbat.files[0].path }} -phase apply
+          -oracle_home {{ wv_spb_home }}
+          -log_dir {{ wv_stage }}/spbat-logs-{{ wv_spb_role }}
+        chdir: "{{ wv_spbat.files[0].path | dirname }}"
+      environment: *wv_spbat_env
+      register: wv_spb_apply
+      changed_when: wv_spb_apply.rc == 0
+      async: "{{ wls_async_timeout }}"
+      poll: "{{ wls_async_poll }}"
+
+    - name: Report the apply - {{ wv_spb_role }}
+      ansible.builtin.debug:
+        msg: "{{ ['rc=' ~ wv_spb_apply.rc ~ ', ' ~ wv_spb_apply.delta] + wv_spb_apply.stdout_lines[-25:] }}"
+
+    - name: Mark the SPB as applied - {{ wv_spb_role }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.copy:
+        dest: "{{ wv_stage }}/.spb-{{ wv_spb_role }}-applied"
+        content: "{{ wv_spb_zip }} {{ wv_spb_home }} {{ wv_spb_apply.start }} {{ wv_spb_apply.end }}\n"
+        mode: "0640"

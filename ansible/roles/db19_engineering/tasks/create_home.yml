@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/create_home.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.08.19
-# Version....: v0.1.0
+# Date.......: 2026.11.03
+# Version....: v0.4.0
 # Purpose....: Create an ORACLE_HOME at a given RU via AutoUpgrade create_home.
 # Notes......: Reused for both homes - the caller sets db19_home_ru and
 #              db19_home_path. No runInstaller, no response file: AutoUpgrade
@@ -24,6 +24,8 @@
   ansible.builtin.set_fact:
     db19_home_ru: "{{ db19_home_ru | default(db_base_ru) }}"
     db19_home_path: "{{ db19_home_path | default(oracle_home_base) }}"
+    # Per call: a gold image found for the previous home must not carry over.
+    db19_gold_image_staged: ""
 
 - name: Check whether a central inventory is already registered
   become: true
@@ -50,6 +52,57 @@
 # image. Same reasoning as db19_base_image_url: a PAR is a bearer credential,
 # so no_log and a short-lived URL.
 # ---------------------------------------------------------------------------
+
+# The gold-image download in download.yml leaves db_goldimage_<RU>_*.zip in
+# the stage directory; create_home does not fetch it itself. Found by name, not
+# by a fact from download.yml, so a re-run after a skipped download still finds it.
+- name: Look for a downloaded gold image for RU {{ db19_home_ru }}
+  become: true
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns: "{{ db19_gold_image_pattern }}"
+  register: db19_gold_image_downloaded
+  when:
+    - not db19_home_stat.stat.exists
+    - db19_gold_image_file | length == 0
+    - db19_try_gold_image | bool
+
+# A downloaded gold image carries RU + OCW only. OPatch, DPBP, OJVM and the JDK
+# patch come down as separate files next to it, so the home is built from the
+# patch list with gold_image=YES - AutoUpgrade takes the gold image from the
+# folder and applies the rest on top. GOLDIMAGE:<file> would install the image
+# alone and silently drop them (2026-11-03: a 19.33 home without OJVM, DPBP,
+# JDK 40192005 and OPatch 55; probe on 26ai: list + gold_image=YES applied
+# JDK 40192148 and OPatch 55). GOLDIMAGE: stays for db19_gold_image_file.
+- name: Build from the downloaded gold image plus the patch list
+  ansible.builtin.set_fact:
+    db19_gold_image_staged: >-
+      {{ (db19_gold_image_downloaded.files | sort(attribute='mtime') | last).path | basename }}
+  when:
+    - db19_gold_image_downloaded.files | default([]) | length > 0
+
+# 19c keeps the proven path when no gold image came down: AUTO validates the
+# staged 19.3.0 base image (download.yml has asserted that one is there).
+- name: Fall back to the base image for 19c without a gold image
+  ansible.builtin.set_fact:
+    db19_autoupgrade_gold_image: "AUTO"
+  when:
+    - not db19_home_stat.stat.exists
+    - db19_gold_image_file | length == 0
+    - db19_gold_image_staged | default('') | length == 0
+    - db_release | string == '19'
+
+- name: Fail when release 26 has no gold image to build from
+  ansible.builtin.assert:
+    that:
+      - (db19_gold_image_file | length > 0) or (db19_gold_image_staged | default('') | length > 0)
+    fail_msg: >-
+      No {{ db19_gold_image_pattern }} in {{ db19_stage_dir }}. Release 26 builds
+      its homes from a gold image only - check the gold-image download in the
+      download step (MOS credentials, keystore, dl1.gold_image=YES).
+  when:
+    - not db19_home_stat.stat.exists
+    - db_release | string == '26'
 
 - name: Stage the gold image from db19_gold_image_url
   become: true
@@ -226,5 +279,5 @@
   ansible.builtin.debug:
     msg: >-
       {{ db19_home_inventory.stdout_lines | default([])
-         | select('search', '(?i)(Oracle Database|Release Update|Patch  *[0-9]+ *:)')
+         | select('search', '(?i)(Oracle (AI )?Database|Release Update|Patch  *[0-9]+ *:)')
          | list }}
