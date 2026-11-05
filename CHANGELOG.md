@@ -6,6 +6,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
 ### Security
 
 - **network**: `allowed_wireguard_cidrs` defaults to `[]` (was `0.0.0.0/0`) - no stack passes it and none runs
