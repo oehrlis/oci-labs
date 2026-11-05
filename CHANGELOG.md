@@ -51,6 +51,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `make preflight DIR=<layer dir>` (`tools/lab_preflight.sh`): read-only check of a layer's target - tools and
+  Terraform >= 1.9, profile authenticates, region subscribed, home region, compartment ACTIVE, namespace, state
+  bucket private, stale lock, core state outputs and live VCN/Bastion (host layers), shape and image. Every FAIL
+  names the fixing command, dependent checks print SKIP. Tested against the CPU target and the ACE tenancy
 - **templates** `terraform/templates/core` and `host-on-core`: core layer per target and host layers on top,
   state in the target's OCI bucket via the native `oci` backend (partial config `backend.hcl`, no S3 key),
   host layer reads the core by remote state, OCI naming rule, `orarepo` never in a state. Core plan against

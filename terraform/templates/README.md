@@ -18,19 +18,25 @@ source = "git::https://github.com/oehrlis/oci-labs.git//terraform/modules/comput
 
 Both layers keep their state in the target's own bucket with the native `oci` backend - the
 API key profile of `~/.oci/config` is enough, no S3 customer secret key. One bucket per target
-(versioned, private), one key per layer:
+(private; versioning suspended - no lock-version noise, labs are short-lived), one key per layer:
 
 ```bash
-cp backend.hcl.example backend.hcl            # git-ignored, fill bucket/namespace/key/profile
-cp terraform.tfvars.example terraform.tfvars  # git-ignored
+cp backend.hcl.example backend.hcl # git-ignored, fill bucket/namespace/key/profile
+cp terraform.tfvars.example terraform.tfvars # git-ignored
+make preflight DIR=<layer dir> # read-only: tenancy, compartment, bucket, core, image, shape
 terraform init -backend-config=backend.hcl
 terraform plan
 ```
 
+`make preflight` (`tools/lab_preflight.sh`) checks everything the layer needs from its target
+before anything is built - also when the same files are pointed at another tenancy (ACE instead
+of Trivadis). Each `FAIL` line names the command that fixes it; checks that depend on a failed
+one print `SKIP` with the reason. Exit 0 = ready, 1 = not ready.
+
 Locking is a conditional create of `<key>.lock`. A second run while the lock is held fails at
 once with `Error acquiring the state lock` and HTTP 412 `IfNoneMatchFailed` - someone else is
-running, not a permission problem. Every run, `plan` included, leaves versions of the `.lock`
-object in a versioned bucket.
+running, not a permission problem. With versioning enabled, every run - `plan`
+included - leaves versions of the `.lock` object behind; suspended versioning avoids that.
 
 With `generate_lab_keypair = true` the host layer's state contains the private key of the lab
 pair. The state bucket must stay private and limited to the lab operators.

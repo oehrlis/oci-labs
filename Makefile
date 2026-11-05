@@ -248,6 +248,13 @@ lint-secrets: ## Scan the git history for secrets with gitleaks (.gitleaks.toml)
 	  { echo "❌ gitleaks not found. Install: brew install gitleaks"; exit 1; }
 	$(Q)"$(GITLEAKS)" git --config .gitleaks.toml --redact --no-banner --log-opts=--all .
 
+.PHONY: preflight
+# Read-only check of a layer directory (copy of terraform/templates/core or
+# host-on-core with backend.hcl + terraform.tfvars) against its target.
+preflight: ## Check that a layer's target has every shared resource (DIR=<layer dir>), read-only
+	$(Q)[[ -n "$(DIR)" ]] || { echo "Usage: make preflight DIR=<layer dir>"; exit 2; }
+	$(Q)"$(TOOLS_DIR)/lab_preflight.sh" "$(DIR)"
+
 .PHONY: check-version
 check-version: ## Validate semantic version format in VERSION file
 	@grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' VERSION \
