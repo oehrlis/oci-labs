@@ -194,11 +194,11 @@ fmt-terraform: guard-terraform ## Format Terraform files in-place
 	@echo "✅ Terraform files formatted"
 
 .PHONY: lint-terraform
-lint-terraform: guard-terraform ## Check Terraform formatting and validate every env
+lint-terraform: guard-terraform ## Check Terraform formatting and validate every env and template
 	@echo -e "$(COLOR_BOLD)terraform fmt -check$(COLOR_RESET)"
 	$(Q)"$(TERRAFORM)" fmt -check -recursive "$(TF_DIR)"
-	@echo -e "$(COLOR_BOLD)terraform validate per env$(COLOR_RESET)"
-	@for env in $(TF_DIR)/envs/*/; do \
+	@echo -e "$(COLOR_BOLD)terraform validate per env and template$(COLOR_RESET)"
+	@for env in $(TF_DIR)/envs/*/ $(TF_DIR)/templates/*/; do \
 	  [[ -f "$$env/provider.tf" ]] || { echo "--- $$env SKIPPED: no provider.tf, nothing to validate"; continue; }; \
 	  echo "--- $$env"; \
 	  ( cd "$$env" && "$(TERRAFORM)" init -backend=false -input=false >/dev/null && "$(TERRAFORM)" validate ); \
@@ -247,6 +247,13 @@ lint-secrets: ## Scan the git history for secrets with gitleaks (.gitleaks.toml)
 	@[[ -n "$(GITLEAKS)" ]] || \
 	  { echo "❌ gitleaks not found. Install: brew install gitleaks"; exit 1; }
 	$(Q)"$(GITLEAKS)" git --config .gitleaks.toml --redact --no-banner --log-opts=--all .
+
+.PHONY: preflight
+# Read-only check of a layer directory (copy of terraform/templates/core or
+# host-on-core with backend.hcl + terraform.tfvars) against its target.
+preflight: ## Check that a layer's target has every shared resource (DIR=<layer dir>), read-only
+	$(Q)[[ -n "$(DIR)" ]] || { echo "Usage: make preflight DIR=<layer dir>"; exit 2; }
+	$(Q)"$(TOOLS_DIR)/lab_preflight.sh" "$(DIR)"
 
 .PHONY: check-version
 check-version: ## Validate semantic version format in VERSION file
@@ -928,7 +935,7 @@ cpu-lab-allow-ip: guard-terraform ## Re-point the SSH allow-list at your current
 	  mv -f terraform.tfvars.new terraform.tfvars; \
 	  echo "terraform.tfvars updated - applying the NSG rules only"; \
 	  "$(TERRAFORM)" apply -input=false -auto-approve \
-	    -target=module.oracle_db_host.oci_core_network_security_group_security_rule.ingress_ssh \
+	    -target=module.oracle_db_host.module.host.oci_core_network_security_group_security_rule.ingress_ssh \
 	    -target=module.network.oci_core_security_list.public 2>&1 | tail -5
 	@echo "✅ SSH allow-list updated - the instance was not touched"
 

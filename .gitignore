@@ -8,9 +8,12 @@
 **/crash.log
 **/crash.*.log
 **/terraform.tfvars
+# Remote state backend settings per target (namespace, profile) - example files stay tracked
+**/backend.hcl
 
 # Environment / secrets
 **/.env
+**/.ssh/
 
 # Ansible generated inventory
 ansible/inventories/generated/

@@ -4,127 +4,134 @@
 # Name.......: main.tf
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
-# Date.......: 2026.08.19
-# Version....: v0.1.0
-# Purpose....: Provision N identical Oracle Linux 8 hosts for Oracle DB labs.
-# Notes......: Cloud-init stays minimal on purpose - OS prerequisites and the
-#              Oracle software install are handled by Ansible (db19_engineering).
-#              Accenture standards enforced: PV encryption in transit, IMDSv2.
+# Date.......: 2026.11.05
+# Version....: v0.2.0
+# Purpose....: Provision N identical Oracle Linux hosts for Oracle DB labs.
+# Notes......: Thin wrapper around compute_host: DB naming (component "db"),
+#              role tags, Oracle Net listener and ICMP ingress, oradba
+#              cloud-init. Cloud-init stays minimal on purpose - OS
+#              prerequisites and the Oracle install are Ansible's job.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.08.19 oehrli - initial version
 # 2026.10.15 oehrli - ignore ssh_authorized_keys drift (no replacement)
+# 2026.11.05 oehrli - resources moved into compute_host (moved blocks below)
 # ------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------
-# Locals
-# ------------------------------------------------------------------------------
+module "host" {
+  source = "../compute_host"
 
-locals {
-  # Host keys: "01", "02", ... - used as for_each key and name suffix
-  host_keys = toset([for i in range(1, var.host_count + 1) : format("%02d", i)])
-
-  # hostname_label must be alphanumeric only (OCI DNS label restriction)
-  hostname_prefix = var.hostname_prefix
-}
-
-# ------------------------------------------------------------------------------
-# Oracle DB compute instances
-# ------------------------------------------------------------------------------
-
-resource "oci_core_instance" "db_host" {
-  for_each = local.host_keys
-
-  compartment_id      = var.compartment_ocid
+  compartment_ocid    = var.compartment_ocid
+  vcn_id              = var.vcn_id
+  vcn_cidr            = var.vcn_cidr
+  subnet_id           = var.subnet_id
   availability_domain = var.availability_domain
-  display_name        = "ci-${var.lab_name_core}-db-${each.key}"
-  shape               = var.shape
+  lab_name_core       = var.lab_name_core
+  freeform_tags       = var.freeform_tags
 
-  shape_config {
-    ocpus         = var.ocpus
-    memory_in_gbs = var.memory_gbs
+  component     = "db"
+  role_tag      = "oracle-db-host"
+  data_role_tag = "oracle-db-data"
+
+  hostname_prefix      = var.hostname_prefix
+  host_count           = var.host_count
+  instance_image_ocid  = var.instance_image_ocid
+  shape                = var.shape
+  ocpus                = var.ocpus
+  memory_gbs           = var.memory_gbs
+  boot_volume_size_gbs = var.boot_volume_size_gbs
+  assign_public_ip     = var.assign_public_ip
+
+  attach_data_volume      = var.attach_data_volume
+  data_volume_size_gbs    = var.data_volume_size_gbs
+  data_volume_vpus_per_gb = var.data_volume_vpus_per_gb
+
+  ssh_public_keys   = var.ssh_public_keys
+  allowed_ssh_cidrs = var.allowed_ssh_cidrs
+  ssh_port          = var.ssh_port
+  egress_https_only = var.egress_https_only
+
+  user_data_template = "${path.module}/templates/oracle_db_host-cloudinit.yaml.tftpl"
+  user_data_vars = {
+    oradba_repo_url    = var.oradba_repo_url
+    oradba_install_dir = var.oradba_install_dir
   }
 
-  create_vnic_details {
-    subnet_id        = var.subnet_id
-    assign_public_ip = var.assign_public_ip
-    hostname_label   = "${local.hostname_prefix}${each.key}"
-    nsg_ids          = [oci_core_network_security_group.db_host.id]
+  ingress_rules = {
+    listener = {
+      protocol    = "tcp"
+      port_min    = var.listener_port
+      description = "Oracle Net listener (intra-VCN)"
+    }
+    icmp = {
+      protocol    = "icmp"
+      description = "ICMP inside the VCN"
+    }
   }
-
-  source_details {
-    source_type             = "image"
-    source_id               = var.instance_image_ocid
-    boot_volume_size_in_gbs = var.boot_volume_size_gbs
-  }
-
-  metadata = {
-    ssh_authorized_keys = join("\n", [for k in var.ssh_public_keys : trimspace(k)])
-    user_data = base64encode(templatefile(
-      "${path.module}/templates/oracle_db_host-cloudinit.yaml.tftpl",
-      {
-        hostname           = "${local.hostname_prefix}${each.key}"
-        oradba_repo_url    = var.oradba_repo_url
-        oradba_install_dir = var.oradba_install_dir
-      }
-    ))
-  }
-
-  # Accenture OCI security standard: IMDSv2 only
-  instance_options {
-    are_legacy_imds_endpoints_disabled = true
-  }
-
-  # Accenture OCI security standard: encrypt paravirtualized volume traffic
-  is_pv_encryption_in_transit_enabled = true
-
-  # Image OCIDs change when Oracle publishes a new OL8 build - do not force
-  # a replacement of a running lab host just because the lookup moved on.
-  #
-  # ssh_authorized_keys likewise: cloud-init reads it on the first boot only,
-  # so a changed workstation key cannot reach a running host through Terraform
-  # anyway - the only effect would be a replacement that destroys the database.
-  # The output ssh_authorized_key_comments still shows the configured keys. To
-  # really roll the keys, replace the host on purpose:
-  #   terraform apply -replace='module.oracle_db_host.oci_core_instance.db_host["01"]'
-  lifecycle {
-    ignore_changes = [source_details[0].source_id, metadata["ssh_authorized_keys"]]
-  }
-
-  freeform_tags = merge(var.freeform_tags, { role = "oracle-db-host" })
 }
 
 # ------------------------------------------------------------------------------
-# Optional data volume per host (engineering labs; off for CPU patch tests)
+# State moves - v0.1.0 addresses to compute_host. Without them every existing
+# stack would destroy and recreate its database hosts on the next apply.
 # ------------------------------------------------------------------------------
 
-resource "oci_core_volume" "data" {
-  for_each = var.attach_data_volume ? local.host_keys : toset([])
-
-  compartment_id      = var.compartment_ocid
-  availability_domain = var.availability_domain
-  display_name        = "bv-${var.lab_name_core}-db-${each.key}-data-01"
-
-  size_in_gbs          = var.data_volume_size_gbs
-  vpus_per_gb          = var.data_volume_vpus_per_gb
-  is_auto_tune_enabled = false
-
-  freeform_tags = merge(var.freeform_tags, { role = "oracle-db-data" })
+moved {
+  from = oci_core_instance.db_host
+  to   = module.host.oci_core_instance.this
 }
 
-resource "oci_core_volume_attachment" "data" {
-  for_each = var.attach_data_volume ? local.host_keys : toset([])
+moved {
+  from = oci_core_volume.data
+  to   = module.host.oci_core_volume.data
+}
 
-  attachment_type = "paravirtualized"
-  instance_id     = oci_core_instance.db_host[each.key].id
-  volume_id       = oci_core_volume.data[each.key].id
+moved {
+  from = oci_core_volume_attachment.data
+  to   = module.host.oci_core_volume_attachment.data
+}
 
-  display_name = "va-${var.lab_name_core}-db-${each.key}-data-01"
+moved {
+  from = oci_core_network_security_group.db_host
+  to   = module.host.oci_core_network_security_group.this
+}
 
-  # Accenture OCI security standard: encrypt block volume traffic in transit
-  is_pv_encryption_in_transit_enabled = true
+moved {
+  from = oci_core_network_security_group_security_rule.ingress_ssh
+  to   = module.host.oci_core_network_security_group_security_rule.ingress_ssh
+}
+
+moved {
+  from = oci_core_network_security_group_security_rule.ingress_listener
+  to   = module.host.oci_core_network_security_group_security_rule.ingress["listener"]
+}
+
+moved {
+  from = oci_core_network_security_group_security_rule.ingress_icmp
+  to   = module.host.oci_core_network_security_group_security_rule.ingress["icmp"]
+}
+
+# egress_all gained a count in v0.1.x (egress_https_only); the chain keeps
+# both the old unindexed and the indexed address working.
+moved {
+  from = oci_core_network_security_group_security_rule.egress_all
+  to   = oci_core_network_security_group_security_rule.egress_all[0]
+}
+
+moved {
+  from = oci_core_network_security_group_security_rule.egress_all[0]
+  to   = module.host.oci_core_network_security_group_security_rule.egress_all[0]
+}
+
+moved {
+  from = oci_core_network_security_group_security_rule.egress_https
+  to   = module.host.oci_core_network_security_group_security_rule.egress_https
+}
+
+moved {
+  from = oci_core_network_security_group_security_rule.egress_vcn
+  to   = module.host.oci_core_network_security_group_security_rule.egress_vcn
 }
 
 # --- EOF ----------------------------------------------------------------------

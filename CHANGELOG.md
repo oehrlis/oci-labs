@@ -6,6 +6,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
 ### Security
 
 - **network**: `allowed_wireguard_cidrs` defaults to `[]` (was `0.0.0.0/0`) - no stack passes it and none runs
@@ -14,6 +16,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **oracle_db_host** v0.2.0: thin wrapper around the new `compute_host` module - same inputs, outputs and
+  resource names; `moved` blocks carry existing states over (verified 2026-11-05 with a read-only plan against a
+  copy of the live datasafe-demo state: 9 resources moved, 0 OCI changes). Addresses are now below
+  `module.host`; `cpu-lab-allow-ssh` targets the new address
 - `db19_engineering`: `db_release` 19 | 26 with `db_release_profiles` - OS check, preinstall RPM,
   AutoUpgrade `target_version` (26ai: 23, the tool's value), gold image, patch lists, dbca schema,
   `CV_ASSUME_DISTID` and `binopt.uniaud` per release; the `db19_*` names stay, so `oracle_db_native`
@@ -47,6 +53,22 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `make preflight DIR=<layer dir>` (`tools/lab_preflight.sh`): read-only check of a layer's target - tools and
+  Terraform >= 1.9, profile authenticates, region subscribed, home region, compartment ACTIVE, namespace, state
+  bucket private, stale lock, core state outputs and live VCN/Bastion (host layers), shape and image. Every FAIL
+  names the fixing command, dependent checks print SKIP. Tested against the CPU target and the ACE tenancy
+- **templates** `terraform/templates/core` and `host-on-core`: core layer per target and host layers on top,
+  state in the target's OCI bucket via the native `oci` backend (partial config `backend.hcl`, no S3 key),
+  host layer reads the core by remote state, OCI naming rule, `orarepo` never in a state. Core plan against
+  the CPU target: 19 resources, names `vcn-zrh-lab-cpu-net-01` ...; `lint-terraform` validates templates too;
+  `backend.hcl` and `.ssh/` git-ignored
+- **naming** v0.2.0: `name_scheme = "oci"` for the OCI naming rule `{resource}-{region}-{env}-{stack}-{component}-{nn}`
+  - region code (`eu-zurich-1` -> `zrh`), env `lab|dev|test|prod`, `lab_name_core` without the instance
+  (`zrh-lab-cpu`); validations reject what the rule does not allow. Default `legacy` keeps every existing name;
+  module requires Terraform >= 1.9
+- **compute_host** module: N identical hosts on an existing subnet - instance NSG with caller-defined
+  `ingress_rules`, per-host cloud-init from a template, optional data volume, IMDSv2 and PV encryption in
+  transit enforced. The building block for product hosts (DB, WebLogic) in the lab kit
 - `db19_engineering` evidence per run (`tasks/evidence.yml`): before the patch / rollback a run
   marker plus `opatch lspatches` and `lsinventory` of every home; after verify / rollback the same
   again, the AutoUpgrade job logs, the sqlpatch / datapatch logs and the alert log since the marker,

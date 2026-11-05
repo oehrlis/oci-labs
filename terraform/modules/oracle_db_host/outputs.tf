@@ -5,7 +5,7 @@
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
 # Date.......: 2026.08.19
-# Version....: v0.1.0
+# Version....: v0.2.0
 # Purpose....: Module outputs for the Oracle DB lab hosts.
 # Notes......: Maps are keyed by host index ("01", "02", ...).
 # Reference..: https://github.com/oehrlis/oci-labs
@@ -13,41 +13,42 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.08.19 oehrli - initial version
+# 2026.11.05 oehrli - values from compute_host
 # ------------------------------------------------------------------------------
 
 output "instance_ids" {
   description = "OCIDs of the Oracle DB hosts, keyed by host index."
-  value       = { for k, v in oci_core_instance.db_host : k => v.id }
+  value       = module.host.instance_ids
 }
 
 output "instance_names" {
   description = "Display names of the Oracle DB hosts, keyed by host index."
-  value       = { for k, v in oci_core_instance.db_host : k => v.display_name }
+  value       = module.host.instance_names
 }
 
 output "private_ips" {
   description = "Private IPs of the Oracle DB hosts, keyed by host index."
-  value       = { for k, v in oci_core_instance.db_host : k => v.private_ip }
+  value       = module.host.private_ips
 }
 
 output "public_ips" {
   description = "Public IPs of the Oracle DB hosts, keyed by host index (empty when assign_public_ip = false)."
-  value       = { for k, v in oci_core_instance.db_host : k => v.public_ip }
+  value       = module.host.public_ips
 }
 
 output "hostnames" {
   description = "Short hostnames of the Oracle DB hosts, keyed by host index."
-  value       = { for k, v in oci_core_instance.db_host : k => v.create_vnic_details[0].hostname_label }
+  value       = module.host.hostnames
 }
 
 output "nsg_id" {
   description = "OCID of the Oracle DB host NSG."
-  value       = oci_core_network_security_group.db_host.id
+  value       = module.host.nsg_id
 }
 
 output "data_volume_ids" {
   description = "OCIDs of the optional data volumes, keyed by host index (empty when attach_data_volume = false)."
-  value       = { for k, v in oci_core_volume.data : k => v.id }
+  value       = module.host.data_volume_ids
 }
 
 # --- EOF ----------------------------------------------------------------------

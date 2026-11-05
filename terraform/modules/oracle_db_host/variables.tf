@@ -5,7 +5,7 @@
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
 # Date.......: 2026.08.19
-# Version....: v0.1.0
+# Version....: v0.2.0
 # Purpose....: Input variables for the oracle_db_host module.
 # Notes......: Oracle Linux 8 compute host(s) for Oracle Database labs.
 #              host_count drives for_each; every host is identical.
@@ -14,6 +14,7 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.08.19 oehrli - initial version
+# 2026.11.05 oehrli - generic validations live in compute_host
 # ------------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -64,22 +65,12 @@ variable "hostname_prefix" {
   type        = string
   description = "Hostname and DNS label prefix, the host key is appended (oradb01). Must be unique per subnet: envs that share the core DB subnet need their own."
   default     = "oradb"
-
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9]{0,12}$", var.hostname_prefix))
-    error_message = "hostname_prefix must start with a letter, lowercase alphanumeric, at most 13 characters (OCI DNS label limit with the two-digit key)."
-  }
 }
 
 variable "host_count" {
   type        = number
   description = "Number of identical Oracle DB hosts to create (workshops: > 1)."
   default     = 1
-
-  validation {
-    condition     = var.host_count >= 1 && var.host_count <= 20
-    error_message = "host_count must be between 1 and 20."
-  }
 }
 
 variable "instance_image_ocid" {
@@ -155,16 +146,6 @@ variable "ssh_public_keys" {
     are authorised - typically the operator's personal key plus a per-lab
     keypair generated for the stack lifecycle.
   EOT
-
-  validation {
-    condition     = length(var.ssh_public_keys) > 0
-    error_message = "At least one SSH public key is required, otherwise the host is unreachable."
-  }
-
-  validation {
-    condition     = alltrue([for k in var.ssh_public_keys : can(regex("^(ssh-(rsa|ed25519)|ecdsa-sha2-)", trimspace(k)))])
-    error_message = "Each entry must be an OpenSSH public key (ssh-rsa, ssh-ed25519, or ecdsa-sha2-*)."
-  }
 }
 
 variable "allowed_ssh_cidrs" {
