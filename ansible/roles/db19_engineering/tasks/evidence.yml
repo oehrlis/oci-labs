@@ -5,7 +5,7 @@
 # Name.......: tasks/evidence.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.10.24
-# Version....: v0.1.0
+# Version....: v0.1.1
 # Purpose....: Collect the evidence of one run for the analysis and fetch it to
 #              ansible/reports/<host>/<run>/ (db19_evidence_phase: before | after).
 # Notes......: before  run marker, opatch lspatches + lsinventory of every home
@@ -45,7 +45,12 @@
   become: true
   become_user: "{{ oracle_os_user }}"
   ansible.builtin.shell:
-    cmd: "date -u +%Y-%m-%dT%H:%M:%S > {{ db19_evidence_dir }}/.run-start"
+    # UTC for the README; local time of the oracle user for the alert log, whose
+    # timestamps carry the host offset (+01:00/+02:00) - a UTC marker opened the
+    # excerpt one to two hours early.
+    cmd: >-
+      date -u +%Y-%m-%dT%H:%M:%S > {{ db19_evidence_dir }}/.run-start &&
+      date +%Y-%m-%dT%H:%M:%S > {{ db19_evidence_dir }}/.run-start-local
     executable: /bin/bash
   when: db19_evidence_phase == 'before'
   changed_when: true
@@ -88,10 +93,17 @@
           find "$sq" -mindepth 1 -maxdepth 1 -newer "$d/.run-start" -print0 \
             | tar -czf "$d/sqlpatch-logs.tgz" --null -T - 2>/dev/null || true
         fi
-        # alert log from the marker on (timestamps are ISO in 19c and 26ai)
-        alert="$(ls {{ oracle_base }}/diag/rdbms/*/{{ oracle_sid }}/trace/alert_{{ oracle_sid }}.log 2>/dev/null | head -1)"
+        # alert log from the marker on (timestamps are ISO in 19c and 26ai). Only a
+        # timestamp line may open the window: text lines ("Starting ORACLE
+        # instance", "ORA-00313") compare greater than "2026-..." and pulled in the
+        # whole history of the host (2026-10: 17700 lines instead of 1226).
+        local_since="$(cat "$d/.run-start-local" 2>/dev/null || echo "$since")"
+        diag="{{ oracle_base }}/diag/rdbms"
+        alert="$(ls "$diag"/*/{{ oracle_sid }}/trace/alert_{{ oracle_sid }}.log 2>/dev/null | head -1)"
         if [[ -n "$alert" ]]; then
-          awk -v s="$since" 'substr($1,1,19) >= s {p=1} p' "$alert" > "$d/alert-excerpt.log" || true
+          awk -v s="$local_since" \
+            '$1 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ && substr($1,1,19) >= s {p=1} p' \
+            "$alert" > "$d/alert-excerpt.log" || true
         fi
         echo "logs since $since"
       else

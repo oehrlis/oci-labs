@@ -6,6 +6,18 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-05
+
+### Fixed
+
+- **db19_engineering** evidence: the alert excerpt starts at the run - only an ISO timestamp line opens the window
+  (text lines such as "Starting ORACLE instance" compared greater than "2026-..." and pulled in the whole host
+  history: 2026-10 db19 17700 lines instead of 1226, with 140-176 old errors), and the window compares local time
+  with local time (`.run-start-local`; the UTC marker opened it one to two hours early)
+- **wls_engineering** verify v0.2.0 starts AdminServer and managed server when they are down before the smoke test:
+  a host stopped overnight failed verify although the patch was fine (14.1.2, 2026-11-04). Reverses the former
+  "starts nothing" rule on purpose; homes, domain and patches stay untouched
+
 ## [0.4.1] - 2026-11-05
 
 ### Fixed
