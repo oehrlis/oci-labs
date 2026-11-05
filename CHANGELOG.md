@@ -6,6 +6,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-05
+
+### Fixed
+
+- `lab_preflight.sh` v0.1.1 reads `*.auto.tfvars` with Terraform's precedence (last auto file wins, then
+  `terraform.tfvars`) - a layer with product values in `product.auto.tfvars` was checked against the template
+  defaults (OL 9, `VM.Standard.E5.Flex`) instead of its own; a variable set nowhere no longer aborts the script
+
 ## [0.4.0] - 2026-11-05
 
 ### Security
