@@ -6,12 +6,13 @@
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
 # Date.......: 2026.11.05
-# Version....: v0.1.0
+# Version....: v0.1.1
 # Purpose....: Read-only check that every shared resource a layer needs exists
 #              in its target (tenancy, compartment, state bucket, core, image,
 #              shape) - before anything is built.
 # Notes......: Reads backend.hcl and terraform.tfvars of a layer directory
-#              (templates/core or templates/host-on-core copies). Every
+#              (templates/core or templates/host-on-core copies), plus any
+#              *.auto.tfvars with Terraform's precedence. Every
 #              missing piece is named together with the command that creates
 #              it; nothing is skipped silently. Exit 0 = ready, 1 = not ready,
 #              2 = usage error. Makes no changes in OCI.
@@ -19,6 +20,7 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.11.05 oehrli - initial version
+# 2026.11.05 oehrli - read *.auto.tfvars like Terraform (product values)
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
@@ -59,6 +61,21 @@ hcl_get() {
     sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\".*/\1/p" "$file" | head -1
 }
 
+# Value of a variable as Terraform resolves it from the layer's files:
+# *.auto.tfvars are loaded after terraform.tfvars (alphabetically), so the last
+# auto file that sets it wins, then terraform.tfvars.
+tfvar_get() {
+    local key="$1" f val
+    local files=()
+    while IFS= read -r f; do files+=("$f"); done < <(find "$LAYER_DIR" -maxdepth 1 -name '*.auto.tfvars' | sort -r)
+    files+=("$TFVARS")
+    for f in "${files[@]}"; do
+        val="$(hcl_get "$f" "$key")"
+        [[ -n "$val" ]] && { printf '%s\n' "$val"; return 0; }
+    done
+    return 0
+}
+
 # Value of 'key = "value"' inside a 'block = { ... }' of terraform.tfvars.
 hcl_get_in_block() {
     local file="$1" block="$2" key="$3"
@@ -87,16 +104,16 @@ for f in "$BACKEND" "$TFVARS"; do
     }
 done
 
-PROFILE="$(hcl_get "$TFVARS" oci_config_profile)"
-REGION="$(hcl_get "$TFVARS" region)"
-COMPARTMENT="$(hcl_get "$TFVARS" compartment_ocid)"
+PROFILE="$(tfvar_get oci_config_profile)"
+REGION="$(tfvar_get region)"
+COMPARTMENT="$(tfvar_get compartment_ocid)"
 STATE_BUCKET="$(hcl_get "$BACKEND" bucket)"
 STATE_NS="$(hcl_get "$BACKEND" namespace)"
 STATE_KEY="$(hcl_get "$BACKEND" key)"
 CORE_KEY="$(hcl_get_in_block "$TFVARS" core_state key)"
-SHAPE="$(hcl_get "$TFVARS" shape)"
-OL_VERSION="$(hcl_get "$TFVARS" ol_version)"
-IMAGE_OCID="$(hcl_get "$TFVARS" instance_image_ocid)"
+SHAPE="$(tfvar_get shape)"
+OL_VERSION="$(tfvar_get ol_version)"
+IMAGE_OCID="$(tfvar_get instance_image_ocid)"
 
 if [[ -n "$CORE_KEY" ]]; then
     LAYER_TYPE="host"

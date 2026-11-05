@@ -6,6 +6,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-05
+
+### Fixed
+
+- `lab_preflight.sh` v0.1.1 reads `*.auto.tfvars` with Terraform's precedence (last auto file wins, then
+  `terraform.tfvars`) - a layer with product values in `product.auto.tfvars` was checked against the template
+  defaults (OL 9, `VM.Standard.E5.Flex`) instead of its own; a variable set nowhere no longer aborts the script
+- `cpu-lab-start` reads the instance IDs from `terraform output` like `cpu-lab-stop`, the local `terraform.tfstate`
+  is only the fallback - with a remote state (oci backend) there is no local file and start failed; `CPU_ENV_DIR`
+  can point at a consumer root (`make cpu-lab-start CPU_ENV=cpu-lab-db19 CPU_ENV_DIR=<abs path>`)
+
 ## [0.4.0] - 2026-11-05
 
 ### Security

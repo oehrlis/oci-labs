@@ -448,7 +448,7 @@ cpu-lab-stop: guard-oci guard-terraform ## Stop the lab instance(s) without dele
 	  profile="$${profile:-DEFAULT}"; \
 	  ids="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -json db_instance_ids 2>/dev/null \
 	    | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).values()))' 2>/dev/null || true)"; \
-	  if [[ -z "$$ids" ]]; then \
+	  if [[ -z "$$ids" && -f "$(CPU_ENV_DIR)/terraform.tfstate" ]]; then \
 	    ids="$$(python3 -c "import json; d=json.load(open('$(CPU_ENV_DIR)/terraform.tfstate')); print(' '.join(i['attributes']['id'] for r in d['resources'] if r['type']=='oci_core_instance' for i in r['instances']))")"; \
 	  fi; \
 	  [[ -n "$$ids" ]] || { echo "❌ No instance found in the state"; exit 1; }; \
@@ -464,7 +464,11 @@ cpu-lab-stop: guard-oci guard-terraform ## Stop the lab instance(s) without dele
 cpu-lab-start: guard-oci guard-terraform ## Start the stopped lab instance(s)
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  profile="$${profile:-DEFAULT}"; \
-	  ids="$$(python3 -c "import json; d=json.load(open('$(CPU_ENV_DIR)/terraform.tfstate')); print(' '.join(i['attributes']['id'] for r in d['resources'] if r['type']=='oci_core_instance' for i in r['instances']))")"; \
+	  ids="$$(cd "$(CPU_ENV_DIR)" && "$(TERRAFORM)" output -json db_instance_ids 2>/dev/null \
+	    | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).values()))' 2>/dev/null || true)"; \
+	  if [[ -z "$$ids" && -f "$(CPU_ENV_DIR)/terraform.tfstate" ]]; then \
+	    ids="$$(python3 -c "import json; d=json.load(open('$(CPU_ENV_DIR)/terraform.tfstate')); print(' '.join(i['attributes']['id'] for r in d['resources'] if r['type']=='oci_core_instance' for i in r['instances']))")"; \
+	  fi; \
 	  [[ -n "$$ids" ]] || { echo "❌ No instance found in the state"; exit 1; }; \
 	  for id in $$ids; do \
 	    echo "Starting $$id"; \
