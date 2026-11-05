@@ -14,6 +14,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **oracle_db_host** v0.2.0: thin wrapper around the new `compute_host` module - same inputs, outputs and
+  resource names; `moved` blocks carry existing states over (verified 2026-11-05 with a read-only plan against a
+  copy of the live datasafe-demo state: 9 resources moved, 0 OCI changes). Addresses are now below
+  `module.host`; `cpu-lab-allow-ssh` targets the new address
 - `db19_engineering`: `db_release` 19 | 26 with `db_release_profiles` - OS check, preinstall RPM,
   AutoUpgrade `target_version` (26ai: 23, the tool's value), gold image, patch lists, dbca schema,
   `CV_ASSUME_DISTID` and `binopt.uniaud` per release; the `db19_*` names stay, so `oracle_db_native`
@@ -47,6 +51,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **compute_host** module: N identical hosts on an existing subnet - instance NSG with caller-defined
+  `ingress_rules`, per-host cloud-init from a template, optional data volume, IMDSv2 and PV encryption in
+  transit enforced. The building block for product hosts (DB, WebLogic) in the lab kit
 - `db19_engineering` evidence per run (`tasks/evidence.yml`): before the patch / rollback a run
   marker plus `opatch lspatches` and `lsinventory` of every home; after verify / rollback the same
   again, the AutoUpgrade job logs, the sqlpatch / datapatch logs and the alert log since the marker,

@@ -20,6 +20,18 @@ Enforced unconditionally, not configurable:
 
 Subnet flow logging is provided by the `network` module.
 
+## Structure (v0.2.0)
+
+Since v0.2.0 this module is a thin wrapper around [`compute_host`](../compute_host/README.md):
+it sets the component `db` (resource names unchanged), the role tags, the Oracle Net
+listener and ICMP ingress rules and the oradba cloud-init. `moved` blocks in `main.tf`
+carry v0.1.0 states over - an existing stack plans the move without destroying anything.
+Resource addresses are now below `module.host`, e.g.
+
+```text
+module.oracle_db_host.module.host.oci_core_instance.this["01"]
+```
+
 ## Inputs
 
 <!-- markdownlint-disable MD013 -->
@@ -39,11 +51,11 @@ Subnet flow logging is provided by the `network` module.
 | `ocpus` | number | `2` | OCPUs per host. |
 | `memory_gbs` | number | `16` | Memory in GB per host. |
 | `boot_volume_size_gbs` | number | `200` | Boot volume size in GB (min 100). |
-| `assign_public_ip` | bool | `true` | Assign a public IP per host. |
+| `assign_public_ip` | bool | `false` | Assign a public IP per host. |
 | `attach_data_volume` | bool | `false` | Attach an extra block volume per host. |
 | `data_volume_size_gbs` | number | `100` | Data volume size in GB. |
 | `data_volume_vpus_per_gb` | number | `10` | Block volume performance (VPUs/GB). |
-| `ssh_public_key` | string | - | SSH public key for the `opc` user. |
+| `ssh_public_keys` | list(string) | - | SSH public keys for the `opc` user (at least one). |
 | `allowed_ssh_cidrs` | list(string) | `[]` | External CIDRs allowed to reach SSH. |
 | `ssh_port` | number | `22` | SSH port. |
 | `listener_port` | number | `1521` | Oracle Net listener port (intra-VCN). |
@@ -98,7 +110,7 @@ module "oracle_db_host" {
 
   host_count          = 1
   instance_image_ocid = local.ol8_image_id
-  ssh_public_key      = var.ssh_public_key
+  ssh_public_keys     = [var.ssh_public_key]
   allowed_ssh_cidrs   = ["203.0.113.10/32"]
 }
 ```

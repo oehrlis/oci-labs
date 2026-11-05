@@ -928,7 +928,7 @@ cpu-lab-allow-ip: guard-terraform ## Re-point the SSH allow-list at your current
 	  mv -f terraform.tfvars.new terraform.tfvars; \
 	  echo "terraform.tfvars updated - applying the NSG rules only"; \
 	  "$(TERRAFORM)" apply -input=false -auto-approve \
-	    -target=module.oracle_db_host.oci_core_network_security_group_security_rule.ingress_ssh \
+	    -target=module.oracle_db_host.module.host.oci_core_network_security_group_security_rule.ingress_ssh \
 	    -target=module.network.oci_core_security_list.public 2>&1 | tail -5
 	@echo "✅ SSH allow-list updated - the instance was not touched"
 

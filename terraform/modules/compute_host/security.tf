@@ -4,47 +4,47 @@
 # Name.......: security.tf
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
-# Date.......: 2026.08.19
+# Date.......: 2026.11.05
 # Version....: v0.1.0
-# Purpose....: Instance-level NSG for the Oracle DB lab hosts (SSH, listener).
-# Notes......: NSG complements the subnet-level Security List in the network
-#              module. External SSH is opt-in via allowed_ssh_cidrs; the
-#              default is intra-VCN access only.
+# Purpose....: Instance-level NSG for the hosts: SSH, caller-defined ingress,
+#              open or HTTPS-only egress.
+# Notes......: External SSH is opt-in via allowed_ssh_cidrs; the default is
+#              intra-VCN access only. Extra ingress (listener, admin console,
+#              ICMP) comes from ingress_rules, keyed by a stable name.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 # Modified...:
-# 2026.08.19 oehrli - initial version
-# 2026.10.19 oehrli - optional HTTPS-only egress (egress_https_only)
+# 2026.11.05 oehrli - initial version (extracted from oracle_db_host)
 # ------------------------------------------------------------------------------
 
 locals {
-  nsg_name = "nsg-${var.lab_name_core}-db-01"
-
-  # Intra-VCN SSH is always allowed (jumphost / bastion / Cloud Shell via VPN),
-  # external CIDRs are opt-in via allowed_ssh_cidrs.
+  # Intra-VCN SSH is always allowed (bastion / jumphost), external CIDRs are opt-in
   ssh_source_cidrs = distinct(concat([var.vcn_cidr], var.allowed_ssh_cidrs))
+
+  # Protocol names as OCI expects them in the rule
+  protocol_numbers = { tcp = "6", udp = "17", icmp = "1", all = "all" }
 }
 
 # ------------------------------------------------------------------------------
 # NSG
 # ------------------------------------------------------------------------------
 
-resource "oci_core_network_security_group" "db_host" {
+resource "oci_core_network_security_group" "this" {
   compartment_id = var.compartment_ocid
   vcn_id         = var.vcn_id
-  display_name   = local.nsg_name
+  display_name   = "nsg-${var.lab_name_core}-${var.component}-01"
   freeform_tags  = var.freeform_tags
 }
 
 # ------------------------------------------------------------------------------
-# NSG Rules - Ingress SSH
+# Ingress SSH
 # ------------------------------------------------------------------------------
 
 resource "oci_core_network_security_group_security_rule" "ingress_ssh" {
   for_each = toset(local.ssh_source_cidrs)
 
-  network_security_group_id = oci_core_network_security_group.db_host.id
+  network_security_group_id = oci_core_network_security_group.this.id
   direction                 = "INGRESS"
   protocol                  = "6"
   source                    = each.value
@@ -60,48 +60,49 @@ resource "oci_core_network_security_group_security_rule" "ingress_ssh" {
 }
 
 # ------------------------------------------------------------------------------
-# NSG Rules - Ingress Oracle Net listener (intra-VCN only)
+# Ingress - caller-defined rules (source defaults to the VCN CIDR)
 # ------------------------------------------------------------------------------
 
-resource "oci_core_network_security_group_security_rule" "ingress_listener" {
-  network_security_group_id = oci_core_network_security_group.db_host.id
-  direction                 = "INGRESS"
-  protocol                  = "6"
-  source                    = var.vcn_cidr
-  source_type               = "CIDR_BLOCK"
-  description               = "Oracle Net listener (intra-VCN)"
+resource "oci_core_network_security_group_security_rule" "ingress" {
+  for_each = var.ingress_rules
 
-  tcp_options {
-    destination_port_range {
-      min = var.listener_port
-      max = var.listener_port
+  network_security_group_id = oci_core_network_security_group.this.id
+  direction                 = "INGRESS"
+  protocol                  = local.protocol_numbers[each.value.protocol]
+  source                    = coalesce(each.value.source, var.vcn_cidr)
+  source_type               = "CIDR_BLOCK"
+  description               = each.value.description
+
+  dynamic "tcp_options" {
+    for_each = each.value.protocol == "tcp" ? [1] : []
+    content {
+      destination_port_range {
+        min = each.value.port_min
+        max = coalesce(each.value.port_max, each.value.port_min)
+      }
+    }
+  }
+
+  dynamic "udp_options" {
+    for_each = each.value.protocol == "udp" ? [1] : []
+    content {
+      destination_port_range {
+        min = each.value.port_min
+        max = coalesce(each.value.port_max, each.value.port_min)
+      }
     }
   }
 }
 
 # ------------------------------------------------------------------------------
-# NSG Rules - Ingress ICMP (path MTU / reachability inside the VCN)
+# Egress
 # ------------------------------------------------------------------------------
-
-resource "oci_core_network_security_group_security_rule" "ingress_icmp" {
-  network_security_group_id = oci_core_network_security_group.db_host.id
-  direction                 = "INGRESS"
-  protocol                  = "1"
-  source                    = var.vcn_cidr
-  source_type               = "CIDR_BLOCK"
-  description               = "ICMP inside the VCN"
-}
-
-# ------------------------------------------------------------------------------
-# NSG Rules - Egress
-# ------------------------------------------------------------------------------
-# Outbound must stay open: yum/dnf updates, GitHub clone of oradba, and
-# AutoUpgrade patch downloads from Oracle (updates.oracle.com).
+# Default open: dnf, GitHub, MOS / AutoUpgrade patch downloads.
 
 resource "oci_core_network_security_group_security_rule" "egress_all" {
   count = var.egress_https_only ? 0 : 1
 
-  network_security_group_id = oci_core_network_security_group.db_host.id
+  network_security_group_id = oci_core_network_security_group.this.id
   direction                 = "EGRESS"
   protocol                  = "all"
   destination               = "0.0.0.0/0"
@@ -109,22 +110,12 @@ resource "oci_core_network_security_group_security_rule" "egress_all" {
   description               = "Allow all outbound traffic (dnf, GitHub, MOS patch download)"
 }
 
-# The rule gained a count for egress_https_only. Without this block every
-# existing stack would destroy and recreate it on the next apply.
-moved {
-  from = oci_core_network_security_group_security_rule.egress_all
-  to   = oci_core_network_security_group_security_rule.egress_all[0]
-}
-
-# Restricted egress (egress_https_only = true): HTTPS to anywhere, everything
-# inside the VCN. Enough for dnf (OCI regional yum mirrors), container
-# registries, GitHub and the Data Safe on-premises connector, which only ever
-# opens outbound TLS connections to the Data Safe service. DNS and NTP to the
-# VCN resolver (169.254.169.254) are covered by the subnet security list.
+# Restricted egress (egress_https_only = true): HTTPS to anywhere plus the VCN.
+# DNS and NTP to the VCN resolver are covered by the subnet security list.
 resource "oci_core_network_security_group_security_rule" "egress_https" {
   count = var.egress_https_only ? 1 : 0
 
-  network_security_group_id = oci_core_network_security_group.db_host.id
+  network_security_group_id = oci_core_network_security_group.this.id
   direction                 = "EGRESS"
   protocol                  = "6"
   destination               = "0.0.0.0/0"
@@ -142,7 +133,7 @@ resource "oci_core_network_security_group_security_rule" "egress_https" {
 resource "oci_core_network_security_group_security_rule" "egress_vcn" {
   count = var.egress_https_only ? 1 : 0
 
-  network_security_group_id = oci_core_network_security_group.db_host.id
+  network_security_group_id = oci_core_network_security_group.this.id
   direction                 = "EGRESS"
   protocol                  = "all"
   destination               = var.vcn_cidr
