@@ -6,6 +6,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-09
+
+### Fixed
+
+- **db19_engineering** assert_vars v0.2.1: "base and target RU differ" only applies to runs that patch or roll back
+  (`--tags patch|rollback` or no tags). An install-only run that builds a gold image of the current RU sets base =
+  target on purpose and was stopped by it (cpu-patch-tests L4, db26 23.26.4, 2026-11-06)
+
 ## [0.4.2] - 2026-11-05
 
 ### Fixed

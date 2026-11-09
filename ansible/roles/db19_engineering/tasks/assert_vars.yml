@@ -5,7 +5,7 @@
 # Name.......: tasks/assert_vars.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.10.23
-# Version....: v0.2.0
+# Version....: v0.2.1
 # Purpose....: Fail fast on missing or contradictory role input.
 # Notes......: Runs under the "always" tag so a step-by-step run on a test VM
 #              is validated the same way as a full run.
@@ -52,7 +52,11 @@
       Terraform tfvars and apply (inventory only), or pass -e oracle_home_target=...
     success_msg: "Target home {{ oracle_home_target }} fits RU {{ db_target_ru }}."
 
+# Only a run that patches or rolls back needs two RUs. An install-only run that
+# builds a gold image of the current RU (E-L8 in cpu-patch-tests) sets the base
+# to the target on purpose; "all" is a run without --tags.
 - name: Assert the base and target Release Updates differ
+  when: ansible_run_tags | intersect(['all', 'patch', 'rollback']) | length > 0
   ansible.builtin.assert:
     that:
       - db_base_ru is defined
