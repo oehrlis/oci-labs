@@ -9,7 +9,24 @@ ausserhalb der eigenen Labs.
 
 ## Project
 
-TODO: describe project purpose, tech stack, and main commands.
+Disposable Oracle lab environments on OCI: Terraform modules (network, naming, database host, IAM) and lab stacks,
+plus a Makefile that drives plan, apply, install, patch, verify and destroy. Labs, not production - build, use,
+tear down. Public repository: no customer data, hostnames, IPs or OCIDs. Lint: `markdownlint docs/`.
+
+## Role in the lab architecture
+
+Terraform building blocks for Oracle Cloud Infrastructure (OCI): network, hosts and targets per tenant.
+From milestone M5 it is the OCI target of `make up LAB=<name> TARGET=oci` in
+[oradba-labs](https://github.com/oehrlis/oradba-labs): first a container host, then a DB VM configured with
+[oradba-ansible](https://github.com/oehrlis/oradba-ansible).
+
+- Is: infrastructure only - VCN, subnets, compute, Bastion, per-tenant targets.
+- Is not: lab content. Labs and demos live in oradba-labs; images in oradba-docker (planned).
+- Moving out (M4): `ansible/roles` go to oradba-ansible, the CPU lab environments to the patch test catalogue.
+- Neighbours: oradba-labs (caller), oradba-ansible (VM configuration), odb_autoupgrade (Oracle Homes),
+  oradba (runtime). Binaries come from the orarepo OCI bucket, not from a repo.
+
+See the [lab architecture overview](https://github.com/oehrlis/oradba-labs/blob/main/docs/architecture.md).
 
 ## Quick Reference
 

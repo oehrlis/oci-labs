@@ -6,6 +6,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Docs: role in the lab architecture (oradba-labs, oradba-docker)
+
 ## [0.4.2] - 2026-11-05
 
 ### Fixed
