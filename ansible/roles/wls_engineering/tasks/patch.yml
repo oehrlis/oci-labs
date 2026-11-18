@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/patch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.24
-# Version....: v0.2.0
+# Date.......: 2026.11.18
+# Version....: v0.3.0
 # Purpose....: Apply the Stack Patch Bundle under test to one version, in place.
 # Notes......: The documented way (SPB README): stop everything that runs from
 #              the home, SPBAT apply, start. Decided 2026-10-24 over the
@@ -87,6 +87,11 @@
     wv_spb_zip: "{{ wls.spb_target }}"
     wv_spb_home: "{{ wv_home }}"
     wv_spb_role: target
+
+- name: Apply the one-off patches next to the SPB
+  ansible.builtin.include_tasks: oneoffs.yml
+  vars:
+    wv_oneoff_action: apply
 
 - name: Start the servers from the patched home
   ansible.builtin.include_tasks: servers.yml

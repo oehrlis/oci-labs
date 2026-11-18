@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/fetch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.1.0
+# Date.......: 2026.11.18
+# Version....: v0.2.0
 # Purpose....: Stage the files of one version from orarepo through the PAR.
 # Notes......: The PAR URL is a bearer credential. It reaches curl through the
 #              task environment and a config on stdin - never argv (ps), never
@@ -39,7 +39,10 @@
     executable: /bin/bash
   environment:
     REPO_URL: "{{ lab_repo_url }}"
-  loop: "{{ ['installer_zip', 'jdk_file', 'spb_base', 'spb_target'] | map('extract', wls) | list }}"
+  # oneoffs_target: patches a CPU names next to the SPB (oneoffs.yml).
+  loop: >-
+    {{ (['installer_zip', 'jdk_file', 'spb_base', 'spb_target'] | map('extract', wls) | list)
+       + (wls.oneoffs_target | default([])) }}
   register: wv_fetch
   changed_when: "'fetched' in wv_fetch.stdout"
   failed_when: false
