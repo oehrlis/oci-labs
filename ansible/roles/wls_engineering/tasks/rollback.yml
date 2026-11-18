@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/rollback.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.24
-# Version....: v0.2.0
+# Date.......: 2026.11.18
+# Version....: v0.3.0
 # Purpose....: Roll the SPB under test back from one version.
 # Notes......: SPBAT has no rollback phase. The SPB README's way is OPatch:
 #              "opatch nrollback -idFile rollback_patchlist.txt" from the bundle's
@@ -65,6 +65,14 @@
   ansible.builtin.include_tasks: servers.yml
   vars:
     wv_action: stop
+
+# One-offs sit on top of the SPB - they go first, in reverse order. A restore of
+# the archive covers them anyway.
+- name: Roll the one-off patches back
+  ansible.builtin.include_tasks: oneoffs.yml
+  vars:
+    wv_oneoff_action: rollback
+  when: not wls_rollback_restore | bool
 
 - name: Roll the SPB back with OPatch
   become: true

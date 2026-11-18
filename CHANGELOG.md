@@ -6,6 +6,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-18
+
+### Added
+
+- **wls_engineering** one-off patches next to the SPB (`oneoffs_target` per version, from the cpu-patch-tests lab
+  profile): fetched with the other files, applied with OPatch after the SPB while the servers are down, rolled back
+  in reverse order before the SPB rollback (`tasks/oneoffs.yml`, marker `.oneoffs-applied`). CPU450 (November 2026)
+  ships OPSS 40154178 / 40154045 and third-party 40288205 outside the SPB
+
 ## [0.5.1] - 2026-11-18
 
 ### Fixed

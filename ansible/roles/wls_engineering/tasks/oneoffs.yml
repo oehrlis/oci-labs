@@ -1,0 +1,114 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: tasks/oneoffs.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.11.18
+# Version....: v0.1.0
+# Purpose....: Apply or roll back the one-off patches a CPU names next to the SPB.
+# Notes......: Input: wls.oneoffs_target (object names p<id>_<tag>_Generic.zip,
+#              from the cpu-patch-tests lab profile), wv_oneoff_action
+#              (apply | rollback). Some fixes of a CPU ship outside the SPB
+#              (CPU450, November 2026: OPSS 40154178 / 40154045, third-party
+#              40288205) - SPBAT does not know them, so OPatch applies them after
+#              the SPB, with the servers down, and rolls them back before it.
+#              The applied ids are kept in <stage>/.oneoffs-applied: rollback
+#              takes exactly those, in reverse order.
+# Reference..: https://github.com/oehrlis/oci-labs
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Name the one-off patches - {{ wls.version }}
+  ansible.builtin.set_fact:
+    wv_oneoffs: "{{ wls.oneoffs_target | default([]) }}"
+    wv_oneoff_ids: >-
+      {{ (wls.oneoffs_target | default([])) | map('regex_replace', '^p([0-9]+)_.*$', '\1') | list }}
+
+- name: Apply the one-off patches
+  when:
+    - wv_oneoff_action == 'apply'
+    - wv_oneoffs | length > 0
+  block:
+    - name: Create the one-off directory
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.file:
+        path: "{{ wv_stage }}/oneoffs"
+        state: directory
+        mode: "0750"
+
+    - name: Unpack each one-off patch
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.unarchive:
+        src: "{{ wv_stage }}/{{ item }}"
+        dest: "{{ wv_stage }}/oneoffs"
+        remote_src: true
+      loop: "{{ wv_oneoffs }}"
+
+    # The order of the profile is the order of the CPU document.
+    - name: OPatch apply - {{ wv_oneoff_ids | join(', ') }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: "{{ wv_home }}/OPatch/opatch apply -silent -oh {{ wv_home }}"
+        chdir: "{{ wv_stage }}/oneoffs/{{ item }}"
+      environment:
+        ORACLE_HOME: "{{ wv_home }}"
+        JAVA_HOME: "{{ wv_jdk }}"
+        CLASSPATH: ""
+      loop: "{{ wv_oneoff_ids }}"
+      register: wv_oneoff_apply
+      changed_when: wv_oneoff_apply.rc == 0
+      async: "{{ wls_async_timeout }}"
+      poll: "{{ wls_async_poll }}"
+
+    - name: Report the one-off apply
+      ansible.builtin.debug:
+        msg: "{{ wv_oneoff_apply.results | map(attribute='stdout_lines') | map('last') | list }}"
+
+    - name: Record the applied one-off patches
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.copy:
+        dest: "{{ wv_stage }}/.oneoffs-applied"
+        content: "{{ wv_oneoff_ids | join('\n') }}\n"
+        mode: "0640"
+
+- name: Roll the one-off patches back
+  when: wv_oneoff_action == 'rollback'
+  block:
+    - name: Read the applied one-off patches
+      become: true
+      ansible.builtin.slurp:
+        src: "{{ wv_stage }}/.oneoffs-applied"
+      register: wv_oneoff_marker
+      failed_when: false
+
+    - name: Name the one-off patches to roll back
+      ansible.builtin.set_fact:
+        wv_oneoff_rb: >-
+          {{ ((wv_oneoff_marker.content | default('') | b64decode).split('\n'))
+             | select | reverse | list }}
+
+    - name: OPatch rollback - {{ wv_oneoff_rb | join(', ') }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: "{{ wv_home }}/OPatch/opatch rollback -silent -id {{ item }} -oh {{ wv_home }}"
+      environment:
+        ORACLE_HOME: "{{ wv_home }}"
+        JAVA_HOME: "{{ wv_jdk }}"
+        CLASSPATH: ""
+      loop: "{{ wv_oneoff_rb }}"
+      register: wv_oneoff_rollback
+      changed_when: wv_oneoff_rollback.rc == 0
+      async: "{{ wls_async_timeout }}"
+      poll: "{{ wls_async_poll }}"
+
+    - name: Forget the applied one-off patches
+      become: true
+      ansible.builtin.file:
+        path: "{{ wv_stage }}/.oneoffs-applied"
+        state: absent
