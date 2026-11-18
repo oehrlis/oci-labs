@@ -37,7 +37,7 @@ install1.platform={{ db19_autoupgrade_platform }}
 install1.download=no
 install1.gold_image=YES
 {% else %}
-install1.download={{ db19_autoupgrade_download }}
+install1.download={{ 'no' if (db19_gold_image_file | length > 0) else db19_autoupgrade_download }}
 {% if db19_gold_image_file | length == 0 and db19_autoupgrade_gold_image | length > 0 %}
 install1.gold_image={{ db19_autoupgrade_gold_image }}
 {% endif %}

@@ -6,6 +6,22 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-18
+
+### Added
+
+- **db19_engineering** base home from an own gold image (cpu-patch-tests A4, E-L8): `db19_gold_image_file` now applies
+  to the base home only - the install skips the MOS download, create_home installs `GOLDIMAGE:<file>` with
+  `download=no`, the file comes from `lab_repo_url` when `db19_gold_image_url` is empty. The target home never uses it
+- **db19_engineering** CSPU month: base RU = target RU is accepted when the base comes from an own gold image (delta =
+  MRP); the target home defaults to `product/<ru>-<YYYYMM>/dbhome_1` so both homes coexist
+
+### Fixed
+
+- **db19_engineering** gold image names carry the time (`...-20261118-1609.zip`): a base image staged and a target image
+  built on the same day had the same name, and the push would have replaced the base in orarepo
+- **db19_engineering** the gold image push never overwrites an object (`if-none-match: *`, verified: second PUT 412)
+
 ## [0.4.4] - 2026-11-18
 
 ### Changed

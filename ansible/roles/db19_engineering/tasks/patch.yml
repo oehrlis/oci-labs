@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/patch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.24
-# Version....: v0.3.0
+# Date.......: 2026.11.18
+# Version....: v0.4.0
 # Purpose....: Quarterly CPU test - patch out-of-place from the base RU to the
 #              target RU using AutoUpgrade.
 # Notes......: Three steps, all AutoUpgrade:
@@ -74,11 +74,15 @@
 # 2. Create the target ORACLE_HOME
 # ---------------------------------------------------------------------------
 
+# db19_gold_image_file is the BASE home's image - the target is built from the
+# target patch list, never from the baseline artifact.
 - name: Create the target ORACLE_HOME
   ansible.builtin.include_tasks: create_home.yml
   vars:
     db19_home_ru: "{{ db_target_ru }}"
     db19_home_path: "{{ oracle_home_target }}"
+    db19_gold_image_file: ""
+    db19_gold_image_url: ""
 
 # ---------------------------------------------------------------------------
 # 3. Move the database to the target home
