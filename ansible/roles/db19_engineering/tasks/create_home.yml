@@ -297,7 +297,8 @@
     fail_msg: >-
       The seed home {{ db19_home_path }} lists an MRP - it is not the quarter's
       state (E-L10) and must not become a gold image:
-      {{ db19_home_inventory.stdout_lines | default([]) | select('search', '(?i)(\\bMRP\\b|Monthly Recommended)') | list }}
+      {{ db19_home_inventory.stdout_lines | default([])
+         | select('search', '(?i)(\\bMRP\\b|Monthly Recommended)') | list }}
     success_msg: "Seed home {{ db19_home_path }}: no MRP in lsinventory."
   when:
     - db19_seed_mode | bool
