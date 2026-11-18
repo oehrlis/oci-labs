@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/assert_vars.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.2.0
+# Date.......: 2026.11.18
+# Version....: v0.3.0
 # Purpose....: Fail fast on missing or contradictory role input.
 # Notes......: Runs under the "always" tag so a step-by-step run on a test VM
 #              is validated the same way as a full run.
@@ -52,6 +52,29 @@
       Terraform tfvars and apply (inventory only), or pass -e oracle_home_target=...
     success_msg: "Target home {{ oracle_home_target }} fits RU {{ db_target_ru }}."
 
+# Seed mode builds one home and a gold image from it - nothing is patched, so a
+# patch, verify or rollback in the same run would test a home against itself.
+# "all" is a run without --tags, which includes the patch phase.
+- name: Refuse patch steps in seed mode
+  ansible.builtin.assert:
+    that:
+      - ansible_run_tags | intersect(['all', 'patch', 'verify', 'rollback']) | length == 0
+    fail_msg: >-
+      db19_seed_mode builds a base home and its gold image only (tags install,
+      goldimage_push or single install tags). Got tags {{ ansible_run_tags }} -
+      run patch/verify/rollback without db19_seed_mode.
+    success_msg: "Seed mode: install-only run at RU {{ db_base_ru }}"
+  when: db19_seed_mode | bool
+
+# The seed overrides beat role defaults and inventory, not extra vars - an
+# explicit -e still wins, on purpose.
+- name: Build the seed home without an Oracle gold image
+  ansible.builtin.set_fact:
+    db19_try_gold_image: false
+    db19_autoupgrade_gold_image: "NO"
+    db19_autoupgrade_download: "no"
+  when: db19_seed_mode | bool
+
 - name: Assert the base and target Release Updates differ
   ansible.builtin.assert:
     that:
@@ -64,6 +87,7 @@
       (got base "{{ db_base_ru | default('') }}",
       target "{{ db_target_ru | default('') }}").
     success_msg: "Patch path: {{ db_base_ru }} -> {{ db_target_ru }}"
+  when: not (db19_seed_mode | bool)
 
 - name: Assert the two ORACLE_HOME paths differ
   ansible.builtin.assert:
@@ -73,6 +97,7 @@
       oracle_home_base and oracle_home_target must differ - out-of-place
       patching installs the target RU into a separate home.
     success_msg: "Base home {{ oracle_home_base }}, target home {{ oracle_home_target }}"
+  when: not (db19_seed_mode | bool)
 
 - name: Assert the date_time fact is available
   ansible.builtin.assert:

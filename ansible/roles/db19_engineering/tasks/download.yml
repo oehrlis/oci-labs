@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/download.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.4.0
+# Date.......: 2026.11.18
+# Version....: v0.5.0
 # Purpose....: Download the Oracle media for a given Release Update from MOS.
 # Notes......: Called once per RU - for the base RU during install, and again
 #              for the target RU during a CPU test. Requires the auto-login
@@ -19,6 +19,10 @@
 #              the Oracle Updater service (gold_image=AUTO, LINUX.X64 only).
 #              This file checks for that and fails with a clear message rather
 #              than letting create_home die halfway.
+#              Seed mode (db19_seed_mode): no gold-image download at all; the
+#              home starts from the base image (db_release_profile.base_image_zip)
+#              plus db19_patch_list_base. The base image may also come from the
+#              read-by-name repo PAR (lab_repo_url).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
@@ -261,47 +265,67 @@
 # Base image - the one thing AutoUpgrade cannot fetch for 19c
 # ---------------------------------------------------------------------------
 
-- name: Check whether the base image is already staged
+# Any *db_home*.zip counts: for 26ai the download job itself may bring the base
+# image under its own name, and staging a second copy would only cost disk.
+- name: Check whether a base image is already staged
   become: true
-  ansible.builtin.stat:
-    path: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
-  register: db19_base_image_stat
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns: "*db_home*.zip"
+  register: db19_base_image_present
 
 # Accept both PAR shapes: a bucket pre-authenticated request ends with "/" and
 # needs the object name appended, whereas a single-object PAR already points at
-# the file and must be used verbatim.
+# the file and must be used verbatim. Without db19_base_image_url the repo PAR
+# of the lab root serves the base image by name (cpu-patch-tests lab/terraform
+# passes no db_base_image_url since 2026-11-05, only lab_repo_url).
 - name: Resolve the base image URL
   ansible.builtin.set_fact:
     db19_base_image_effective_url: >-
-      {{ db19_base_image_url ~ db19_base_image_zip
-         if db19_base_image_url.endswith('/')
-         else db19_base_image_url }}
-  when: db19_base_image_url | length > 0
+      {{ db19_base_image_source ~ db19_base_image_zip
+         if db19_base_image_source.endswith('/')
+         else db19_base_image_source }}
+  vars:
+    db19_base_image_source: >-
+      {{ db19_base_image_url if (db19_base_image_url | length > 0)
+         else (lab_repo_url | default('')) }}
+  when: (db19_base_image_url | length > 0) or (lab_repo_url | default('') | length > 0)
 
-- name: Stage the base image from db19_base_image_url
-  become: true
-  become_user: "{{ oracle_os_user }}"
-  ansible.builtin.get_url:
-    url: "{{ db19_base_image_effective_url }}"
-    dest: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
-    owner: "{{ oracle_os_user }}"
-    group: "{{ oracle_os_group_install }}"
-    mode: "0644"
-    timeout: 120
-  no_log: true
-  register: db19_base_image_dl
-  retries: 3
-  delay: 10
-  until: db19_base_image_dl is succeeded
+- name: Stage the base image from orarepo
   when:
     - not (db19_gold_image_used | bool)
-    - not db19_base_image_stat.stat.exists
-    - db19_base_image_url | length > 0
+    - db19_base_image_present.files | length == 0
+    - db19_base_image_effective_url | default('') | length > 0
+  block:
+    - name: Download {{ db19_base_image_zip }}
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.get_url:
+        url: "{{ db19_base_image_effective_url }}"
+        dest: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
+        owner: "{{ oracle_os_user }}"
+        group: "{{ oracle_os_group_install }}"
+        mode: "0644"
+        timeout: 120
+      no_log: true
+      register: db19_base_image_dl
+      retries: 3
+      delay: 10
+      until: db19_base_image_dl is succeeded
+  rescue:
+    # no_log hides the reason together with the URL - name the object instead.
+    - name: Fail with the object that could not be staged
+      ansible.builtin.fail:
+        msg: >-
+          Staging {{ db19_base_image_zip }} from orarepo failed (missing object
+          or expired PAR). Check it with make cpu-lab-repo-par REPO_CHECK={{ db19_base_image_zip }};
+          a missing image is uploaded once from Oracle eDelivery.
 
 - name: Re-check the base image after staging
   become: true
-  ansible.builtin.stat:
-    path: "{{ db19_stage_dir }}/{{ db19_base_image_zip }}"
+  ansible.builtin.find:
+    paths: "{{ db19_stage_dir }}"
+    patterns: "*db_home*.zip"
   register: db19_base_image_final
 
 - name: Look for a gold image instead
@@ -311,11 +335,26 @@
     patterns: "*goldimage*.zip"
   register: db19_gold_image_found
 
+# A seed home must start from the base image - a gold image left in the stage
+# directory is not a substitute, it carries a different patch state.
+- name: Assert the seed home has its base image
+  ansible.builtin.assert:
+    that:
+      - db19_base_image_final.files | length > 0
+    fail_msg: >-
+      Seed mode needs the base image in {{ db19_stage_dir }}: neither the
+      download job brought one nor could {{ db19_base_image_zip }} be staged
+      (set lab_repo_url or db19_base_image_url). Staged:
+      {{ db19_staged_media.files | map(attribute='path') | map('basename') | list }}
+    success_msg: >-
+      Seed base image: {{ db19_base_image_final.files | map(attribute='path') | map('basename') | list }}
+  when: db19_seed_mode | bool
+
 - name: Assert a base image or a gold image is available for create_home
   ansible.builtin.assert:
     that:
       - (db19_gold_image_used | bool)
-        or db19_base_image_final.stat.exists
+        or (db19_base_image_final.files | length > 0)
         or (db19_gold_image_found.files | length > 0)
     fail_msg: >-
       Neither {{ db19_base_image_zip }} nor a gold image is present in
@@ -330,7 +369,7 @@
       https://www.oracle.com/database/technologies/oracle19c-linux-downloads.html
     success_msg: >-
       Software source for create_home is available
-      ({{ db19_base_image_final.stat.exists | ternary(db19_base_image_zip, 'gold image') }}).
+      ({{ (db19_base_image_final.files | length > 0) | ternary(db19_base_image_zip, 'gold image') }}).
 
 - name: Stamp this RU as fully staged
   become: true

@@ -6,9 +6,31 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-18
+
+### Added
+
+- **db19_engineering** seed mode (`db19_seed_mode=true`, cpu-patch-tests E-L8/E-L9): an install-only run builds one
+  home at the quarter's customer state and turns it into a self-made gold image (`db19_gold_image_create=true`, then
+  `goldimage_push`) - the base of the next CPU test, independent of what Oracle still serves. The home is built with
+  `gold_image=NO` and `download=no` from the base image plus `db19_patch_list_base` for both releases; patch, verify
+  and rollback are refused in seed mode. The manifest records `seed_mode`
+
 ### Changed
 
 - Docs: role in the lab architecture (oradba-labs, oradba-docker)
+- **db19_engineering** the asserts "base and target RU differ" and "homes differ" apply to patch runs only; release 26
+  needs a gold image only outside seed mode
+- **db19_engineering** the base image comes from `lab_repo_url` (read-by-name orarepo PAR of the cpu-patch-tests lab
+  roots) when `db19_base_image_url` is empty; any `*db_home*.zip` in the stage directory counts as staged, and a
+  failed staging names the object instead of a hidden URL. `db19_base_image_zip` per release (26ai:
+  `LINUX.X64_2326100_db_home.zip`)
+
+### Fixed
+
+- **db19_engineering** a run with base RU = target RU (seed) took the RECOMMENDED target list - and with it the MRP of
+  the download day - for the base home
+- **db19_engineering** gold image names carry five version fields for 26ai too (`23_26_4_0_0`, was `23_26_4_0_0_0`)
 
 ## [0.4.2] - 2026-11-05
 
