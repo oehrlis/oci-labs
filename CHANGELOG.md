@@ -6,6 +6,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-18
+
+### Fixed
+
+- **db19_engineering** gold image manifest: `autoupgrade` is read from the jar in the push run (was `unknown` - the
+  goldpush run has no autoupgrade step), and `requested_patch_list` is the target list for an image pushed after the
+  patch step (`db19_gold_image_ru` = target RU), the base list for a seed
+
 ## [0.5.0] - 2026-11-18
 
 ### Added
