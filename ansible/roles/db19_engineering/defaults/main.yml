@@ -5,7 +5,7 @@
 # Name.......: defaults/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.3.0
+# Version....: v0.3.1
 # Purpose....: Default variables for the db19_engineering role.
 # Notes......: oracle_sid, oracle_base, db_base_ru, db_target_ru,
 #              oracle_home_base and oracle_home_target are normally supplied
@@ -468,6 +468,12 @@ db19_patch_list: >-
 #     image is never used - it carries the newest OCW and MRP of the download
 #     day, not the quarter's state (19.33 image with OCW only, 2026-11-11)
 #   - the steps patch, verify and rollback are refused
+#   - exception, explicit only: -e db19_try_gold_image=true builds the seed from
+#     the Oracle gold image (RU + OCW) plus the one-offs of the list. For 26ai
+#     this is the only route without a manual base-image download - AutoUpgrade
+#     brings no 26ai base image with gold_image=NO (2026-11-18). Valid only while
+#     no MRP exists for the RU: create_home fails the seed when the built home
+#     lists one
 db19_seed_mode: false
 
 # Minimum AutoUpgrade version for this flow. create_home arrived in 24.7, but
@@ -476,8 +482,13 @@ db19_seed_mode: false
 db19_autoupgrade_min_major: 25
 db19_autoupgrade_min_minor: 3
 
-# Force a re-download of autoupgrade.jar even if the file already exists.
-db19_autoupgrade_force_download: false
+# Fetch autoupgrade.jar on every install/patch run - always the newest build.
+# Oracle fixes the MOS download side in the tool (2026-11-18: 26.6.260925 could
+# not download any 23.26.4 media - "Multiple ARU release IDs were returned" -
+# 26.7.2.261111 could), and a jar left on a host from an earlier run is exactly
+# the old build. The build in use goes into every report and gold-image
+# manifest (db19_autoupgrade_build). false only to pin a jar on purpose.
+db19_autoupgrade_force_download: true
 
 # My Oracle Support credentials for the AutoUpgrade patch downloads.
 # NEVER hardcode these. Supply them at run time, e.g.

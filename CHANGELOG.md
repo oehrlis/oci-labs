@@ -6,6 +6,22 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-18
+
+### Changed
+
+- **db19_engineering** fetches `autoupgrade.jar` on every install/patch run (`db19_autoupgrade_force_download`
+  default `true`): AutoUpgrade 26.6.260925 could not download any 23.26.4 media after the November 2026 release
+  ("Multiple ARU release IDs were returned"), 26.7.2.261111 could - a jar left on a host is the old build
+- **db19_engineering** seed mode: `-e db19_try_gold_image=true` builds the seed from the Oracle gold image plus the
+  one-offs - for 26ai the route without a manual base-image download (AutoUpgrade brings no 26ai base image with
+  `gold_image=NO`)
+
+### Added
+
+- **db19_engineering** a seed home whose `lsinventory` lists an MRP fails before it becomes a gold image - checked on
+  the built home, because an Oracle gold image carries the RU's newest MRP inside the zip
+
 ## [0.4.3] - 2026-11-18
 
 ### Added
