@@ -5,7 +5,7 @@
 # Name.......: defaults/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.3.1
+# Version....: v0.4.0
 # Purpose....: Default variables for the db19_engineering role.
 # Notes......: oracle_sid, oracle_base, db_base_ru, db_target_ru,
 #              oracle_home_base and oracle_home_target are normally supplied
@@ -126,7 +126,12 @@ oracle_inventory: "{{ oracle_root }}/app/oraInventory"
 
 # ORACLE_HOMEs. Mirrors the Terraform locals so both layers agree.
 oracle_home_base: "{{ oracle_base }}/product/{{ db_base_ru }}/dbhome_1"
-oracle_home_target: "{{ oracle_base }}/product/{{ db_target_ru }}/dbhome_1"
+# CSPU month (same RU, delta = MRP, base from an own gold image): the target home
+# gets the run month, so both homes coexist - product/19.33-202611/dbhome_1.
+oracle_home_target: >-
+  {{ oracle_base }}/product/{{ db_target_ru
+     ~ (('-' ~ ansible_facts['date_time']['year'] ~ ansible_facts['date_time']['month'])
+        if (db_target_ru | string) == (db_base_ru | string) else '') }}/dbhome_1
 
 # Staging area for AutoUpgrade downloads (base image + RU patches).
 db19_stage_dir: /opt/stage
@@ -425,7 +430,8 @@ db19_gold_image_name: >-
   {{ 'goldimage-db-' ~ ((db19_home_ru ~ '.0.0.0.0').split('.'))[:5] | join('_') ~ '-'
      ~ (db19_autoupgrade_platform | lower | replace('.', '-')) ~ '-'
      ~ (db19_edition | lower) ~ '-'
-     ~ (ansible_facts['date_time']['date'] | replace('-', '')) ~ '.zip' }}
+     ~ (ansible_facts['date_time']['date'] | replace('-', '')) ~ '-'
+     ~ ansible_facts['date_time']['hour'] ~ ansible_facts['date_time']['minute'] ~ '.zip' }}
 
 # Job state for a gold-image run that happens AFTER a deploy. The deploy keeps
 # its Guaranteed Restore Point (db19_drop_grp_after_patching=false), so its job
@@ -437,9 +443,10 @@ db19_gold_image_name: >-
 # anything.
 db19_gold_image_log_dir: "{{ db19_autoupgrade_log_dir }}-goldimage"
 
-# Install this home FROM a gold image instead of base image plus patches. The
-# file must be present in db19_stage_dir - stage it from a bucket the same way
-# as the base image, via db19_gold_image_url.
+# Install the BASE home FROM a gold image instead of base image plus patches
+# (E-L8: an own goldimage-db-* from orarepo). The base download step is skipped,
+# create_home runs with download=no; the target home never uses it (patch.yml).
+# db19_gold_image_url empty = lab_repo_url + file name (read-by-name repo PAR).
 # Empty = build from the base image and the patch list.
 db19_gold_image_file: ""
 db19_gold_image_url: ""
