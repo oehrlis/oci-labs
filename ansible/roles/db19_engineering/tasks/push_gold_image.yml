@@ -5,7 +5,7 @@
 # Name.......: tasks/push_gold_image.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.2.0
+# Version....: v0.3.0
 # Purpose....: Upload a self-made gold image plus its manifest to Object Storage.
 # Notes......: Uploads from the LAB HOST, not from the control node: the artifact
 #              is several GB and the host sits in the same region as the bucket,
@@ -63,6 +63,27 @@
     db19_gold_artifact: >-
       {{ db19_gold_image_files.files | sort(attribute='mtime') | last }}
 
+# The goldpush run has no autoupgrade step, so db19_autoupgrade_build is unset
+# there - the manifest showed "unknown" (2026-11-18). Read it from the jar.
+- name: Query the AutoUpgrade build for the manifest
+  become: true
+  become_user: "{{ oracle_os_user }}"
+  ansible.builtin.command:
+    cmd: "{{ db19_java_bin }} -jar {{ db19_autoupgrade_jar }} -version"
+  register: db19_gold_au_version
+  changed_when: false
+  failed_when: false
+
+# Which list built the home: a seed builds the base list, an image pushed after
+# the patch step (db19_gold_image_ru = target RU) the target list.
+- name: Select the patch list the gold image was built from
+  ansible.builtin.set_fact:
+    db19_gold_requested_list: >-
+      {{ db19_patch_list_base
+         if ((db19_seed_mode | bool)
+             or (db19_gold_image_ru | default(db_base_ru)) != db_target_ru)
+         else db19_patch_list_target }}
+
 - name: Load the resolved patch set of the Release Update it was built from
   become: true
   ansible.builtin.slurp:
@@ -83,8 +104,9 @@
            'oracle_base': oracle_base,
            'built_on': inventory_hostname,
            'built_at': ansible_facts['date_time']['iso8601'] | default('unknown'),
-           'autoupgrade': db19_autoupgrade_build | default('unknown'),
-           'requested_patch_list': db19_patch_list_base | trim,
+           'autoupgrade': (db19_gold_au_version.stdout | default('')
+                           | regex_findall('build\.version\s+(\S+)') | first | default('unknown')),
+           'requested_patch_list': db19_gold_requested_list | trim,
            'seed_mode': db19_seed_mode | bool,
            'resolved_patches': (db19_gold_patchset_raw.content | b64decode
                                 | from_json).patches | default([])
