@@ -5,7 +5,7 @@
 # Name.......: tasks/create_home.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.5.0
+# Version....: v0.5.1
 # Purpose....: Create an ORACLE_HOME at a given RU via AutoUpgrade create_home.
 # Notes......: Reused for both homes - the caller sets db19_home_ru and
 #              db19_home_path. No runInstaller, no response file: AutoUpgrade
@@ -286,3 +286,20 @@
       {{ db19_home_inventory.stdout_lines | default([])
          | select('search', '(?i)(Oracle (AI )?Database|Release Update|Patch  *[0-9]+ *:)')
          | list }}
+
+# Checked on the built home, not on the download list: an Oracle gold image
+# carries the newest MRP of its RU inside the zip, invisible in patches_info.
+- name: Fail a seed home that carries an MRP
+  ansible.builtin.assert:
+    that:
+      - db19_home_inventory.rc == 0
+      - db19_home_inventory.stdout_lines | select('search', '(?i)(\\bMRP\\b|Monthly Recommended)') | list | length == 0
+    fail_msg: >-
+      The seed home {{ db19_home_path }} lists an MRP - it is not the quarter's
+      state (E-L10) and must not become a gold image:
+      {{ db19_home_inventory.stdout_lines | default([])
+         | select('search', '(?i)(\\bMRP\\b|Monthly Recommended)') | list }}
+    success_msg: "Seed home {{ db19_home_path }}: no MRP in lsinventory."
+  when:
+    - db19_seed_mode | bool
+    - not db19_home_stat.stat.exists

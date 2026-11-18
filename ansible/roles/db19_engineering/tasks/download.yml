@@ -5,7 +5,7 @@
 # Name.......: tasks/download.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.5.0
+# Version....: v0.5.1
 # Purpose....: Download the Oracle media for a given Release Update from MOS.
 # Notes......: Called once per RU - for the base RU during install, and again
 #              for the target RU during a CPU test. Requires the auto-login
@@ -336,11 +336,13 @@
   register: db19_gold_image_found
 
 # A seed home must start from the base image - a gold image left in the stage
-# directory is not a substitute, it carries a different patch state.
+# directory is not a substitute, it carries a different patch state. Only an
+# Oracle gold image downloaded by THIS run on explicit request
+# (db19_try_gold_image=true) counts; create_home then checks the home for an MRP.
 - name: Assert the seed home has its base image
   ansible.builtin.assert:
     that:
-      - db19_base_image_final.files | length > 0
+      - (db19_base_image_final.files | length > 0) or (db19_gold_image_used | bool)
     fail_msg: >-
       Seed mode needs the base image in {{ db19_stage_dir }}: neither the
       download job brought one nor could {{ db19_base_image_zip }} be staged
