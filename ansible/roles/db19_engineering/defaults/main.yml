@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: defaults/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.2.0
+# Date.......: 2026.11.18
+# Version....: v0.3.0
 # Purpose....: Default variables for the db19_engineering role.
 # Notes......: oracle_sid, oracle_base, db_base_ru, db_target_ru,
 #              oracle_home_base and oracle_home_target are normally supplied
@@ -56,6 +56,9 @@ db_release_profiles:
     try_gold_image: true
     patch_list_base: "RU:{{ db_base_ru }},JDK,OPATCH,OJVM,DPBP"
     patch_list_target: "RECOMMENDED:{{ db_target_ru }},JDK"
+    # Base image a home without gold image starts from (db19_seed_mode, and the
+    # fallback when no gold image comes down). Staged from orarepo.
+    base_image_zip: "LINUX.X64_193000_db_home.zip"
     dbca_rsp_version: "v19.0.0"
     dbca_em_configuration: true
     # 19c prerequisite checks reject OL8 without it.
@@ -85,6 +88,11 @@ db_release_profiles:
     # is what the 2026-10-23 probe resolved for both RUs.
     patch_list_base: "RU:{{ db_base_ru }}"
     patch_list_target: "RU:{{ db_target_ru }}"
+    # Only used in db19_seed_mode (gold_image=NO). Oracle documents no automatic
+    # base-image download only for 19c/21c, so a 26ai download job is expected to
+    # bring the base image itself - unverified until the first seed run. The
+    # name is the eDelivery 23.26.1 image, staged from orarepo when it is there.
+    base_image_zip: "LINUX.X64_2326100_db_home.zip"
     dbca_rsp_version: "v23.0.0"
     dbca_em_configuration: false
     cv_assume_distid: ""
@@ -283,7 +291,7 @@ db19_gold_image_pattern: "db_goldimage_{{ db19_home_ru | replace('.', '_') }}*.z
 # stops with "A usable base image file is not found" (26ai, 2026-10-23; Lauf A
 # finding 7 for 19c).
 db19_deploy_gold_image: "NO"
-db19_base_image_zip: "LINUX.X64_193000_db_home.zip"
+db19_base_image_zip: "{{ db_release_profile.base_image_zip }}"
 
 # AutoUpgrade CANNOT obtain the 19c base image. Verified on 2026-08-19 with
 # AutoUpgrade 26.5: gold_image=YES and gold_image=ALL both report "Unable to find
@@ -295,7 +303,8 @@ db19_base_image_zip: "LINUX.X64_193000_db_home.zip"
 # Accepts either shape:
 #   bucket PAR  ".../b/orarepo/o/"                     -> filename is appended
 #   object PAR  ".../o/LINUX.X64_193000_db_home.zip"   -> used verbatim
-# Empty = the file must already be present in db19_stage_dir.
+# Empty = lab_repo_url (the read-by-name PAR on orarepo that cpu-patch-tests'
+# lab roots pass for every product), else the file must already be staged.
 db19_base_image_url: ""
 
 # Fallback for the TARGET RU when the host should not download from MOS: an OCI
@@ -400,6 +409,8 @@ db19_gold_image_create: false
 # matching <stem>.patchset.json carries the resolved patch set and the artifact
 # checksum, so the image describes itself. Deliberately no "latest" alias -
 # a gold image is always referenced explicitly.
+# Five version fields for both releases: 19.33 -> 19_33_0_0_0, 23.26.4 ->
+# 23_26_4_0_0 (appending ".0.0.0" gave 26ai a sixth field).
 # AutoUpgrade would accept its own %RELEASE%/%UPDATE%/%TIMESTAMP% placeholders
 # here, but those carry neither platform nor edition and let the timestamp
 # dominate the sort order.
@@ -411,7 +422,7 @@ db19_gold_image_create: false
 # Composed inside one Jinja expression on purpose: a folded scalar would turn
 # the line breaks into spaces and corrupt the file name.
 db19_gold_image_name: >-
-  {{ 'goldimage-db-' ~ (db19_home_ru ~ '.0.0.0') | replace('.', '_') ~ '-'
+  {{ 'goldimage-db-' ~ ((db19_home_ru ~ '.0.0.0.0').split('.'))[:5] | join('_') ~ '-'
      ~ (db19_autoupgrade_platform | lower | replace('.', '-')) ~ '-'
      ~ (db19_edition | lower) ~ '-'
      ~ (ansible_facts['date_time']['date'] | replace('-', '')) ~ '.zip' }}
@@ -434,10 +445,30 @@ db19_gold_image_file: ""
 db19_gold_image_url: ""
 
 # Resolved per invocation - callers set db19_home_ru to the base or target RU.
+# A seed run builds the base home at the target RU on purpose, so the RU
+# comparison alone would hand it the RECOMMENDED target list - and with it the
+# MRP of the download day, which is exactly what a seed must not contain.
 db19_patch_list: >-
   {{ db19_patch_list_target
-     if (db19_home_ru | default(db_base_ru)) == db_target_ru
+     if ((db19_home_ru | default(db_base_ru)) == db_target_ru
+         and not (db19_seed_mode | bool))
      else db19_patch_list_base }}
+
+# ------------------------------------------------------------------------------
+# Seed mode (cpu-patch-tests E-L8/E-L9, 2026-11-18)
+# ------------------------------------------------------------------------------
+# Install-only run that builds ONE home - the quarter's customer state - and
+# turns it into a self-made gold image (db19_gold_image_create=true, then
+# goldimage_push). That image is the base of the next CPU test, so no baseline
+# depends on what Oracle still serves. In seed mode:
+#   - db_base_ru may equal db_target_ru, and oracle_home_base may equal
+#     oracle_home_target - the base/target asserts apply to patch runs only
+#   - the home is built with gold_image=NO and download=no from what the
+#     download step staged: base image + db19_patch_list_base. An Oracle gold
+#     image is never used - it carries the newest OCW and MRP of the download
+#     day, not the quarter's state (19.33 image with OCW only, 2026-11-11)
+#   - the steps patch, verify and rollback are refused
+db19_seed_mode: false
 
 # Minimum AutoUpgrade version for this flow. create_home arrived in 24.7, but
 # home_settings.inventory_location / inventory_group - mandatory on a server
