@@ -5,7 +5,7 @@
 # Name.......: tasks/patch.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.4.0
+# Version....: v0.4.1
 # Purpose....: Quarterly CPU test - patch out-of-place from the base RU to the
 #              target RU using AutoUpgrade.
 # Notes......: Three steps, all AutoUpgrade:
@@ -74,8 +74,21 @@
 # 2. Create the target ORACLE_HOME
 # ---------------------------------------------------------------------------
 
-# db19_gold_image_file is the BASE home's image - the target is built from the
-# target patch list, never from the baseline artifact.
+# The target is built from the target patch list, never from the baseline
+# artifact. db19_gold_image_file as an EXTRA var beats the include vars below
+# (2026-11-19: the target home rendered PATCH=GOLDIMAGE: next to
+# CREATE_GOLD_IMAGE and AutoUpgrade refused) - callers name the base image in
+# db19_base_gold_image_file, and this assert catches the old usage.
+- name: Assert the base gold image is not passed as db19_gold_image_file
+  ansible.builtin.assert:
+    that:
+      - db19_gold_image_file | length == 0
+    fail_msg: >-
+      db19_gold_image_file={{ db19_gold_image_file }} is set for the whole play
+      (extra var) and would build the target home from the baseline image. Pass
+      it as db19_base_gold_image_file.
+    quiet: true
+
 - name: Create the target ORACLE_HOME
   ansible.builtin.include_tasks: create_home.yml
   vars:
