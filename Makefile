@@ -852,6 +852,13 @@ cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forw
 # ("Permission denied (publickey)", 2026-10-22), and ssh then exits at once. The
 # tunnel loop therefore restarts a dead ssh within the same session instead of
 # probing a tunnel that is already gone.
+# The tunnel ssh runs under a supervisor loop for the whole run, not once. On
+# 2026-11-19 the Bastion stopped answering mid-step on two hosts ("Timeout,
+# server ... not responding" at 12:01 and 12:18), the ssh exited as it should,
+# and with nothing to start it again both runs hung for over two hours on a
+# finished task. The supervisor restarts the ssh after 5 s; Ansible bridges the
+# gap with ssh retries (ansible.cfg [ssh_connection]). The supervisor's own
+# command line carries "-L <port>:", so the pkill below stops it with the ssh.
 BASTION_SSH_OPTS := -o StrictHostKeyChecking=no -o IdentitiesOnly=yes \
   -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
 
@@ -886,7 +893,8 @@ cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the
 	    pid=""; \
 	    for i in $$(seq 1 15); do \
 	      if [[ -z "$$pid" ]] || ! kill -0 "$$pid" 2>/dev/null; then \
-	        nohup bash -c "$$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS)" \
+	        nohup bash -c "while :; do $$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS); rc=\$$?; \
+	          echo \"\$$(date '+%F %T') tunnel ssh exited rc=\$$rc - restarting in 5 s\"; sleep 5; done" \
 	          >.bastion-tunnel.log 2>&1 & \
 	        pid=$$!; \
 	      fi; \
