@@ -35,7 +35,7 @@
     # Bastion tunnel on a reused local port: no host key pinning (see
     # lab-cpu-patch.yml for the reasoning).
     ansible_ssh_common_args: >-
-      -o ServerAliveInterval=60 -o ServerAliveCountMax=30
+      -o ServerAliveInterval=15 -o ServerAliveCountMax=8
       -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
       -o IdentitiesOnly=yes -o LogLevel=ERROR
 

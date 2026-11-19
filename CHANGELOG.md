@@ -6,6 +6,18 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-19
+
+### Fixed
+
+- **cpu-lab-bastion-tunnel**: the tunnel ssh runs under a supervisor loop that restarts it 5 s after it exits, for
+  the whole run. On 2026-11-19 the Bastion stopped answering mid-step on two hosts; the ssh exited, nothing restarted
+  it, and both runs hung for over two hours on tasks the host had already finished. The pkill of a tunnel rebuild
+  stops the supervisor with the ssh
+- **Ansible ssh**: a silent channel fails after 2 min (`ServerAliveInterval=15`, `ServerAliveCountMax=8`, was 60 x 30)
+  in the cpu, wls and Data Safe demo playbooks, and ssh exit 255 is retried 10 times with backoff
+  (`ansible.cfg [ssh_connection] retries`), about 3.5 min - long enough for the supervisor to bring the forward back
+
 ## [0.6.3] - 2026-11-19
 
 ### Changed
