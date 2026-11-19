@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/create_home.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.11.18
-# Version....: v0.6.0
+# Date.......: 2026.11.19
+# Version....: v0.6.1
 # Purpose....: Create an ORACLE_HOME at a given RU via AutoUpgrade create_home.
 # Notes......: Reused for both homes - the caller sets db19_home_ru and
 #              db19_home_path. No runInstaller, no response file: AutoUpgrade
@@ -28,6 +28,11 @@
     db19_home_path: "{{ db19_home_path | default(oracle_home_base) }}"
     # Per call: a gold image found for the previous home must not carry over.
     db19_gold_image_staged: ""
+    # An own base image gets a folder of its own: in the shared stage directory
+    # AutoUpgrade's gold_image=YES for the TARGET picked it over Oracle's gold
+    # image - the target home lost the MRP (L3 db19, 2026-11-19).
+    db19_home_folder: >-
+      {{ (db19_stage_dir ~ '/base-gold') if (db19_gold_image_file | length > 0) else db19_stage_dir }}
 
 - name: Check whether a central inventory is already registered
   become: true
@@ -109,6 +114,18 @@
     - db_release | string == '26'
     - not (db19_seed_mode | bool)
 
+- name: Create the folder of the own base gold image
+  become: true
+  ansible.builtin.file:
+    path: "{{ db19_home_folder }}"
+    state: directory
+    owner: "{{ oracle_os_user }}"
+    group: "{{ oracle_os_group_install }}"
+    mode: "0755"
+  when:
+    - not db19_home_stat.stat.exists
+    - db19_gold_image_file | length > 0
+
 - name: Stage the gold image from db19_gold_image_url
   become: true
   become_user: "{{ oracle_os_user }}"
@@ -116,7 +133,7 @@
     url: >-
       {{ db19_gold_image_url if (db19_gold_image_url | length > 0)
          else (lab_repo_url | default('')) ~ db19_gold_image_file }}
-    dest: "{{ db19_stage_dir }}/{{ db19_gold_image_file }}"
+    dest: "{{ db19_home_folder }}/{{ db19_gold_image_file }}"
     owner: "{{ oracle_os_user }}"
     group: "{{ oracle_os_group_install }}"
     mode: "0644"
@@ -134,7 +151,7 @@
 - name: Assert the gold image is present before building from it
   become: true
   ansible.builtin.stat:
-    path: "{{ db19_stage_dir }}/{{ db19_gold_image_file }}"
+    path: "{{ db19_home_folder }}/{{ db19_gold_image_file }}"
   register: db19_gold_image_local
   when:
     - not db19_home_stat.stat.exists
@@ -300,7 +317,7 @@
       The seed home {{ db19_home_path }} lists an MRP - it is not the quarter's
       state (E-L10) and must not become a gold image:
       {{ db19_home_inventory.stdout_lines | default([])
-         | select('search', '(?i)(\\bMRP\\b|Monthly Recommended)') | list }}
+         | select('search', '(?i)(\bMRP\b|Monthly Recommended)') | list }}
     success_msg: "Seed home {{ db19_home_path }}: no MRP in lsinventory."
   when:
     - db19_seed_mode | bool

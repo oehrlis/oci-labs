@@ -6,6 +6,20 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-19
+
+### Fixed
+
+- **db19_engineering** the own base gold image is staged in `<stage>/base-gold/`: in the shared stage directory
+  AutoUpgrade's `gold_image=YES` for the target picked it over Oracle's gold image, and the target home lost the
+  November MRP (L3 db19, 2026-11-19)
+- **db19_engineering** verify: new hard criterion "MRP in the target home" when the target list asks for `MRP` or
+  `RECOMMENDED` - checked in lsinventory, because inside a gold image the MRP only shows as "DB Gold Image" and the
+  binary check passed a home without it
+- **db19_engineering** verify: the sqlpatch criterion takes the rows added since the baseline snapshot. Matching by
+  RU version took the base's rows in a CSPU month (base RU = target RU), and a create_db "WITH ERRORS" row turned the
+  run red; no new row passes only when base and target RU are the same (binary-only MRP)
+
 ## [0.6.1] - 2026-11-19
 
 ### Fixed
