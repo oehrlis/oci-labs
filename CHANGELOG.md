@@ -6,6 +6,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-19
+
+### Fixed
+
+- **db19_engineering** the base gold image is passed as `db19_base_gold_image_file` (and `_url`): as an extra var
+  (cpu-patch-tests profile, `-e @file`) `db19_gold_image_file` beat the include vars of patch.yml and reached the
+  target home - AutoUpgrade refused `PATCH=GOLDIMAGE:` together with `CREATE_GOLD_IMAGE` (L3 db19, 2026-11-19).
+  patch.yml fails early when `db19_gold_image_file` is set for the whole play
+
 ## [0.6.0] - 2026-11-18
 
 ### Added

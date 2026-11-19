@@ -5,7 +5,7 @@
 # Name.......: tasks/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.2.0
+# Version....: v0.2.1
 # Purpose....: Entry point for the db19_engineering role.
 # Notes......: Two phases, split by tag.
 #
@@ -69,11 +69,11 @@
     - patch
     - credentials
 
-# A base home from an own gold image (db19_gold_image_file) needs no MOS media:
-# the image is the base. E-L8 - the base of a cycle is the target of the last.
+# A base home from an own gold image (db19_base_gold_image_file) needs no MOS
+# media: the image is the base. E-L8 - the base of a cycle is the target of the last.
 - name: Download the base release image and base RU
   ansible.builtin.import_tasks: download.yml
-  when: db19_gold_image_file | length == 0
+  when: db19_base_gold_image_file | length == 0
   tags:
     - install
     - download
@@ -83,6 +83,8 @@
   vars:
     db19_home_ru: "{{ db_base_ru }}"
     db19_home_path: "{{ oracle_home_base }}"
+    db19_gold_image_file: "{{ db19_base_gold_image_file }}"
+    db19_gold_image_url: "{{ db19_base_gold_image_url }}"
   tags:
     - install
     - create_home

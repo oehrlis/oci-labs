@@ -5,7 +5,7 @@
 # Name.......: defaults/main.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.4.0
+# Version....: v0.4.1
 # Purpose....: Default variables for the db19_engineering role.
 # Notes......: oracle_sid, oracle_base, db_base_ru, db_target_ru,
 #              oracle_home_base and oracle_home_target are normally supplied
@@ -445,9 +445,14 @@ db19_gold_image_log_dir: "{{ db19_autoupgrade_log_dir }}-goldimage"
 
 # Install the BASE home FROM a gold image instead of base image plus patches
 # (E-L8: an own goldimage-db-* from orarepo). The base download step is skipped,
-# create_home runs with download=no; the target home never uses it (patch.yml).
-# db19_gold_image_url empty = lab_repo_url + file name (read-by-name repo PAR).
+# create_home runs with download=no; the target home never uses it.
+# db19_base_gold_image_url empty = lab_repo_url + file name (read-by-name repo PAR).
 # Empty = build from the base image and the patch list.
+db19_base_gold_image_file: ""
+db19_base_gold_image_url: ""
+
+# Per create_home call (set by main.yml for the base home) - not for callers:
+# as an extra var it would reach the target home too (patch.yml asserts that).
 db19_gold_image_file: ""
 db19_gold_image_url: ""
 

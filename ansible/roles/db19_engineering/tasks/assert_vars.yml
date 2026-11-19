@@ -5,7 +5,7 @@
 # Name.......: tasks/assert_vars.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.11.18
-# Version....: v0.4.0
+# Version....: v0.4.1
 # Purpose....: Fail fast on missing or contradictory role input.
 # Notes......: Runs under the "always" tag so a step-by-step run on a test VM
 #              is validated the same way as a full run.
@@ -80,13 +80,13 @@
     that:
       - db_base_ru is defined
       - db_target_ru is defined
-      - (db_base_ru != db_target_ru) or (db19_gold_image_file | length > 0)
+      - (db_base_ru != db_target_ru) or (db19_base_gold_image_file | length > 0)
     fail_msg: >-
       db_base_ru and db_target_ru must both be set and must differ - an
       out-of-place patch test needs two distinct Release Updates
       (got base "{{ db_base_ru | default('') }}",
       target "{{ db_target_ru | default('') }}"). Same RU is a CSPU month (base
-      = own gold image via db19_gold_image_file, delta = MRP).
+      = own gold image via db19_base_gold_image_file, delta = MRP).
     success_msg: "Patch path: {{ db_base_ru }} -> {{ db_target_ru }}"
   when: not (db19_seed_mode | bool)
 
