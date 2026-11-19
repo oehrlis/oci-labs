@@ -6,6 +6,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-19
+
+### Changed
+
+- **wls_engineering** one-off patches: `opatch prereq CheckApplicable` first. A patch OPatch reports as not applicable
+  to the home (e.g. OPSS on a plain WebLogic Server install) is not applied and does not fail the run; every one-off
+  lands in the evidence (`oneoffs`: patch, install type, verdict applied / not applicable / apply failed, OPatch
+  output). A failing apply of an applicable patch still fails the run
+
 ## [0.6.2] - 2026-11-19
 
 ### Fixed
