@@ -27,7 +27,7 @@ install1.patch={{ db19_patch_list }}
 {# Produces the gold image in install1.folder after the home is built. #}
 install1.create_gold_image={{ db19_gold_image_name }}
 {% endif %}
-install1.folder={{ db19_stage_dir }}
+install1.folder={{ db19_home_folder | default(db19_stage_dir) }}
 install1.target_home={{ db19_home_path }}
 install1.target_version={{ db19_major_release }}
 install1.platform={{ db19_autoupgrade_platform }}

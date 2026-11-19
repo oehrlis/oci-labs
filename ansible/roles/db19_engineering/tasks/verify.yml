@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/verify.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.2.1
+# Date.......: 2026.11.19
+# Version....: v0.2.2
 # Purpose....: Verify and report the outcome of a quarterly CPU patch test.
 # Notes......: Four levels, because a patch can fail at four different places:
 #                binary     the patch is in the ORACLE_HOME (opatch)
@@ -18,8 +18,9 @@
 #              failure. That keeps the exit code meaningful without truncating
 #              the evidence - a red run must still produce a full report.
 #
-#              Hard : version_full, every sqlpatch row SUCCESS, datapatch has
-#                     nothing pending, every PDB at the root's patch level
+#              Hard : version_full, every NEW sqlpatch row SUCCESS, datapatch
+#                     has nothing pending, every PDB at the root's patch level,
+#                     an MRP in the target home when the list asks for one
 #              Soft : invalid-object delta, component validity, listener
 #                     services, binary-vs-resolved-patch-set comparison
 #
@@ -220,8 +221,10 @@
     # db19_sqlpatch_historical_errors. Measured 2026-08-21: DPBP 19.31 sat in
     # the registry as "WITH ERRORS (PREV PATCH)" from create_db and turned an
     # otherwise clean 19.32 run red.
+    # No new row is right for a binary-only MRP in a CSPU month (datapatch has
+    # nothing to do); a new RU always writes rows.
     db19_check_sqlpatch: >-
-      {{ (db19_sqlpatch_target | length > 0)
+      {{ ((db19_sqlpatch_target | length > 0) or (db_base_ru | string) == (db_target_ru | string))
          and (db19_sqlpatch_target | rejectattr(2, 'equalto', 'SUCCESS')
               | list | length == 0) }}
     db19_sqlpatch_target: "{{ db19_sqlpatch_target }}"
@@ -231,23 +234,28 @@
          | rejectattr(1, 'in', db19_sqlpatch_target | map(attribute=1) | list)
          | list }}
     db19_check_datapatch: "{{ not db19_datapatch_pending }}"
+    # MRP or RECOMMENDED in the target list: the home must list an MRP. The
+    # resolved patch set cannot show it - inside a gold image the MRP is only
+    # "DB Gold Image" (2026-11-19: a home without the November MRP passed the
+    # binary check).
+    db19_mrp_requested: "{{ db19_patch_list_target is search('(?i)(\\bMRP\\b|RECOMMENDED)') }}"
+    # Folded scalar: one backslash reaches the regex (two in a double-quoted
+    # string, as above) - measured 2026-11-19, two here never matched.
+    db19_check_mrp: >-
+      {{ (not (db19_patch_list_target is search('(?i)(\bMRP\b|RECOMMENDED)')))
+         or (db19_lsinventory.stdout | default('') is search('(?i)(\bMRP\b|Monthly Recommended)')) }}
     db19_pdb_gap: >-
       {{ db19_post.container_patch_sets | default([])
          | rejectattr(0, 'equalto', '1')
          | rejectattr(1, 'equalto', db19_root_patch_set)
          | map(attribute=0) | list }}
   vars:
-    # Rows that belong to the target Release Update: either the RU version shows
-    # up in the description, or the patch id is one of the resolved target
-    # patches. Both, because Oracle's wording differs per patch type.
+    # Rows of THIS patch: the rows the baseline snapshot did not have (by
+    # position - the registry only grows). Matching by RU version took the
+    # base's rows in a CSPU month, where base and target RU are the same, and
+    # an old create_db "WITH ERRORS" row turned the run red (2026-11-19).
     db19_sqlpatch_target: >-
-      {{ db19_post.sqlpatch | default([])
-         | selectattr(3, 'search', db_target_ru | regex_escape)
-         | list
-         + (db19_post.sqlpatch | default([])
-            | selectattr(0, 'in', db19_expected_patches | default([]))
-            | rejectattr(3, 'search', db_target_ru | regex_escape)
-            | list) }}
+      {{ (db19_post.sqlpatch | default([]))[(db19_baseline.sqlpatch | default([])) | length :] }}
     db19_root_patch_set: >-
       {{ (db19_post.container_patch_sets | default([])
           | selectattr(0, 'equalto', '1') | map(attribute=1) | first)
@@ -302,6 +310,7 @@
                'sqlpatch_all_success': db19_check_sqlpatch,
                'datapatch_nothing_pending': db19_check_datapatch,
                'containers_in_sync': db19_check_containers,
+               'mrp_in_target_home': db19_check_mrp,
              },
              'soft': {
                'binary_patchset_complete': db19_check_binary,
@@ -340,6 +349,9 @@
       - "HARD every sqlpatch row SUCCESS .: {{ db19_check_sqlpatch | ternary('PASS', 'FAIL') }}"
       - "HARD datapatch nothing pending ..: {{ db19_check_datapatch | ternary('PASS', 'FAIL') }}"
       - "HARD containers in sync .........: {{ db19_check_containers | ternary('PASS', 'FAIL') }}"
+      - >-
+        HARD MRP in target home .........: {{ db19_check_mrp | ternary('PASS', 'FAIL') }}{{
+        '' if db19_mrp_requested else ' (not requested)' }}
       - >-
         bundled, members counted individually:
         {{ db19_bundled_patches | join('; ') | default('none', true) }}
@@ -402,12 +414,14 @@
       - db19_check_sqlpatch | bool
       - db19_check_datapatch | bool
       - db19_check_containers | bool
+      - db19_check_mrp | bool
     fail_msg: >-
       CPU patch test FAILED.
       version={{ db19_check_version | ternary('ok', 'wrong: ' ~ (db19_post.db.version_full | default('?'))) }},
       sqlpatch={{ db19_check_sqlpatch | ternary('ok', 'rows not SUCCESS') }},
       datapatch={{ db19_check_datapatch | ternary('ok', 'work still pending') }},
-      containers={{ db19_check_containers | ternary('ok', 'out of sync: ' ~ (db19_pdb_gap | join(','))) }}.
+      containers={{ db19_check_containers | ternary('ok', 'out of sync: ' ~ (db19_pdb_gap | join(','))) }},
+      mrp={{ db19_check_mrp | ternary('ok', 'MRP requested, not in the home') }}.
       Full evidence: {{ db19_stage_dir }}/{{ db19_report_stem }}.md
     success_msg: >-
       CPU patch test PASSED - {{ oracle_sid }} runs
