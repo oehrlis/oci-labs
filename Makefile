@@ -852,13 +852,18 @@ cpu-lab-bastion-session: guard-oci guard-terraform ## Create a Bastion port-forw
 # ("Permission denied (publickey)", 2026-10-22), and ssh then exits at once. The
 # tunnel loop therefore restarts a dead ssh within the same session instead of
 # probing a tunnel that is already gone.
-# The tunnel ssh runs under a supervisor loop for the whole run, not once. On
-# 2026-11-19 the Bastion stopped answering mid-step on two hosts ("Timeout,
-# server ... not responding" at 12:01 and 12:18), the ssh exited as it should,
-# and with nothing to start it again both runs hung for over two hours on a
-# finished task. The supervisor restarts the ssh after 5 s; Ansible bridges the
-# gap with ssh retries (ansible.cfg [ssh_connection]). The supervisor's own
-# command line carries "-L <port>:", so the pkill below stops it with the ssh.
+# The tunnel ssh runs under tools/bastion-tunnel-supervisor.sh for the whole run,
+# not once. On 2026-11-19 the Bastion stopped answering mid-step on two hosts,
+# the ssh exited as it should, and with nothing to start it again both runs hung
+# for over two hours on a finished task. The supervisor restarts the ssh after
+# 5 s, renews the session BASTION_SUPERVISOR_RENEW seconds before its TTL ends (a
+# WLS install step ran past the three hours on 2026-11-19), and stops when
+# BASTION_OWNER_PID is gone. Ansible bridges each gap with ssh retries
+# (ansible.cfg [ssh_connection]). BASTION_TUNNEL_STOP ends the supervisor through
+# its pid file, then any ssh left on the port.
+BASTION_SUPERVISOR_RENEW ?= 900
+BASTION_TUNNEL_STOP = if [[ -f .bastion-tunnel.pid ]]; then kill "$$(cat .bastion-tunnel.pid)" 2>/dev/null || true; \
+  sleep 1; rm -f .bastion-tunnel.pid; fi; pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true;
 BASTION_SSH_OPTS := -o StrictHostKeyChecking=no -o IdentitiesOnly=yes \
   -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
 
@@ -884,7 +889,7 @@ cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the
 	    fi; \
 	  fi; \
 	  if [[ $$renew -eq 0 ]] && probe; then echo "✅ Tunnel already usable on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
-	  pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
+	  $(BASTION_TUNNEL_STOP) \
 	  for attempt in 1 2 3; do \
 	    if [[ ! -f .bastion-tunnel.cmd ]] || [[ $$attempt -gt 1 ]]; then \
 	      echo "Creating a Bastion session (attempt $$attempt)..."; \
@@ -893,21 +898,27 @@ cpu-lab-bastion-tunnel: ## Open the Bastion tunnel, retrying and re-creating the
 	    pid=""; \
 	    for i in $$(seq 1 15); do \
 	      if [[ -z "$$pid" ]] || ! kill -0 "$$pid" 2>/dev/null; then \
-	        nohup bash -c "while :; do $$(cat .bastion-tunnel.cmd) $(BASTION_SSH_OPTS); rc=\$$?; \
-	          echo \"\$$(date '+%F %T') tunnel ssh exited rc=\$$rc - restarting in 5 s\"; sleep 5; done" \
-	          >.bastion-tunnel.log 2>&1 & \
+	        nohup "$(CURDIR)/$(TOOLS_DIR)/bastion-tunnel-supervisor.sh" "$(CPU_ENV_DIR)" \
+	          $(BASTION_SESSION_TTL) $(BASTION_SUPERVISOR_RENEW) -- \
+	          $(MAKE) --no-print-directory -C "$(CURDIR)" cpu-lab-bastion-session CPU_ENV="$(CPU_ENV)" \
+	          CPU_ENV_DIR="$(CPU_ENV_DIR)" BASTION_LOCAL_PORT=$(BASTION_LOCAL_PORT) \
+	          BASTION_SESSION_TTL=$(BASTION_SESSION_TTL) >.bastion-tunnel.log 2>&1 & \
 	        pid=$$!; \
 	      fi; \
 	      sleep 4; probe && break; \
 	    done; \
 	    if probe; then echo "✅ Tunnel up on 127.0.0.1:$(BASTION_LOCAL_PORT)"; exit 0; fi; \
 	    echo "   attempt $$attempt failed: $$(tail -1 .bastion-tunnel.log 2>/dev/null)"; \
-	    pkill -f "L $(BASTION_LOCAL_PORT):" 2>/dev/null || true; \
+	    $(BASTION_TUNNEL_STOP) \
 	  done; \
 	  echo "❌ Tunnel did not come up - see $(CPU_ENV_DIR)/.bastion-tunnel.log"; exit 1
 	@echo ""
 	@echo "Use it with Ansible:"
 	@echo "  make cpu-lab-install ANSIBLE_EXTRA=\"-e ansible_host=127.0.0.1 -e ansible_port=$(BASTION_LOCAL_PORT)\""
+
+.PHONY: cpu-lab-bastion-tunnel-stop
+cpu-lab-bastion-tunnel-stop: ## Stop the tunnel supervisor and its ssh for this CPU_ENV
+	$(Q)cd "$(CPU_ENV_DIR)" && $(BASTION_TUNNEL_STOP) echo "Tunnel on 127.0.0.1:$(BASTION_LOCAL_PORT) stopped"
 
 .PHONY: cpu-lab-bastion-list
 cpu-lab-bastion-list: guard-oci guard-terraform ## List active Bastion sessions
