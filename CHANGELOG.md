@@ -6,6 +6,20 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-20
+
+### Fixed
+
+- **cpu-lab-bastion-tunnel**: the supervisor is now `tools/bastion-tunnel-supervisor.sh`. Besides restarting the ssh it
+  renews the Bastion session `BASTION_SUPERVISOR_RENEW` (900) seconds before the TTL ends, and after six fast ssh exits
+  in a row (a session that expired while the Mac slept); it stops when `BASTION_OWNER_PID` is gone. On 2026-11-19 a
+  WLS install step ran past the three hour session and the 0.6.4 loop kept restarting an ssh into an expired session,
+  then ran on for a day after the run had ended
+
+### Added
+
+- `make cpu-lab-bastion-tunnel-stop` - stops the supervisor (pid file `.bastion-tunnel.pid`) and the ssh on the port
+
 ## [0.6.4] - 2026-11-19
 
 ### Fixed
