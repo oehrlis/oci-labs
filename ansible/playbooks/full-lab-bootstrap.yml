@@ -24,4 +24,4 @@
         that: false
         fail_msg: >-
           full-lab-bootstrap.yml is a placeholder and has no tasks yet.
-          See tasks/roadmap-cpu-lab.md for the milestone that fills it.
+          Open item 'Lab-Stubs' in tasks/open-work.md.

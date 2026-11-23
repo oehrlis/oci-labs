@@ -888,7 +888,7 @@ The ones that matter per quarter:
 | `lab_count` | `.env` / tfvars | `1` | Number of identical hosts |
 | `allowed_ssh_cidrs` | `.env` / tfvars | `[]` | External CIDRs allowed to SSH |
 | `compartment_ocid` | `.env` / tfvars | - | Base compartment, never created by Terraform |
-| `assign_public_ip` | tfvars | `true` | Public subnet plus public IP |
+| `assign_public_ip` | tfvars | `false` | Public subnet plus public IP; default is the Bastion path |
 | `enable_auto_stop` | tfvars | `true` | Daily auto-stop schedule; set `false` for AutoUpgrade runs |
 
 <!-- markdownlint-restore -->

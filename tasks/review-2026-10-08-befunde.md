@@ -383,7 +383,7 @@
 - F-17 traegt bewusst `ort: .gitleaks.toml` statt `.github/workflows/gitleaks.yml`, damit RA-oci-labs-006 (gleiche regel `ci-gate`) nicht als regressiert gilt
 - Verworfen nach Orchestrator-Korrektur: INV-3-Befund aus scan-secrets (CLAUDE.md liegt im Root), MD041 und "197 Fences ohne Sprache" aus scan-markdown (leere Dateien bzw. schliessende Fences)
 - Verworfen: scan-tests "site2site-udm stiller Skip" - veraltet, Makefile:185 meldet den Skip sichtbar; Rest in F-22
-- tasks/review-2026-10-08-scan-secrets.md: Profil- und Compartment-Namen vom Orchestrator redigiert (`<profile>`, `<compartment>`)
+- tasks/review-2026-10-08-scan-secrets.md (Rohbericht seit 2026-11-23 nicht mehr im Repo, `git show 26adc3f:tasks/review-2026-10-08-scan-secrets.md`): Profil- und Compartment-Namen vom Orchestrator redigiert (`<profile>`, `<compartment>`)
 
 ### Register-Abgleich
 

@@ -6,10 +6,43 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **tasks/open-work.md**: the one checkbox file of the repo, replaces `tasks/todo.md`. Holds what is still open
+  from the removed state and plan files, checked against the code on 2026-11-23, plus the review-register findings
+  worth scheduling
+- **tasks/lessons.md**: lessons not written down elsewhere - baseline drift through AutoUpgrade keywords,
+  `rollback restore` and foreign restore points, PDB$SEED READ WRITE after deploy, smoke test against the old home,
+  NSG union, and three working-method lessons
+
+### Changed
+
+- Placeholder playbooks, the two infra-tools stubs and `terraform/envs/core/README.md` point to
+  `tasks/open-work.md` instead of the removed roadmap; `docs/datasafe-demo.md` points to the removed move plan by
+  commit
+- `docs/runbook-cpu-patch-lab.md`: the `assign_public_ip` default is `false` (the code default since 2026-08-27),
+  not `true`
+
 ### Removed
 
 - `tasks/state-2026-08-24.md` - resume card superseded by `tasks/state-2026-11-23.md`, no open points left; last
   content in `ab541a0` (`git show ab541a0:tasks/state-2026-08-24.md`)
+- Old resume cards, superseded by `tasks/state-2026-11-23.md`; open points checked, the still valid ones moved to
+  `tasks/open-work.md`: `state-2026-08-28.md` (`1efe0de`), `state-2026-10-15.md` (`7246707`),
+  `state-2026-10-25.md` (`3d8ab14`), `state-2026-11-03.md` (`141bca9`), `state-2026-11-04.md` (`9e97116`),
+  `state-cpu-lab-2026-08-19.md` and `state-cpu-lab-2026-08-21.md` (`d9127cd`), `state-cpu-lab-2026-08-23.md`
+  (`b07dc87`)
+- CPU lab plans, done with the CPU 2026-10 cycle (lab tests complete 2026-11-04, `feat/cpu-lab` merged):
+  `plan-cpu-lab.md` and `roadmap-cpu-lab.md` (`787d0e0`), `plan-cpu-2026-10.md` (`83f07f5`),
+  `plan-cpu-2026-10-tests.md` (`141bca9`), `plan-cpu-review-and-central-control.md` (`e2cfb23`)
+- `plan-datasafe-demo-trivadis.md` (`9ef082c`) - the move to the Trivadis tenancy is done, the lab runs there
+- `plan-m3-shared-assets.md` and `cr-oradba-shared-templates.md` (`fdece8e`) - the template merge moves with the
+  Ansible move to oradba-ansible (lab architecture M4), tracked in the PKM area oci-labs
+- `todo.md` (`96a0e98`) - replaced by `tasks/open-work.md`; the Windows AD items are there as P3, `.env` and the
+  push were done
+- Six raw reports of the repo audit 2026-10-08 (`26adc3f`): `review-2026-10-08-` doku, scan-markdown, scan-secrets,
+  scan-tests, security and testing. As `/repo-audit` intends, register, findings file and run report stay
+- Read any removed file with `git show <commit>:tasks/<file>`
 
 ## [0.7.0] - 2026-11-23
 
