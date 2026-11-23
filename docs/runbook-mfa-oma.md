@@ -110,7 +110,7 @@ Before deploying this stack, verify the following:
 | Terraform >= 1.3                                 | Check with `terraform version`                                                 |
 | OCI CLI configured                               | `~/.oci/config` with DEFAULT or named profile                                  |
 | 1Password CLI (`op`)                             | For saving sensitive credentials immediately after apply                       |
-| Oracle Database 23.9 minimum                     | 23.26.1 and 23.26.3 (26ai) ARM64 have a known regression: `FsDirect not implemented`; use 23.9 or x86-64 |
+| Oracle Database 23.9 minimum                     | 23.26.1 (26ai) ARM64 has a known regression: `FsDirect not implemented`; use 23.9 |
 <!-- markdownlint-restore -->
 
 ---
@@ -783,7 +783,7 @@ ALTER SYSTEM RESET MFA_SENDER_EMAIL_DISPLAYNAME SCOPE=BOTH;
 | `ORA-28000` or login fails after CREATE USER AND FACTOR            | OMA roles not granted on OAuth App                                       | Repeat Step 5 - grant MFA Client, User Administrator, Identity Domain Administrator                                         |
 | `orapki secretstore create_entry` fails                            | Wallet does not exist or path is wrong                                   | Verify `$WALLET_ROOT/$PDB_GUID/mfa` exists; re-run `orapki wallet create -pwd ... -compat_v12` |
 | `Cannot modify auto-login (sso) wallet` on `orapki wallet add`     | Wallet was created without `-pwd` (auto_login_only)                      | Delete wallet files and recreate with `-pwd WALLET_PWD -auto_login -compat_v12` |
-| `ORA-28474` / `fsd_notify_cb: FsDirect not implemented` in trace  | Oracle 23.26.1 and 23.26.3 (26ai) ARM64 regression (seen 2026-11-23 on build RDBMS_23.26.3.0.0DBRU_LINUX.ARM64_260704) — MFA not implemented in this build | Use Oracle Database 23.9; `SELECT * FROM v$option WHERE parameter LIKE '%MFA%'` returns no rows on affected builds |
+| `ORA-28474` / `fsd_notify_cb: FsDirect not implemented` in trace  | Oracle 23.26.1 (26ai) ARM64 regression — MFA not implemented in this build | Use Oracle Database 23.9; `SELECT * FROM v$option WHERE parameter LIKE '%MFA%'` returns no rows on affected builds |
 <!-- markdownlint-restore -->
 
 ---
