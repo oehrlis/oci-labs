@@ -1,0 +1,33 @@
+# terraform.tfvars.example - mfa_oma_setup stack
+# Copy to terraform.tfvars (git-ignored) and adjust. OCIDs (tenancy, compartment,
+# identity domain) do not belong here - set them as TF_VAR_* via .env, see .env.example.
+
+# -- OCI provider --------------------------------------------------------------
+oci_profile = "DEFAULT"
+region = "eu-zurich-1"
+
+# -- Naming / tagging ----------------------------------------------------------
+region_key = "zrh"
+env = "lab"
+stack = "mfaoma"
+lab_instance = 1
+project_tag = "oradba-labs"
+
+# -- Email Delivery ------------------------------------------------------------
+# FROM address of the MFA mails, becomes the Approved Sender and MFA_SENDER_EMAIL_ID
+smtp_sender_email = "mfa.notification@example.com"
+smtp_sender_name = "Oracle DB MFA Demo"
+
+# -- OAuth Application ---------------------------------------------------------
+# Empty = derived from the naming convention (app-<region_key>-<env>-<stack>-oauth-01)
+app_name = ""
+
+# -- Email Domain (optional) ---------------------------------------------------
+# Phase 1: create the domain, add the TXT record from the output to DNS
+create_email_domain = false
+# email_domain = "example.com"
+
+# -- DKIM (optional) -----------------------------------------------------------
+# Phase 3: only after the domain is verified in OCI Email Delivery
+create_dkim = false
+# email_domain_ocid = "ocid1.emaildomain.oc1.<region>.<unique_id>"
