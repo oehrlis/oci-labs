@@ -6,6 +6,20 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-11-23
+
+### Changed
+
+- **wls_engineering rollback**: `wls_rollback_mode` both (default) | nrollback | restore replaces the switch
+  `wls_rollback_restore` (true still means restore). "both" runs `opatch nrollback`, then restores the archive taken
+  before the SPB, and checks each against the base patch level. The SPB README (section 6) says nrollback removes the
+  patches of the past and present SPBs and re-activates only superseded ones; on 2026-11-23 it left all four homes
+  at the previous SPB marker and PSU without Coherence, JDBC, RDA and the other base components, while the smoke test
+  stayed green - nothing in the evidence said so. Now the rollback evidence carries `rollback_check` (removed from the
+  base, re-activated, anything removed outside the rollback list; restore matches the base line by line) and a
+  "Rollback check" section, the `nrollback` patch level is kept as its own snapshot, and a failed check fails the run
+  after the evidence is written
+
 ## [0.6.6] - 2026-11-23
 
 ### Fixed

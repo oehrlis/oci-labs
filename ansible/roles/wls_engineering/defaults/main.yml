@@ -90,7 +90,12 @@ wls_client_java_options: >-
   -Dweblogic.security.TrustKeyStore=DemoTrust
   -Dweblogic.security.SSL.ignoreHostnameVerification=true
 
-# Rollback with the archive patch.yml took instead of OPatch nrollback.
+# both: OPatch nrollback (checked against base minus rollback_patchlist.txt),
+# then restore of the archive patch.yml took (checked against base).
+# nrollback | restore: only that one. nrollback alone does not lead back to
+# the previous SPB - see tasks/rollback.yml.
+wls_rollback_mode: both
+# Legacy switch, true = wls_rollback_mode restore.
 wls_rollback_restore: false
 
 # Waits for a server to report RUNNING (seconds).

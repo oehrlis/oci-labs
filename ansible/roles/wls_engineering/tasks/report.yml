@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/report.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.2.0
+# Date.......: 2026.11.23
+# Version....: v0.3.0
 # Purpose....: Write the evidence of one phase of one version as JSON and
 #              Markdown and fetch both to ansible/reports/<host>/.
 # Notes......: Durations come from the async tasks themselves (delta) and from
@@ -18,7 +18,7 @@
   become: true
   ansible.builtin.slurp:
     src: "{{ wv_stage }}/lspatches-{{ item }}.txt"
-  loop: [base, patched, rolledback, current]
+  loop: [base, patched, nrollback, rolledback, current]
   register: wv_lsp_files
   failed_when: false
 
@@ -39,12 +39,16 @@
         backup: "{{ wv_t_backup.delta | default('') }}"
         spb_apply: "{{ wv_spb_apply.delta | default('') }}"
         nrollback: "{{ wv_nrollback.delta | default('') }}"
+        restore: "{{ wv_restore.delta | default('') }}"
         downtime_s: "{{ (wv_down_end | int - wv_down_start | int) if wv_down_end is defined else '' }}"
         rollback_s: "{{ (wv_rb_end | int - wv_rb_start | int) if wv_rb_end is defined else '' }}"
       smoke: "{{ wv_smoke | default({}) }}"
       oneoffs: "{{ wv_oneoff_result | default([]) }}"
       spb_precheck_rc: "{{ wv_spb_precheck.rc | default('') }}"
-      rollback_method: "{{ ('restore' if wls_rollback_restore | bool else 'opatch nrollback') if wv_phase == 'rollback' else '' }}"
+      rollback_method: >-
+        {{ {'both': 'opatch nrollback, then restore of the archive', 'nrollback': 'opatch nrollback',
+            'restore': 'restore of the archive'}[wv_rb_mode] if wv_phase == 'rollback' else '' }}
+      rollback_check: "{{ wv_rb_check | default({}) if wv_phase == 'rollback' else {} }}"
       patches: >-
         {{ dict(wv_lsp_files.results | selectattr('content', 'defined')
                 | map(attribute='item')

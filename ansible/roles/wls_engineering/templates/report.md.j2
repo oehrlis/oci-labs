@@ -7,13 +7,14 @@
 - SPB baseline: `{{ wv_evidence.spb_base }}`
 - SPB under test: `{{ wv_evidence.spb_target }}`
 - Method: SPB in place with SPBAT (servers stopped), home and inventory
-  archived before; rollback with OPatch nrollback (rollback_patchlist.txt)
+  archived before; rollback: {{ wv_evidence.rollback_method or 'see the rollback phase' }}
 
 ## Durations
 
 - Archive of home and inventory (no downtime): {{ wv_evidence.durations.backup or '-' }}
 - SPBAT apply: {{ wv_evidence.durations.spb_apply or '-' }}
 - OPatch nrollback: {{ wv_evidence.durations.nrollback or '-' }}
+- Restore of the archive: {{ wv_evidence.durations.restore | default('') or '-' }}
 - Downtime (stop to RUNNING): {{ (wv_evidence.durations.downtime_s ~ ' s') if wv_evidence.durations.downtime_s else '-' }}
 - Rollback (stop to RUNNING): {{ (wv_evidence.durations.rollback_s ~ ' s') if wv_evidence.durations.rollback_s else '-' }}{{ (' - ' ~ wv_evidence.rollback_method) if wv_evidence.rollback_method else '' }}
 
@@ -25,6 +26,28 @@
 - Page served over SSL: {{ wv_evidence.smoke.page | default('-') }}
 - SPBAT precheck rc: {{ wv_evidence.spb_precheck_rc or '-' }}
 
+{% if wv_evidence.rollback_check | default({}) %}
+## Rollback check
+{% if wv_evidence.rollback_check.nrollback is defined %}
+{% set n = wv_evidence.rollback_check.nrollback %}
+
+OPatch nrollback - as documented (base minus rollback_patchlist.txt): **{{ n.as_documented | ternary('yes', 'NO') }}**
+
+- Removed from the base: {{ n.removed_from_base | join(', ') or 'nothing' }}
+- Re-activated (superseded before): {{ n.re_activated | join(', ') or 'nothing' }}
+- Removed although not in the rollback list: {{ n.removed_not_in_rollback_list | join(', ') or 'nothing' }}
+- Rollback list patches left in the home: {{ n.rollback_list_left_in_home | join(', ') or 'nothing' }}
+{% endif %}
+{% if wv_evidence.rollback_check.restore is defined %}
+{% set r = wv_evidence.rollback_check.restore %}
+
+Restore of the archive - home matches the base: **{{ r.matches_base | ternary('yes', 'NO') }}**
+
+- Missing against the base: {{ r.missing | join('; ') or 'nothing' }}
+- Extra against the base: {{ r.extra | join('; ') or 'nothing' }}
+{% endif %}
+
+{% endif %}
 ## Patch level
 {% for snap, lines in wv_evidence.patches.items() %}
 

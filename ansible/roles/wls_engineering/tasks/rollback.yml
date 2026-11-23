@@ -4,21 +4,40 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/rollback.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.11.18
-# Version....: v0.3.0
+# Date.......: 2026.11.23
+# Version....: v0.4.0
 # Purpose....: Roll the SPB under test back from one version.
 # Notes......: SPBAT has no rollback phase. The SPB README's way is OPatch:
 #              "opatch nrollback -idFile rollback_patchlist.txt" from the bundle's
 #              binary_patches directory - that is what this proves. OPatch stays
 #              at the version the SPB brought, which is expected.
-#              -e wls_rollback_restore=true restores the archive patch.yml took
-#              instead (home + inventory) - the safety net when nrollback fails.
+#              v0.4.0: wls_rollback_mode both (default) | nrollback | restore.
+#              nrollback does not lead back to the previous SPB: it removes
+#              every patch of the past and present SPBs and only re-activates
+#              superseded ones (README section 6, 2026-11-23: Coherence, JDBC,
+#              RDA, ... of the base were gone). "both" therefore records that
+#              state, checks it against base minus rollback_patchlist.txt, and
+#              then restores the archive patch.yml took (home + inventory) -
+#              the complete rollback the README names - and checks that the
+#              home matches the base exactly. A mismatch fails the run after
+#              the evidence is written.
+#              -e wls_rollback_restore=true still means restore only.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 
 - name: Derive the layout
   ansible.builtin.include_tasks: vars.yml
+
+- name: Name the rollback mode
+  ansible.builtin.set_fact:
+    wv_rb_mode: "{{ 'restore' if wls_rollback_restore | bool else wls_rollback_mode }}"
+    wv_rb_check: {}
+
+- name: Assert the rollback mode is known
+  ansible.builtin.assert:
+    that: wv_rb_mode in ['both', 'nrollback', 'restore']
+    fail_msg: "wls_rollback_mode '{{ wv_rb_mode }}' - use both, nrollback or restore."
 
 - name: Check that the target SPB was applied - {{ wls.version }}
   become: true
@@ -33,11 +52,11 @@
   ansible.builtin.assert:
     that:
       - wv_rb_pre.results[0].stat.exists
-      - (not wls_rollback_restore | bool) or wv_rb_pre.results[1].stat.exists
+      - wv_rb_mode == 'nrollback' or wv_rb_pre.results[1].stat.exists
     fail_msg: >-
       WebLogic {{ wls.version }}: the target SPB is not applied
       ({{ wv_stage }}/.spb-target-applied missing){{ ', and there is no archive '
-      ~ wv_backup_tgz ~ ' to restore' if wls_rollback_restore | bool else '' }}.
+      ~ wv_backup_tgz ~ ' to restore' if wv_rb_mode != 'nrollback' else '' }}.
 
 - name: Find the rollback list of the target SPB
   become: true
@@ -46,7 +65,7 @@
     patterns: rollback_patchlist.txt
     recurse: true
   register: wv_rb_list
-  when: not wls_rollback_restore | bool
+  when: wv_rb_mode != 'restore'
 
 - name: Assert the bundle carries a rollback list
   ansible.builtin.assert:
@@ -54,8 +73,8 @@
       - wv_rb_list.files | length > 0
     fail_msg: >-
       No rollback_patchlist.txt below {{ wv_stage }}/spb-target - roll back with the
-      archive instead: -e wls_rollback_restore=true
-  when: not wls_rollback_restore | bool
+      archive instead: -e wls_rollback_mode=restore
+  when: wv_rb_mode != 'restore'
 
 - name: Rollback begins
   ansible.builtin.set_fact:
@@ -72,7 +91,7 @@
   ansible.builtin.include_tasks: oneoffs.yml
   vars:
     wv_oneoff_action: rollback
-  when: not wls_rollback_restore | bool
+  when: wv_rb_mode != 'restore'
 
 - name: Roll the SPB back with OPatch
   become: true
@@ -89,15 +108,62 @@
   changed_when: wv_nrollback.rc == 0
   async: "{{ wls_async_timeout }}"
   poll: "{{ wls_async_poll }}"
-  when: not wls_rollback_restore | bool
+  when: wv_rb_mode != 'restore'
 
 - name: Report the OPatch rollback
   ansible.builtin.debug:
     msg: "{{ ['rc=' ~ wv_nrollback.rc ~ ', ' ~ wv_nrollback.delta] + wv_nrollback.stdout_lines[-20:] }}"
-  when: not wls_rollback_restore | bool
+  when: wv_rb_mode != 'restore'
+
+- name: Read the base patch level
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ wv_stage }}/lspatches-base.txt"
+  register: wv_rb_base
+
+- name: Check the state nrollback left
+  when: wv_rb_mode != 'restore'
+  block:
+    - name: Record the patch level after nrollback
+      ansible.builtin.include_tasks: snapshot.yml
+      vars:
+        wv_snap: nrollback
+
+    - name: Read the rollback list
+      become: true
+      ansible.builtin.slurp:
+        src: "{{ wv_rb_list.files[0].path }}"
+      register: wv_rb_ids
+
+    # Expected: base minus rollback_patchlist.txt, plus whatever OPatch
+    # re-activates (superseded patches - not predictable from the lists).
+    - name: Compare the nrollback state with base minus the rollback list
+      ansible.builtin.set_fact:
+        wv_rb_check: >-
+          {%- set base = (wv_rb_base.content | b64decode).splitlines()
+                         | select('match', '^[0-9]+;') | map('regex_replace', ';.*$', '') | list -%}
+          {%- set rbl = (wv_rb_ids.content | b64decode).split() -%}
+          {%- set now = wv_lspatches.stdout_lines
+                        | select('match', '^[0-9]+;') | map('regex_replace', ';.*$', '') | list -%}
+          {%- set unexpected = base | reject('in', now) | reject('in', rbl) | list -%}
+          {%- set left_over = now | select('in', rbl) | list -%}
+          {{ {'nrollback': {
+                'removed_from_base': base | reject('in', now) | list,
+                're_activated': now | reject('in', base) | list,
+                'removed_not_in_rollback_list': unexpected,
+                'rollback_list_left_in_home': left_over,
+                'as_documented': (unexpected | length == 0 and left_over | length == 0)}} }}
+
+    - name: Report the nrollback state
+      ansible.builtin.debug:
+        msg: >-
+          nrollback {{ wls.version }}: removed from base
+          {{ wv_rb_check.nrollback.removed_from_base | join(', ') or 'nothing' }};
+          re-activated {{ wv_rb_check.nrollback.re_activated | join(', ') or 'nothing' }};
+          as documented: {{ wv_rb_check.nrollback.as_documented }}
 
 - name: Restore the archive taken before the SPB
-  when: wls_rollback_restore | bool
+  when: wv_rb_mode != 'nrollback'
   block:
     - name: Remove the patched home and its inventory
       become: true
@@ -140,7 +206,28 @@
   vars:
     wv_snap: rolledback
 
+# Full lines including the OPatch version - the archive brings OPatch back.
+- name: Compare the restored home with the base
+  when: wv_rb_mode != 'nrollback'
+  ansible.builtin.set_fact:
+    wv_rb_check: >-
+      {%- set base = (wv_rb_base.content | b64decode).splitlines() | select | list -%}
+      {%- set now = wv_lspatches.stdout_lines | select | list -%}
+      {{ wv_rb_check | combine({'restore': {
+            'missing': base | reject('in', now) | list,
+            'extra': now | reject('in', base) | list,
+            'matches_base': (base | sort) == (now | sort)}}) }}
+
 - name: Write the report
   ansible.builtin.include_tasks: report.yml
   vars:
     wv_phase: rollback
+
+- name: Assert the rollback left the documented state
+  ansible.builtin.assert:
+    that:
+      - wv_rb_check.nrollback.as_documented | default(true)
+      - wv_rb_check.restore.matches_base | default(true)
+    fail_msg: >-
+      WebLogic {{ wls.version }} rollback ({{ wv_rb_mode }}):
+      {{ wv_rb_check | to_json }} - see the rollback evidence.
