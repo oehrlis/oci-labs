@@ -6,6 +6,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-23
+
+### Added
+
+- **ACE credit report**: `tools/oci_cost_report.sh` with `make cost-report` (stdout) and `make cost-report-notes`
+  (`~/notes/costs/YYYY-MM.md`). Read-only: credits used in the current ACE year (default 5000 from 09-09), what is
+  left, forecast from the average of the last 30 days, cost per month, top resources with state, compute and
+  databases with state, and stopped resources that still cost money. The API shows the subscription promotion, not
+  the yearly ACE amount - the report prints both and computes with `--credits`. Output never goes into the repo.
+  Runbook: `docs/runbook-cost-report.md`
+
 ## [0.6.7] - 2026-11-23
 
 ### Changed

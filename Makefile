@@ -133,6 +133,10 @@ help: ## Show this help message
 	@grep -E '^dsdemo-[a-zA-Z_-]*:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo -e "$(COLOR_BOLD)ACE Credit Report:$(COLOR_RESET)"
+	@grep -E '^cost-report[a-zA-Z_-]*:.*?## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo -e "$(COLOR_BOLD)Cleanup:$(COLOR_RESET)"
 	@grep -E '^clean[a-zA-Z_-]*:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}'
@@ -1269,6 +1273,22 @@ release: ## Full patch release: bump patch -> commit -> tag
 	echo "   Push manually:"; \
 	echo "     git push origin main"; \
 	echo "     git push origin v$$version"
+
+# ==============================================================================
+# Cost report
+# ==============================================================================
+# Read-only report on the credit-funded ACE tenancy: credits used in the ACE
+# year, forecast, cost per month, top resources, compute and databases with
+# their state. Output goes to stdout or ~/notes/costs/YYYY-MM.md, never into
+# the repo - it carries tenancy data. Runbook: docs/runbook-cost-report.md
+COST_REPORT := $(TOOLS_DIR)/oci_cost_report.sh
+
+.PHONY: cost-report cost-report-notes
+cost-report: guard-oci ## ACE credit report on stdout, read-only (COST_ARGS="--credits N --year-start MM-DD")
+	$(Q)"$(COST_REPORT)" $(COST_ARGS)
+
+cost-report-notes: guard-oci ## Write the ACE credit report to ~/notes/costs/YYYY-MM.md (COST_ARGS=--yes overwrites)
+	$(Q)"$(COST_REPORT)" --notes $(COST_ARGS)
 
 # ==============================================================================
 # Info
