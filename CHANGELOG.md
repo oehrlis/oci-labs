@@ -6,6 +6,30 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-11-23
+
+### Fixed
+
+- **db19_engineering verify**: the hard check `mrp_in_target_home` compares the MRP's member patches with the target
+  home instead of searching lsinventory for the word MRP. opatch registers only the members, so the 0.6.2 check could
+  never pass: on 2026-11-22 the OUA gold image carried MRP 19.33.0.0.261117 (members 40127726, 40180925, 40096495,
+  40130806, 33566299, all in the home) and the run went red. The members come from the gold image entry of the
+  manifest (`includedPatchApply` MRP, `includedPatches` without the Release Updates). An ARU MRP zip has no member
+  list and keeps the lsinventory text as fallback; an MRP that was requested but not resolved fails. The reason is
+  named in the gate message and the report (`AutoUpgrade resolved no MRP`, `members missing from the home: ...`)
+- **db19_engineering report_patchset**: `mrp_included` and "MRP included" recognise a gold image that carries the MRP
+  (`includedPatchApply`), not only an MRP description
+- **cputest report**: the verdict counts the MRP check - it read PASSED while the play failed on it; the check table
+  has an MRP row with the members
+- **wls_engineering one-offs**: the one-off result is reset per version - 14.1.1 and 15.1.1 carried the result of the
+  version before them into their evidence (2026-11-22)
+- **wls_engineering one-offs**: an apply that OPatch ends with "there are no patches to apply" (rc 0, every component
+  missing) is recorded as `not applicable (missing components)` and stays out of `.oneoffs-applied`. OPSS 40154045 on
+  plain WebLogic Server 14.1.2 passed CheckApplicable, was recorded as applied, and the rollback then stopped on it
+  (`Patch not present in the Oracle Home`), before 12.2.1.4 was rolled back at all
+- **wls_engineering one-offs**: rollback takes only marker ids that `opatch lspatches` shows in the home and names the
+  others; the marker is split on whitespace - `split('\n')` in a folded scalar never split a marker with two ids
+
 ## [0.6.5] - 2026-11-20
 
 ### Fixed

@@ -17,7 +17,7 @@
 
 ## Verdict
 
-{% set hard = [db19_check_version, db19_check_sqlpatch, db19_check_datapatch, db19_check_containers] %}
+{% set hard = [db19_check_version, db19_check_sqlpatch, db19_check_datapatch, db19_check_containers, db19_check_mrp] %}
 {% if hard | select('equalto', false) | list | length == 0 %}
 **PASSED** - {{ oracle_sid }} runs {{ db19_post.db.version_full | default('?') }} from the target home.
 {% else %}
@@ -34,6 +34,7 @@
 | hard | every sqlpatch row SUCCESS | {{ db19_check_sqlpatch | ternary('PASS', 'FAIL') }} | {{ db19_post.sqlpatch | default([]) | length }} row(s) |
 | hard | datapatch nothing pending | {{ db19_check_datapatch | ternary('PASS', 'FAIL') }} | {{ db19_datapatch_pending | ternary('work pending', 'clean') }} |
 | hard | containers in sync | {{ db19_check_containers | ternary('PASS', 'FAIL') }} | {{ db19_pdb_gap | length | ternary('CON_ID ' ~ (db19_pdb_gap | join(',')) ~ ' behind root', 'all containers at root level') }} |
+| hard | MRP in target home | {{ db19_check_mrp | ternary('PASS', 'FAIL') }} | {{ db19_mrp_requested | ternary(db19_mrp_reason ~ ((db19_mrp_members | length > 0) | ternary(' (members ' ~ (db19_mrp_members | join(',')) ~ ')', '')), 'not requested') }} |
 | soft | binary patch set complete | {{ db19_check_binary | ternary('PASS', 'FAIL') }} | {{ db19_missing_patches | length | ternary('missing ' ~ (db19_missing_patches | join(',')), 'all expected patches in the home') }} |
 | soft | components valid | {{ db19_check_components | ternary('PASS', 'FAIL') }} | {{ db19_post.components | default([]) | length }} component(s) |
 | soft | no new invalid objects | {{ db19_check_invalid | ternary('PASS', 'FAIL') }} | {{ db19_invalid_before }} before, {{ db19_invalid_after }} after, delta {{ db19_invalid_delta }} |

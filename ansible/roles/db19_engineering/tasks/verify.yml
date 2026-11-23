@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/verify.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.11.19
-# Version....: v0.2.2
+# Date.......: 2026.11.22
+# Version....: v0.2.3
 # Purpose....: Verify and report the outcome of a quarterly CPU patch test.
 # Notes......: Four levels, because a patch can fail at four different places:
 #                binary     the patch is in the ORACLE_HOME (opatch)
@@ -123,10 +123,32 @@
     db19_missing_patches: >-
       {{ db19_expected_ids | difference(db19_home_patches) }}
     db19_bundled_patches: >-
-      {{ db19_manifest_patches
-         | selectattr('description', 'search', '(?i)\bMRP\b')
-         | map(attribute='description') | list }}
+      {{ db19_mrp_sources | map(attribute='description') | list }}
+    db19_mrp_sources: "{{ db19_mrp_sources }}"
+    db19_mrp_members: "{{ db19_mrp_members }}"
+    db19_mrp_missing: "{{ db19_mrp_members | difference(db19_home_patches) }}"
   vars:
+    # Where the MRP came from: an ARU MRP zip (the description says MRP) or an
+    # OUA gold image whose includedPatchApply names MRP. The gold image entry is
+    # only "DB Gold Image - <RU>" - 0.6.2 did not see it (2026-11-22).
+    db19_mrp_sources: >-
+      {{ ((db19_manifest_patches
+           | selectattr('description', 'search', '(?i)\bMRP\b') | list)
+          + (db19_manifest_patches
+             | selectattr('includedPatchApply', 'defined')
+             | selectattr('includedPatchApply', 'contains', 'MRP') | list))
+         | unique | list }}
+    # The MRP's own patches as Oracle lists them in the gold image entry
+    # (includedPatches). Release Updates are left out: the version check covers
+    # them, and the superseded 19.3 RU/OCW listed there are not in the home.
+    # MRP 19.33.0.0.261117 (2026-11-22): 40127726, 40180925, 40096495, 40130806,
+    # 33566299 - "Fix for bug ...", no MRP wording anywhere in lsinventory.
+    db19_mrp_members: >-
+      {{ db19_mrp_sources
+         | selectattr('includedPatches', 'defined')
+         | map(attribute='includedPatches') | flatten
+         | rejectattr('description', 'search', '(?i)RELEASE UPDATE')
+         | map(attribute='patchId') | map('string') | unique | list }}
     # Two kinds of entry can never be found in lsinventory and are filtered out
     # before the comparison. Both measured 2026-08-21, both reported as
     # permanently missing until they were excluded:
@@ -136,8 +158,9 @@
     #
     #   An MRP is a bundle. opatch registers its MEMBERS individually, not the
     #   bundle number - MRP 39834034 showed up in the home as 39661089, 39750798
-    #   and 39779336. Since the manifest does not list the members, the bundle
-    #   number is excluded here and the MRP is reported by name instead.
+    #   and 39779336. The bundle number is excluded here; the members are
+    #   checked by the hard MRP criterion (db19_mrp_members) where the
+    #   manifest lists them, which only a gold image entry does.
     db19_manifest_patches: >-
       {{ (db19_target_patchset_raw.content | b64decode | from_json).patches
          | default([])
@@ -234,16 +257,20 @@
          | rejectattr(1, 'in', db19_sqlpatch_target | map(attribute=1) | list)
          | list }}
     db19_check_datapatch: "{{ not db19_datapatch_pending }}"
-    # MRP or RECOMMENDED in the target list: the home must list an MRP. The
-    # resolved patch set cannot show it - inside a gold image the MRP is only
-    # "DB Gold Image" (2026-11-19: a home without the November MRP passed the
-    # binary check).
+    # MRP or RECOMMENDED in the target list: the MRP must be in the home
+    # (2026-11-19: a home without the November MRP passed the binary check).
+    # opatch registers the MRP's member patches, never the word MRP, so the
+    # members the manifest names are compared with the home. Only an ARU MRP
+    # zip comes without a member list - there the lsinventory text is the
+    # fallback. Requested but resolved to no MRP at all fails.
     db19_mrp_requested: "{{ db19_patch_list_target is search('(?i)(\\bMRP\\b|RECOMMENDED)') }}"
     # Folded scalar: one backslash reaches the regex (two in a double-quoted
     # string, as above) - measured 2026-11-19, two here never matched.
     db19_check_mrp: >-
       {{ (not (db19_patch_list_target is search('(?i)(\bMRP\b|RECOMMENDED)')))
-         or (db19_lsinventory.stdout | default('') is search('(?i)(\bMRP\b|Monthly Recommended)')) }}
+         or ((db19_mrp_members | length > 0) and (db19_mrp_missing | length == 0))
+         or ((db19_mrp_sources | length > 0) and (db19_mrp_members | length == 0)
+             and (db19_lsinventory.stdout | default('') is search('(?i)(\bMRP\b|Monthly Recommended)'))) }}
     db19_pdb_gap: >-
       {{ db19_post.container_patch_sets | default([])
          | rejectattr(0, 'equalto', '1')
@@ -260,6 +287,15 @@
       {{ (db19_post.container_patch_sets | default([])
           | selectattr(0, 'equalto', '1') | map(attribute=1) | first)
          | default('', true) }}
+
+- name: Name the reason of the MRP check
+  ansible.builtin.set_fact:
+    db19_mrp_reason: >-
+      {{ 'ok' if db19_check_mrp
+         else ('AutoUpgrade resolved no MRP' if (db19_mrp_sources | length == 0)
+         else ('members missing from the home: ' ~ (db19_mrp_missing | join(','))
+               if (db19_mrp_members | length > 0)
+         else 'MRP zip without member list, no MRP in lsinventory')) }}
 
 - name: Derive the container sync verdict
   ansible.builtin.set_fact:
@@ -331,6 +367,8 @@
              'expected_patches': db19_expected_patches,
              'missing_patches': db19_missing_patches,
              'bundled_patches': db19_bundled_patches,
+             'mrp_members': db19_mrp_members,
+             'mrp_missing': db19_mrp_missing,
              'containers_out_of_sync': db19_pdb_gap,
              'listener_services': db19_listener_services,
              'restore_points': db19_post.restore_points | default([]),
@@ -351,10 +389,11 @@
       - "HARD containers in sync .........: {{ db19_check_containers | ternary('PASS', 'FAIL') }}"
       - >-
         HARD MRP in target home .........: {{ db19_check_mrp | ternary('PASS', 'FAIL') }}{{
-        '' if db19_mrp_requested else ' (not requested)' }}
+        (' - ' ~ db19_mrp_reason) if db19_mrp_requested else ' (not requested)' }}
       - >-
         bundled, members counted individually:
         {{ db19_bundled_patches | join('; ') | default('none', true) }}
+        (members {{ db19_mrp_members | join(',') | default('none listed', true) }})
       - >-
         soft binary patch set complete ..:
         {{ db19_check_binary | ternary('PASS', 'FAIL') }}
@@ -421,7 +460,7 @@
       sqlpatch={{ db19_check_sqlpatch | ternary('ok', 'rows not SUCCESS') }},
       datapatch={{ db19_check_datapatch | ternary('ok', 'work still pending') }},
       containers={{ db19_check_containers | ternary('ok', 'out of sync: ' ~ (db19_pdb_gap | join(','))) }},
-      mrp={{ db19_check_mrp | ternary('ok', 'MRP requested, not in the home') }}.
+      mrp={{ db19_mrp_reason }}.
       Full evidence: {{ db19_stage_dir }}/{{ db19_report_stem }}.md
     success_msg: >-
       CPU patch test PASSED - {{ oracle_sid }} runs

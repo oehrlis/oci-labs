@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/report_patchset.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.23
-# Version....: v0.1.1
+# Date.......: 2026.11.22
+# Version....: v0.1.2
 # Purpose....: Record which patches AutoUpgrade actually resolved for one RU.
 # Notes......: A CPU test is only worth its report. The base home is defined by
 #              an explicit patch list, the target home by RECOMMENDED - so for
@@ -80,9 +80,13 @@
 
 - name: Classify the resolved patch set
   ansible.builtin.set_fact:
+    # An ARU MRP zip says MRP in its description; an OUA gold image that
+    # carries the MRP says it only in includedPatchApply (2026-11-22).
     db19_patchset_mrp: >-
-      {{ db19_patchset | selectattr('description', 'search', '(?i)\bMRP\b')
-         | list }}
+      {{ ((db19_patchset | selectattr('description', 'search', '(?i)\bMRP\b') | list)
+          + (db19_patchset | selectattr('includedPatchApply', 'defined')
+             | selectattr('includedPatchApply', 'contains', 'MRP') | list))
+         | unique | list }}
     db19_patchset_lines: >-
       {{ db19_patchset
          | map(attribute='description')
