@@ -6,6 +6,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- `tasks/state-2026-08-24.md` - resume card superseded by `tasks/state-2026-11-23.md`, no open points left; last
+  content in `ab541a0` (`git show ab541a0:tasks/state-2026-08-24.md`)
+
 ## [0.7.0] - 2026-11-23
 
 ### Added
