@@ -166,10 +166,24 @@ WebLogic, and the downtime measured is the real one):
    this is the downtime that is measured
 3. Smoke test and `opatch lspatches`
 
-SPBAT has no rollback phase. `make cpu-lab-rollback` runs `opatch nrollback` with the
-bundle's `rollback_patchlist.txt` - Oracle's documented way back; OPatch stays at
-the version the SPB brought. `ANSIBLE_EXTRA="-e wls_rollback_restore=true"` restores
-the archive instead. 14.1.2 and 15.1.1 run in secured production mode (no Admin
+SPBAT has no rollback phase. `make cpu-lab-rollback` runs both ways back the SPB
+README names (section 6), one after the other, and checks each against the base
+patch level:
+
+1. `opatch nrollback` with the bundle's `rollback_patchlist.txt`. It removes every
+   patch of the past and present SPBs and re-activates only superseded ones (the WLS
+   PSU, the SPB marker) - so it does **not** lead back to the previous SPB:
+   Coherence, JDBC, RDA and the other components of the base are gone afterwards
+   (measured 2026-11-23 on all four versions). The check: base minus the rollback
+   list, nothing else removed, nothing of the list left in the home
+2. Restore of the archive taken before the SPB (home and inventory) - the complete
+   rollback. The check: `opatch lspatches` matches the base line by line, OPatch
+   version included
+
+A failed check fails the run after the evidence is written.
+`ANSIBLE_EXTRA="-e wls_rollback_mode=nrollback"` or `=restore` runs only one of them.
+
+14.1.2 and 15.1.1 run in secured production mode (no Admin
 Console): every domain gets a domain-wide administration port and SSL with demo
 certificates; checks, deployment and shutdown go through the REST management API.
 
