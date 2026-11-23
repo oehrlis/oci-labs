@@ -6,7 +6,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.6.6] - 2026-11-22
+## [0.6.6] - 2026-11-23
 
 ### Fixed
 
@@ -21,6 +21,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`includedPatchApply`), not only an MRP description
 - **cputest report**: the verdict counts the MRP check - it read PASSED while the play failed on it; the check table
   has an MRP row with the members
+- **wls_engineering one-offs**: the one-off result is reset per version - 14.1.1 and 15.1.1 carried the result of the
+  version before them into their evidence (2026-11-22)
+- **wls_engineering one-offs**: an apply that OPatch ends with "there are no patches to apply" (rc 0, every component
+  missing) is recorded as `not applicable (missing components)` and stays out of `.oneoffs-applied`. OPSS 40154045 on
+  plain WebLogic Server 14.1.2 passed CheckApplicable, was recorded as applied, and the rollback then stopped on it
+  (`Patch not present in the Oracle Home`), before 12.2.1.4 was rolled back at all
+- **wls_engineering one-offs**: rollback takes only marker ids that `opatch lspatches` shows in the home and names the
+  others; the marker is split on whitespace - `split('\n')` in a folded scalar never split a marker with two ids
 
 ## [0.6.5] - 2026-11-20
 

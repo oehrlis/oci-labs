@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/oneoffs.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.11.18
-# Version....: v0.2.0
+# Date.......: 2026.11.23
+# Version....: v0.2.1
 # Purpose....: Apply or roll back the one-off patches a CPU names next to the SPB.
 # Notes......: Input: wls.oneoffs_target (object names p<id>_<tag>_Generic.zip,
 #              from the cpu-patch-tests lab profile), wv_oneoff_action
@@ -20,12 +20,19 @@
 #              WebLogic Server install) is not applied and does not fail the
 #              run - it is named in the evidence (wv_oneoff_result: id, install
 #              type, verdict, OPatch output), never skipped in silence.
+#              v0.2.1: the result is reset per version (14.1.1 carried the
+#              12.2.1.4 result), an apply that ends in "no patches to apply"
+#              is not applicable rather than applied (OPSS on plain WebLogic
+#              Server 14.1.2 passes CheckApplicable, then skips every
+#              component), and rollback takes only marker ids that are in the
+#              home and names the others.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 
 - name: Name the one-off patches - {{ wls.version }}
   ansible.builtin.set_fact:
+    wv_oneoff_result: []
     wv_oneoffs: "{{ wls.oneoffs_target | default([]) }}"
     wv_oneoff_ids: >-
       {{ (wls.oneoffs_target | default([])) | map('regex_replace', '^p([0-9]+)_.*$', '\1') | list }}
@@ -105,6 +112,16 @@
       async: "{{ wls_async_timeout }}"
       poll: "{{ wls_async_poll }}"
 
+    # OPatch exits 0 with "there are no patches to apply" when every component
+    # of the patch is missing from the home - nothing was installed.
+    - name: Name the one-off patches OPatch really applied
+      ansible.builtin.set_fact:
+        wv_oneoff_applied_ids: >-
+          {{ (wv_oneoff_apply.results | default([]))
+             | selectattr('rc', 'equalto', 0)
+             | rejectattr('stdout', 'search', '(?i)no patches to apply')
+             | map(attribute='item') | list }}
+
     - name: Record the one-off result for the evidence
       ansible.builtin.set_fact:
         wv_oneoff_result: >-
@@ -114,8 +131,10 @@
             {%- set _ = out.append({
                   'patch': c.item,
                   'install_type': wv_install_type,
-                  'verdict': ('applied' if (a | length > 0 and a[0].rc == 0) else
-                              ('apply failed' if a | length > 0 else 'not applicable')),
+                  'verdict': ('applied' if c.item in wv_oneoff_applied_ids else
+                              ('not applicable (missing components)'
+                               if (a | length > 0 and a[0].rc == 0) else
+                               ('apply failed' if a | length > 0 else 'not applicable'))),
                   'opatch': ((a[0].stdout_lines if a | length > 0 else c.stdout_lines) | default([]))[-6:],
                 }) -%}
           {%- endfor -%}
@@ -130,7 +149,7 @@
       become_user: "{{ oracle_os_user }}"
       ansible.builtin.copy:
         dest: "{{ wv_stage }}/.oneoffs-applied"
-        content: "{{ wv_oneoff_apply_ids | join('\n') }}\n"
+        content: "{{ wv_oneoff_applied_ids | join('\n') }}\n"
         mode: "0640"
 
 - name: Roll the one-off patches back
@@ -143,11 +162,39 @@
       register: wv_oneoff_marker
       failed_when: false
 
+    - name: List the patches in the home
+      become: true
+      become_user: "{{ oracle_os_user }}"
+      ansible.builtin.command:
+        cmd: "{{ wv_home }}/OPatch/opatch lspatches -oh {{ wv_home }}"
+      environment:
+        ORACLE_HOME: "{{ wv_home }}"
+        JAVA_HOME: "{{ wv_jdk }}"
+        CLASSPATH: ""
+      register: wv_oneoff_lspatches
+      changed_when: false
+      when: wv_oneoff_marker.content is defined
+
+    # split() on whitespace: a '\n' inside a folded scalar reaches Jinja as a
+    # backslash and an n, so split('\n') never split a multi-id marker.
     - name: Name the one-off patches to roll back
       ansible.builtin.set_fact:
-        wv_oneoff_rb: >-
-          {{ ((wv_oneoff_marker.content | default('') | b64decode).split('\n'))
-             | select | reverse | list }}
+        wv_oneoff_marked: "{{ (wv_oneoff_marker.content | default('') | b64decode).split() | reverse | list }}"
+        wv_oneoff_present: >-
+          {{ (wv_oneoff_lspatches.stdout_lines | default([]))
+             | map('regex_search', '^([0-9]+);', '\1') | select | flatten | list }}
+
+    - name: Split the marked one-off patches by presence in the home
+      ansible.builtin.set_fact:
+        wv_oneoff_rb: "{{ wv_oneoff_marked | select('in', wv_oneoff_present) | list }}"
+        wv_oneoff_absent: "{{ wv_oneoff_marked | reject('in', wv_oneoff_present) | list }}"
+
+    - name: Name the marked one-off patches that are not in the home
+      ansible.builtin.debug:
+        msg: >-
+          {{ wv_oneoff_absent | join(', ') }} marked as applied but not in
+          {{ wv_home }} (opatch lspatches) - nothing to roll back for them.
+      when: wv_oneoff_absent | length > 0
 
     - name: OPatch rollback - {{ wv_oneoff_rb | join(', ') }}
       become: true
