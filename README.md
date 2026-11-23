@@ -37,6 +37,7 @@ See the [lab architecture overview](https://github.com/oehrlis/oradba-labs/blob/
 - Runbooks: [CPU patch lab](docs/runbook-cpu-patch-lab.md),
   [oradba.automation lab test](docs/runbook-oradba-automation-lab.md),
   [AD / CMU lab](docs/runbook-ad-cmu-lab.md), [MFA with OMA](docs/runbook-mfa-oma.md)
+- [ACE credit report](docs/runbook-cost-report.md) - `make cost-report`, monthly to `~/notes/costs/`
 - `make help` lists all targets; `make lint` runs every check
 
 ## Secrets
