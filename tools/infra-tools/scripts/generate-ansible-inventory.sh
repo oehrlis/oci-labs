@@ -16,5 +16,5 @@
 set -euo pipefail
 
 echo "ERROR: $(basename "${BASH_SOURCE[0]}") is a placeholder and not implemented yet." >&2
-echo "       See tasks/roadmap-cpu-lab.md for the milestone that fills it." >&2
+echo "       Open item 'Lab-Stubs' in tasks/open-work.md." >&2
 exit 1

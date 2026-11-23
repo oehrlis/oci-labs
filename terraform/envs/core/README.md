@@ -66,5 +66,5 @@ and owns its own network, on the same CIDR `10.29.0.0/16` in a separate VCN; it
 was deliberately left untouched while a database it needs is live on it. The two
 VCNs coexist without conflict because they are never peered. Migrating
 `cpu-patch-test` to consume this core - the point at which the ownership rule
-above actually earns its keep - is the remaining part of milestone M2 in
-`tasks/roadmap-cpu-lab.md`.
+above actually earns its keep - is an open item in
+`tasks/open-work.md`.

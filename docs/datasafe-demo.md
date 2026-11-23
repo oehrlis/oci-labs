@@ -33,7 +33,7 @@ Laptop: Bastion-Tunnel 127.0.0.1:2223 (2222 belegt das cpu-lab), eigene odb_data
 
 Umzug 2026-10-23: Im ACE-Tenant war das Data-Safe-Target-Limit bei zwei aktiven Targets erreicht (400
 LimitExceeded) - das Lab wurde dort abgebaut und im Trivadis-Tenant neu aufgebaut
-(`tasks/plan-datasafe-demo-trivadis.md`).
+(Umzugsplan nicht mehr im Repo: `git show 9ef082c:tasks/plan-datasafe-demo-trivadis.md`).
 
 | Datei | Zweck |
 | --- | --- |
