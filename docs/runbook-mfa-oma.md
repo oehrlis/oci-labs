@@ -42,7 +42,7 @@ flowchart LR
 
     subgraph ODB["Oracle Database 23.9+  —  manual steps"]
         PARAMS["System Parameters\nMFA_OMA_IAM_DOMAIN_URL\nMFA_SMTP_HOST · PORT\nMFA_SENDER_EMAIL_ID"]
-        WALLET["MFA Wallet\noracle.security.mfa.oma.clientid/secret\noracle.security.mfa.smtp.user/password\n+ CA Certificates"]
+        WALLET["MFA Wallet\noracle.security.mfa.oma.clientid/secret\n+ SMTP: SYS.MFA_SMTP_CREDENTIAL$\n(DBMS_CREDENTIAL, 26ai)"]
         MFAUSER["MFA-enabled User\nCREATE USER ... AND FACTOR 'OMA_PUSH'"]
         PARAMS --- WALLET --> MFAUSER
     end
@@ -50,7 +50,7 @@ flowchart LR
     OMA(["OMA App\niOS · Android"])
 
     OA -. "client_id / secret → wallet" .-> WALLET
-    SMTPC -. "smtp.user / password → wallet" .-> WALLET
+    SMTPC -. "smtp user / password → MFA_SMTP_CREDENTIAL$" .-> WALLET
     MFAUSER -->|"enrollment email\nvia SMTP"| SND
     MFAUSER <-->|"OMA enrollment + push\nvia OAuth"| OA
     OA --> OMA
@@ -110,7 +110,7 @@ Before deploying this stack, verify the following:
 | Terraform >= 1.3                                 | Check with `terraform version`                                                 |
 | OCI CLI configured                               | `~/.oci/config` with DEFAULT or named profile                                  |
 | 1Password CLI (`op`)                             | For saving sensitive credentials immediately after apply                       |
-| Oracle Database 23.9 minimum                     | 23.26.1 (26ai) ARM64 has a known regression: `FsDirect not implemented`; use 23.9 |
+| Oracle Database 23.9 minimum                     | Works on 26ai Free ARM64 23.26.1, 23.26.3 and 23.26.4 (tested 2026-11-23) |
 <!-- markdownlint-restore -->
 
 ---
@@ -459,24 +459,21 @@ docker exec -it labdb bash -c "
 "
 ```
 
-### 6.4 Store OAuth and SMTP Credentials in Wallet
+### 6.4 Store OAuth Credentials in Wallet
 
-Oracle DB MFA requires four named aliases in the Oracle Secret Store. Use
-`orapki secretstore create_entry -alias` with the exact alias names listed below.
-`create_credential -connect_string` produces a different entry format and does
-not work for MFA.
+The MFA wallet holds the OAuth client of the Identity Domain under two named
+aliases in the Oracle Secret Store. Use `orapki secretstore create_entry -alias`
+with the exact alias names below. `create_credential -connect_string` produces a
+different entry format and does not work for MFA.
 
 Retrieve credential values:
 
 ```bash
-CLIENT_ID=$(terraform output -raw oauth_client_id)
-CLIENT_SECRET=$(op read "op://OCI-Labs/OCI-Labs-MFA-OMA/oauth_client_secret")
-SMTP_USER=$(terraform output -raw smtp_username)
-SMTP_PASS=$(op read "op://OCI-Labs/OCI-Labs-MFA-OMA/smtp_password")
-WALLET="${WALLET_ROOT}/${PDB_GUID}/mfa"
+CLIENT_ID=$(op read "op://Engineering/OCI-Labs-MFA-OMA/oauth_client_id")
+CLIENT_SECRET=$(op read "op://Engineering/OCI-Labs-MFA-OMA/oauth_client_secret")
 ```
 
-Store all four required aliases (exact names are mandatory):
+Store both aliases (exact names are mandatory):
 
 ```bash
 docker exec -it labdb bash -c "
@@ -487,22 +484,45 @@ docker exec -it labdb bash -c "
   orapki secretstore create_entry \
     -wallet ${WALLET_ROOT}/${PDB_GUID}/mfa -pwd ${WALLET_PWD} \
     -alias oracle.security.mfa.oma.clientsecret -secret '${CLIENT_SECRET}'
-
-  orapki secretstore create_entry \
-    -wallet ${WALLET_ROOT}/${PDB_GUID}/mfa -pwd ${WALLET_PWD} \
-    -alias oracle.security.mfa.smtp.user -secret '${SMTP_USER}'
-
-  orapki secretstore create_entry \
-    -wallet ${WALLET_ROOT}/${PDB_GUID}/mfa -pwd ${WALLET_PWD} \
-    -alias oracle.security.mfa.smtp.password -secret '${SMTP_PASS}'
 "
 ```
 
-### 6.5 Add Trusted CA Certificates to Wallet
+> Note: the tutorial and earlier versions of this runbook also stored the SMTP
+> credential in the wallet (`oracle.security.mfa.smtp.user` /
+> `oracle.security.mfa.smtp.password`). Oracle AI Database 26ai ignores these
+> aliases (verified 2026-11-23 on 23.26.1, 23.26.3 and 23.26.4) - see 6.4a.
 
-Oracle DB's internal TLS stack uses the MFA wallet — not the OS CA bundle — when
-connecting to the Identity Domain HTTPS endpoint. Without trusted CA certificates
-the OAuth call fails silently with ORA-28474.
+### 6.4a Store the SMTP Credential (DBMS_CREDENTIAL)
+
+Starting with Oracle AI Database 26ai, the database reads the SMTP credential from
+`SYS.MFA_SMTP_CREDENTIAL$`, not from the MFA wallet (Security Guide 26ai, chapter
+"Configuring Multi-Factor Authentication"). Create it as SYSDBA in the container
+where MFA is configured - for a PDB setup in the PDB:
+
+```sql
+ALTER SESSION SET CONTAINER = LABPDB1;
+BEGIN
+  DBMS_CREDENTIAL.CREATE_CREDENTIAL(
+    credential_name => 'MFA_SMTP_CREDENTIAL$',
+    username        => '<smtp_username from terraform output>',
+    password        => '<smtp_password from 1Password>');
+END;
+/
+```
+
+Pass the values through stdin (heredoc into `sqlplus`), never as command-line
+arguments. Without this credential the database opens the SMTP connection
+unauthenticated, OCI Email Delivery closes it, and `CREATE USER ... AND FACTOR
+'OMA_PUSH'` fails with `ORA-28474` - after the user and its PUSH/TOTP factors
+were already created in the Identity Domain (the domain sends an "Activate your
+profile" mail, the database's "OMA Security Enrollment" mail never arrives).
+
+### 6.5 Add Trusted CA Certificates to Wallet (optional)
+
+Not required with the Oracle Free container image: the 2026-11-23 test enrolled
+successfully with a wallet without trusted certificates (the Security Guide puts
+the SMTP CA into the OS trust store, which already contains DigiCert Global Root
+G2). Keep this step for hosts whose OS trust store lacks the DigiCert chain.
 
 Extract the CA chain from the Identity Domain endpoint:
 
@@ -535,7 +555,7 @@ for cert in /tmp/idcs_cert*.pem /tmp/digicert_root_g2.pem; do
 done
 ```
 
-Verify — wallet must show four secret store entries plus trusted certificates:
+Verify - wallet must show the two OAuth secret store entries (plus trusted certificates if 6.5 was done):
 
 ```bash
 docker exec -it labdb bash -c "
@@ -549,8 +569,6 @@ Expected output:
 Oracle Secret Store entries:
 oracle.security.mfa.oma.clientid
 oracle.security.mfa.oma.clientsecret
-oracle.security.mfa.smtp.password
-oracle.security.mfa.smtp.user
 Trusted Certificates:
 Subject: CN=DigiCert Global Root G2,...
 Subject: CN=DigiCert Global G2 TLS RSA SHA256 2020 CA1,...
@@ -588,8 +606,10 @@ docker exec -it labdb bash -c "
 "
 ```
 
-Confirm four `oracle.security.mfa.*` entries under Oracle Secret Store entries
-and at least two entries under Trusted Certificates.
+Confirm the two `oracle.security.mfa.oma.*` entries under Oracle Secret Store entries.
+Check the SMTP credential with
+`SELECT credential_name, username FROM dba_credentials WHERE credential_name = 'MFA_SMTP_CREDENTIAL$';`
+in the PDB.
 
 ### 7.3 Create Test User and Trigger OMA Registration Email
 
@@ -783,7 +803,9 @@ ALTER SYSTEM RESET MFA_SENDER_EMAIL_DISPLAYNAME SCOPE=BOTH;
 | `ORA-28000` or login fails after CREATE USER AND FACTOR            | OMA roles not granted on OAuth App                                       | Repeat Step 5 - grant MFA Client, User Administrator, Identity Domain Administrator                                         |
 | `orapki secretstore create_entry` fails                            | Wallet does not exist or path is wrong                                   | Verify `$WALLET_ROOT/$PDB_GUID/mfa` exists; re-run `orapki wallet create -pwd ... -compat_v12` |
 | `Cannot modify auto-login (sso) wallet` on `orapki wallet add`     | Wallet was created without `-pwd` (auto_login_only)                      | Delete wallet files and recreate with `-pwd WALLET_PWD -auto_login -compat_v12` |
-| `ORA-28474` / `fsd_notify_cb: FsDirect not implemented` in trace  | Oracle 23.26.1 (26ai) ARM64 regression — MFA not implemented in this build | Use Oracle Database 23.9; `SELECT * FROM v$option WHERE parameter LIKE '%MFA%'` returns no rows on affected builds |
+| `ORA-28474` after CREATE USER AND FACTOR; domain user created, no "OMA Security Enrollment" mail | SMTP credential missing: 26ai reads `SYS.MFA_SMTP_CREDENTIAL$`, not the wallet aliases `oracle.security.mfa.smtp.*` | Step 6.4a - `DBMS_CREDENTIAL.CREATE_CREDENTIAL('MFA_SMTP_CREDENTIAL$', ...)` in the PDB; delete the half-created domain user before retrying |
+| `ORA-28474` with "User with the same userName already exists" in the domain audit | A previous failed attempt left the domain user (userName = mail address) | Delete the user in the Identity Domain (`DELETE /admin/v1/Users/<id>?forceDelete=true`), then retry |
+| `fsd_notify_cb: FsDirect not implemented` in trace files | Harmless noise on ARM64 Free images, appears in most sessions | None - not related to MFA |
 <!-- markdownlint-restore -->
 
 ---
