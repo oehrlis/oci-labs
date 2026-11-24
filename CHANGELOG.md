@@ -36,6 +36,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- `tasks/state-2026-11-23.md` - resume card superseded by `tasks/state-2026-11-24.md` (MFA demo done), open points
+  moved there or already in `tasks/open-work.md`; last content in `c16c536`
+  (`git show c16c536:tasks/state-2026-11-23.md`)
 - `tasks/state-2026-08-24.md` - resume card superseded by `tasks/state-2026-11-23.md`, no open points left; last
   content in `ab541a0` (`git show ab541a0:tasks/state-2026-08-24.md`)
 - Old resume cards, superseded by `tasks/state-2026-11-23.md`; open points checked, the still valid ones moved to

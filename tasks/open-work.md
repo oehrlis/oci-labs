@@ -6,8 +6,8 @@ newest `tasks/state-*.md`. Lessons: `tasks/lessons.md`. Repo-audit findings with
 
 ## Now
 
-- [ ] MFA-Live-Demo (OMA Push) fuer UKOUG S4 auf base26,
-  Prompt `~/notes/prompts/ukoug-mfa-demo-setup.md` [P1] (due: 2026-11-24)
+- [x] MFA-Live-Demo (OMA Push) fuer UKOUG S4 auf base26 - steht, Stand `tasks/state-2026-11-24.md`
+- [ ] mfa_oma_setup: Terraform-State sichern, dann `terraform apply` (nur Output) [P1] (due: 2026-11-25)
 - [ ] Data-Safe-Demo-Lab nach der UKOUG-Session stoppen oder abbauen
   (`make dsdemo-stop` / `make dsdemo-destroy`) [P2] (due: 2026-11-26)
 - [ ] ACE: geloeschte ADBs als TERMINATED pruefen, Restbetrag in der Konsole gegen `--credits` abgleichen [P2]
