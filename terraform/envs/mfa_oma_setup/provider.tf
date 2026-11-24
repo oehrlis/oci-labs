@@ -8,7 +8,7 @@
 # Version....: v0.1.0
 # Purpose....: Terraform and OCI provider configuration for mfa_oma_setup stack
 # Notes......: OCI CLI profile set via var.oci_profile (default: DEFAULT).
-#              Identity Domain resources require OCI Provider >= 5.0.
+#              Pinned to the tested major version (module allows >= 5.0).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0, January 2004 as shown
 #              at http://www.apache.org/licenses/
@@ -20,7 +20,7 @@ terraform {
   required_providers {
     oci = {
       source  = "oracle/oci"
-      version = ">= 5.0"
+      version = "~> 8.0" # tested with 8.28.0 (2026-11-23)
     }
   }
 }

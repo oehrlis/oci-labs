@@ -5,11 +5,37 @@ Calls the `iam_mfa_oma` module to provision all OCI-side prerequisites.
 
 ## Prerequisites
 
+Self-contained: this directory plus the module `../../modules/iam_mfa_oma` and the
+runbook `docs/runbook-mfa-oma.md` of this repository. Nothing else is downloaded
+except the OCI provider.
+
+OCI:
+
 - OCI Tenancy with Identity Domain (not classic IAM)
 - OCI Email Delivery available in the target region
-- Email domain already verified in OCI Email Delivery
-- Terraform >= 1.3, OCI Provider >= 5.0
+- Email domain verified in OCI Email Delivery (or let the stack create it with
+  `create_email_domain = true` and add the DNS TXT record, see the runbook)
+- An OCI user allowed to create IAM users, groups and policies in the tenancy root,
+  an integrated application in the Identity Domain, and Approved Senders in the
+  target compartment - in a lab tenancy: a tenancy administrator. The role grants
+  after the apply (step 2) need Identity Domain administrator rights
+
+Tools:
+
+- Terraform >= 1.3 and OCI provider 8.x (`~> 8.0`, tested with 8.28.0 and
+  Terraform 1.17)
 - OCI CLI configured (`~/.oci/config`, profile DEFAULT or named)
+- `jq` for the output commands below; `python3` for the `oci raw-request`
+  role grants in the runbook
+
+Database:
+
+- Oracle AI Database 26ai RU 23.9 or later (tested with 26ai Free 23.26.1,
+  23.26.3 and 23.26.4 in a container, ARM64) or Oracle Database 19c RU 19.28 or
+  later (DB side not tested with 19c in this repository)
+- Outbound HTTPS to the Identity Domain and SMTP (port 587) to OCI Email Delivery
+  from the database host
+- The Oracle Mobile Authenticator app on a phone for the user's enrollment
 
 ## Deployment
 

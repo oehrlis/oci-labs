@@ -26,6 +26,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   certificates optional); `terraform.tfvars.example` added; dead links into the private talks repo removed
 - **iam_mfa_oma**: `schemas` added to `ignore_changes` of the OAuth app - the Identity Domain adds the OCITags
   extension schema after create, which showed as perpetual in-place drift
+- **mfa_oma_setup**: OCI provider pinned to `~> 8.0` (tested 8.28.0); README lists all prerequisites - OCI
+  permissions, tools (`jq`, `python3`), database versions and network - so the directory is self-contained
 - Placeholder playbooks, the two infra-tools stubs and `terraform/envs/core/README.md` point to
   `tasks/open-work.md` instead of the removed roadmap; `docs/datasafe-demo.md` points to the removed move plan by
   commit
