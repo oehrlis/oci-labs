@@ -164,36 +164,47 @@ oci iam policy create \
   --statements '["Allow group grp-zrh-lab-mfaoma-smtp-01 to use email-family in compartment id COMPARTMENT_OCID"]'
 ```
 
-### DB MFA Wallet (post-apply, manual)
+### DB MFA wallet and SMTP credential (post-apply, manual)
 
-Oracle DB MFA requires a wallet per PDB. Use the **service URL as connect string**
-with the actual credentials as username/password — NOT separate entries per field.
+Oracle DB MFA needs a wallet per PDB holding the OAuth client under two fixed
+aliases (`orapki secretstore create_entry -alias`; the `create_credential
+-connect_string` form produces a different entry format and does not work).
 
 ```bash
 WALLET_ROOT="<value of wallet_root DB parameter>"
 PDB_GUID="<SELECT guid FROM v\$pdbs WHERE name = 'YOUR_PDB'>"
 WALLET="${WALLET_ROOT}/${PDB_GUID}/mfa"
-IDCS=$(terraform output -raw iam_domain_url)
-SMTP_HOST=$(terraform output -raw smtp_host)
 CLIENT_ID=$(terraform output -raw oauth_client_id)
-CLIENT_SECRET="<from 1Password>"
-SMTP_USER=$(terraform output -raw smtp_username)
-SMTP_PASS="<from 1Password>"
+CLIENT_SECRET=$(terraform output -raw oauth_client_secret)
 
 mkdir -p "$WALLET"
-orapki wallet create -wallet "$WALLET" -auto_login
+orapki wallet create -wallet "$WALLET" -pwd "$WALLET_PWD" -auto_login -compat_v12
 
-# OAuth: IDCS URL as connect string
-orapki secretstore create_credential -wallet "$WALLET" \
-  -connect_string "$IDCS" -username "$CLIENT_ID" -password "$CLIENT_SECRET"
+orapki secretstore create_entry -wallet "$WALLET" -pwd "$WALLET_PWD" \
+  -alias oracle.security.mfa.oma.clientid -secret "$CLIENT_ID"
+orapki secretstore create_entry -wallet "$WALLET" -pwd "$WALLET_PWD" \
+  -alias oracle.security.mfa.oma.clientsecret -secret "$CLIENT_SECRET"
 
-# SMTP: host as connect string
-orapki secretstore create_credential -wallet "$WALLET" \
-  -connect_string "$SMTP_HOST" -username "$SMTP_USER" -password "$SMTP_PASS"
-
-# Verify: must show exactly 2 entries
-mkstore -wrl "$WALLET" -listCredential
+# Verify: two oracle.security.mfa.oma.* entries under "Oracle Secret Store entries"
+orapki wallet display -wallet "$WALLET"
 ```
+
+The SMTP credential does **not** go into the wallet: Oracle AI Database 26ai reads
+it from `SYS.MFA_SMTP_CREDENTIAL$`. Create it as SYSDBA in the same PDB - the
+`db_mfa_config_commands` output contains the template with the SMTP username:
+
+```sql
+BEGIN
+  DBMS_CREDENTIAL.CREATE_CREDENTIAL(
+    credential_name => 'MFA_SMTP_CREDENTIAL$',
+    username => '<terraform output -raw smtp_username>',
+    password => '<terraform output -raw smtp_password>');
+END;
+/
+```
+
+Without it `CREATE USER ... AND FACTOR 'OMA_PUSH'` fails with `ORA-28474`. Full
+procedure: [runbook](../../../docs/runbook-mfa-oma.md), steps 6-7.
 
 ## Inputs
 
@@ -239,4 +250,3 @@ mkstore -wrl "$WALLET" -listCredential
 ## References
 
 - [Oracle MFA Tutorial](https://docs.oracle.com/en/learn/mfa-db23ai-oma/)
-- [Talk Demo Guide](../../../../talks/oracle-db-mfa/demos.md)

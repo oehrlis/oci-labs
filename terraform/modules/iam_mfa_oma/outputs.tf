@@ -92,14 +92,30 @@ output "dkim_cname_value" {
 }
 
 output "db_mfa_config_commands" {
-  description = "ALTER SYSTEM commands for Oracle DB-side MFA setup (copy-paste ready)."
+  description = "SQL for the Oracle DB-side MFA setup (copy-paste ready): parameters and the 26ai SMTP credential."
   sensitive   = true
   value       = <<-EOT
-    -- Run as SYSDBA on the Oracle Database:
+    -- Run as SYSDBA in the PDB that holds the MFA users (ALTER SESSION SET CONTAINER = <pdb>;)
     ALTER SYSTEM SET MFA_OMA_IAM_DOMAIN_URL = '${local.idcs_endpoint}' SCOPE=BOTH;
-    ALTER SYSTEM SET MFA_SMTP_HOST          = '${local.smtp_host}' SCOPE=BOTH;
-    ALTER SYSTEM SET MFA_SMTP_PORT          = 587 SCOPE=BOTH;
-    ALTER SYSTEM SET MFA_SENDER_EMAIL_ID    = '${var.smtp_sender_email}' SCOPE=BOTH;
+    ALTER SYSTEM SET MFA_SMTP_HOST = '${local.smtp_host}' SCOPE=BOTH;
+    ALTER SYSTEM SET MFA_SMTP_PORT = 587 SCOPE=BOTH;
+    ALTER SYSTEM SET MFA_SENDER_EMAIL_ID = '${var.smtp_sender_email}' SCOPE=BOTH;
+    ALTER SYSTEM SET MFA_SENDER_EMAIL_DISPLAYNAME = '${var.smtp_sender_name}' SCOPE=BOTH;
+
+    -- 26ai reads the SMTP credential from SYS.MFA_SMTP_CREDENTIAL$, not from the MFA wallet.
+    -- Without it CREATE USER ... AND FACTOR 'OMA_PUSH' fails with ORA-28474.
+    -- Password: terraform output -raw smtp_password (pass it via stdin, not on the command line)
+    BEGIN
+      DBMS_CREDENTIAL.CREATE_CREDENTIAL(
+        credential_name => 'MFA_SMTP_CREDENTIAL$',
+        username => '${oci_identity_smtp_credential.smtp_cred.username}',
+        password => '<smtp_password>');
+    END;
+    /
+
+    -- MFA wallet WALLET_ROOT/<PDB GUID>/mfa (orapki secretstore create_entry -alias):
+    --   oracle.security.mfa.oma.clientid = ${oci_identity_domains_app.oauth_app.name}
+    --   oracle.security.mfa.oma.clientsecret = terraform output -raw oauth_client_secret
   EOT
 }
 

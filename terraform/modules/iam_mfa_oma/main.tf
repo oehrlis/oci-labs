@@ -75,7 +75,8 @@ resource "oci_identity_domains_app" "oauth_app" {
   client_type     = "confidential"
 
   lifecycle {
-    ignore_changes = [urnietfparamsscimschemasoracleidcsextensionrequestable_app]
+    # schemas: the domain adds the OCITags extension schema after create - perpetual drift otherwise
+    ignore_changes = [urnietfparamsscimschemasoracleidcsextensionrequestable_app, schemas]
   }
 }
 

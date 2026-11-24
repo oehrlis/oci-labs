@@ -816,4 +816,3 @@ ALTER SYSTEM RESET MFA_SENDER_EMAIL_DISPLAYNAME SCOPE=BOTH;
 - Oracle MFA Tutorial: <https://docs.oracle.com/en/learn/mfa-db23ai-oma/>
 - Spec: `docs/spec-iam-mfa-oma.md`
 - Module README: `terraform/modules/iam_mfa_oma/README.md`
-- Talk Demo Guide: `[talk demo guide](../../../../talks/oracle-db-mfa/demos.md)`

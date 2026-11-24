@@ -17,6 +17,15 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **iam_mfa_oma / mfa_oma_setup** (MFA with OMA Push, verified 2026-11-23 on 26ai Free 23.26.x): the
+  `db_mfa_config_commands` output now also prints `MFA_SENDER_EMAIL_DISPLAYNAME`, the
+  `DBMS_CREDENTIAL.CREATE_CREDENTIAL('MFA_SMTP_CREDENTIAL$', ...)` template and the two wallet aliases. 26ai reads
+  the SMTP credential from `SYS.MFA_SMTP_CREDENTIAL$`, not from the MFA wallet - without it `CREATE USER ... AND
+  FACTOR 'OMA_PUSH'` fails with `ORA-28474`. Env README, module README and `docs/runbook-mfa-oma.md` corrected
+  accordingly (wallet holds the OAuth client only, `create_entry -alias` instead of `create_credential`, CA
+  certificates optional); `terraform.tfvars.example` added; dead links into the private talks repo removed
+- **iam_mfa_oma**: `schemas` added to `ignore_changes` of the OAuth app - the Identity Domain adds the OCITags
+  extension schema after create, which showed as perpetual in-place drift
 - Placeholder playbooks, the two infra-tools stubs and `terraform/envs/core/README.md` point to
   `tasks/open-work.md` instead of the removed roadmap; `docs/datasafe-demo.md` points to the removed move plan by
   commit
