@@ -26,6 +26,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   certificates optional); `terraform.tfvars.example` added; dead links into the private talks repo removed
 - **iam_mfa_oma**: `schemas` added to `ignore_changes` of the OAuth app - the Identity Domain adds the OCITags
   extension schema after create, which showed as perpetual in-place drift
+- **tasks/**: `open-work.md` keeps open items only (done lines go, the record is the state file and this
+  CHANGELOG); new sections "Planned, not decided" (links `plan-dbsec-central.md`) and the M4 date conflict with
+  cpu-patch-tests. `state-2026-11-24.md` shortened to the session record: MFA demo, state backup of
+  `mfa_oma_setup`, orarepo cleanup (6 legacy binaries deleted from the bucket, 621 -> 615 objects), architecture
+  check M1-M5. `review-2026-10-08*.md` stay - `/repo-audit` versions the last run's report and findings
 - **mfa_oma_setup**: OCI provider pinned to `~> 8.0` (tested 8.28.0); README lists all prerequisites - OCI
   permissions, tools (`jq`, `python3`), database versions and network - so the directory is self-contained
 - Placeholder playbooks, the two infra-tools stubs and `terraform/envs/core/README.md` point to

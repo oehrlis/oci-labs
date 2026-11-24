@@ -1,16 +1,20 @@
 # Open work - oci-labs
 
-The one checkbox file of this repo (replaces `tasks/todo.md`). Re-entry point of the last session:
-newest `tasks/state-*.md`. Lessons: `tasks/lessons.md`. Repo-audit findings with stable IDs: `tasks/review-register.md`
-(22 open on 2026-11-23) - the items below name only those worth scheduling.
+The one checkbox file of this repo. Re-entry point of the last session: newest `tasks/state-*.md`. Lessons:
+`tasks/lessons.md`. Repo-audit findings with stable IDs: `tasks/review-register.md` (22 open on 2026-11-24) - the
+items below name only those worth scheduling. Done items leave this file; the record is the state file and the
+CHANGELOG.
 
 ## Now
 
-- [x] MFA-Live-Demo (OMA Push) fuer UKOUG S4 auf base26 - steht, Stand `tasks/state-2026-11-24.md`
-- [ ] mfa_oma_setup: Terraform-State sichern, dann `terraform apply` (nur Output) [P1] (due: 2026-11-25)
-- [ ] Data-Safe-Demo-Lab nach der UKOUG-Session stoppen oder abbauen
+- [ ] Data-Safe-Demo-Lab nach der UKOUG-Session (Mi 2026-11-25 15:00) stoppen oder abbauen, nicht frueher
   (`make dsdemo-stop` / `make dsdemo-destroy`) [P2] (due: 2026-11-26)
+- [ ] 19c RU 19.28+: MFA-SMTP-Credential (`MFA_SMTP_CREDENTIAL$` oder Wallet) und `DBA_USERS`-MFA-Spalten pruefen,
+  KB-TODOs in delphi-oradba `mfa.md` aufloesen [P2]
 - [ ] ACE: geloeschte ADBs als TERMINATED pruefen, Restbetrag in der Konsole gegen `--credits` abgleichen [P2]
+- [ ] `.env` fuer mfa_oma_setup von Hand anlegen (Session darf `.env` nicht schreiben) - bis dahin die drei OCIDs als
+  `TF_VAR_*` (ACE-Tenancy-OCID zweimal, Default-Domain-OCID) [P3]
+- [ ] Release v0.7.1 aus `[Unreleased]` (MFA-Fixes, tasks-Bereinigung) vor dem Ansible-Umzug [P3]
 
 ## Security and repo hygiene (review-register)
 
@@ -35,8 +39,6 @@ newest `tasks/state-*.md`. Lessons: `tasks/lessons.md`. Repo-audit findings with
   (`docs/runbook-cpu-patch-lab.md` Tabelle bei Zeile 325, `docs/datasafe-demo.md`) [P3]
 - [ ] Lab-Stubs `lab-db19eng`, `lab-oudeng`, `lab-wlseng`, `full-lab-bootstrap` und die zwei infra-tools-Skripte:
   fuellen oder loeschen - mit dem Ansible-Umzug nach oradba-ansible (M4) entscheiden [P3]
-- [ ] orarepo-Kandidaten (jdk-11.0.20, jdk-17.0.9, jdk-11.0.10.rpm, wls_lite_slim, grid 19.3 Home)
-  behalten oder loeschen [P3]
 
 ## Windows AD / CMU lab (ad-cmu-test)
 
@@ -44,8 +46,14 @@ newest `tasks/state-*.md`. Lessons: `tasks/lessons.md`. Repo-audit findings with
 - [ ] CMU/Kerberos auf dem DB-Server nachholen (krb5.conf, sqlnet.ora, keytab),
   ad-lab-Skripte auf `oradba.ch` pruefen [P3]
 
+## Planned, not decided
+
+- Security Central Lab (Nachfolger AVDF) als eigener Stack: Brief `tasks/plan-dbsec-central.md`, Idee in
+  `~/notes/ideas.md` (2026-11-17) - erst nach Entscheid bauen
+
 ## Elsewhere (not in this repo)
 
+- Lab-Architektur M4 (KW50, Ansible nach oradba-ansible, E7 Umbenennung) und M5 (KW51, OCI-Runner):
+  `~/notes/areas/oci-labs.md`. Termin-Widerspruch: cpu-patch-tests L6 (gleicher Umzug) due 2026-12-18
 - oradba-ansible: Lab-Vorlagen dbca.rsp, tnsnames.ora, listener.ora mit den oradba-Templates zusammenfuehren
-  (`~/notes/areas/oci-labs.md`, Change Request `git show fdece8e:tasks/cr-oradba-shared-templates.md`)
-- Lab-Architektur M4 (Ansible nach oradba-ansible) und M5 (OCI-Runner): `~/notes/areas/oci-labs.md`
+  (Change Request `git show fdece8e:tasks/cr-oradba-shared-templates.md`)
