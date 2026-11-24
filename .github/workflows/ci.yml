@@ -1,0 +1,66 @@
+# ci - the credential-free part of `make lint` on every push to main and on PRs
+# (RA-oci-labs-013).
+#
+# Runs: lint-terraform (fmt -check, init -backend=false, validate), lint-ansible,
+# lint-ansible-syntax (inline localhost inventory, RA-oci-labs-025), lint-yaml,
+# lint-markdown, lint-shell, check-version.
+# Not run here: lint-secrets (own workflow gitleaks.yml, with a pinned gitleaks). None of
+# the jobs needs OCI credentials or a running lab.
+#
+# Tool versions: shellcheck comes from the runner's apt (0.9.0 on ubuntu-latest), local
+# brew is newer (0.11.x) - the older version can report things the newer one does not.
+# Actions are pinned by major tag, except checkout (SHA, as in gitleaks.yml).
+---
+name: ci
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: make lint (credential-free targets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install linters
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          python3 -m pip install ansible-lint yamllint
+          npm install -g markdownlint-cli
+          if [[ -f ansible/requirements.yml ]]; then
+            ansible-galaxy collection install -r ansible/requirements.yml
+          fi
+          # oradba.automation is a release tarball, not on Galaxy - the playbooks
+          # import it, so ansible-lint and the syntax check fail without it
+          make cpu-lab-coll-install
+          shellcheck --version | sed -n 2p
+
+      - name: Lint (terraform, ansible, syntax, yaml, markdown, shell, version)
+        run: make lint-terraform lint-ansible lint-ansible-syntax lint-yaml lint-markdown lint-shell check-version

@@ -8,6 +8,11 @@
 **/crash.log
 **/crash.*.log
 **/terraform.tfvars
+**/*.auto.tfvars
+**/*.auto.tfvars.json
+# Saved plans carry every variable value in clear text
+**/*.tfplan
+**/tfplan
 # Remote state backend settings per target (namespace, profile) - example files stay tracked
 **/backend.hcl
 

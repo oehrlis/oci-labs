@@ -10,6 +10,8 @@
 # Notes......: FQCN ansible.windows.* and ansible.builtin.* throughout.
 #              windows_ad_admin_password must be defined in group_vars or vault.
 #              Reboot after AD role install is mandatory and handled explicitly.
+#              00_init_environment.ps1 carries the admin password: rendered with
+#              no_log, removed in the always section even if a script fails.
 # Reference..: https://github.com/oehrlis/oci-labs
 # ------------------------------------------------------------------------------
 
@@ -41,77 +43,90 @@
     dest: "{{ windows_ad_config_dest }}\\"
     recurse: true
 
-# 4. Render and deploy 00_init_environment.ps1
-- name: Deploy 00_init_environment.ps1 from template
-  ansible.windows.win_template:
-    src: "00_init_environment.ps1.j2"
-    dest: "{{ windows_ad_scripts_dest }}\\00_init_environment.ps1"
+# 4.-11. Scripts that dot-source 00_init_environment.ps1 (admin password)
+- name: Run AD setup with rendered environment file
+  block:
+    # 4. Render and deploy 00_init_environment.ps1 (contains the admin password)
+    - name: Deploy 00_init_environment.ps1 from template
+      ansible.windows.win_template:
+        src: "00_init_environment.ps1.j2"
+        dest: "{{ windows_ad_scripts_dest }}\\00_init_environment.ps1"
+      no_log: true
 
-# 5. Install AD DS role and reboot
-- name: Install AD DS role (01_install_ad_role.ps1)
-  ansible.windows.win_shell: |
-    & "{{ windows_ad_scripts_dest }}\01_install_ad_role.ps1"
-  args:
-    chdir: "{{ windows_ad_scripts_dest }}"
-  register: ad_role_result
-  changed_when: ad_role_result.rc == 0
+    # 5. Install AD DS role and reboot
+    - name: Install AD DS role (01_install_ad_role.ps1)
+      ansible.windows.win_shell: |
+        & "{{ windows_ad_scripts_dest }}\01_install_ad_role.ps1"
+      args:
+        chdir: "{{ windows_ad_scripts_dest }}"
+      register: windows_ad_ad_role_result
+      no_log: "{{ windows_ad_no_log }}"
+      changed_when: windows_ad_ad_role_result.rc == 0
 
-- name: Reboot after AD DS role installation
-  ansible.builtin.reboot:
-    reboot_timeout: 600
-    connect_timeout: 30
-    post_reboot_delay: 60
+    - name: Reboot after AD DS role installation
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        connect_timeout: 30
+        post_reboot_delay: 60
 
-# 6. Wait for AD (LDAP port 389) to become available
-- name: Wait for Active Directory LDAP port
-  ansible.windows.win_wait_for:
-    host: localhost
-    port: 389
-    delay: 10
-    timeout: 300
-    state: started
+    # 6. Wait for AD (LDAP port 389) to become available
+    - name: Wait for Active Directory LDAP port
+      ansible.windows.win_wait_for:
+        host: localhost
+        port: 389
+        delay: 10
+        timeout: 300
+        state: started
 
-# 7. Add lab company and OUs
-- name: Add lab company and OUs (11_add_lab_company.ps1)
-  ansible.windows.win_shell: |
-    & "{{ windows_ad_scripts_dest }}\11_add_lab_company.ps1"
-  args:
-    chdir: "{{ windows_ad_scripts_dest }}"
-  register: company_result
-  changed_when: company_result.rc == 0
+    # 7. Add lab company and OUs
+    - name: Add lab company and OUs (11_add_lab_company.ps1)
+      ansible.windows.win_shell: |
+        & "{{ windows_ad_scripts_dest }}\11_add_lab_company.ps1"
+      args:
+        chdir: "{{ windows_ad_scripts_dest }}"
+      register: windows_ad_company_result
+      changed_when: windows_ad_company_result.rc == 0
 
-# 8. Add service principals and users
-- name: Add service principals (11_add_service_principles.ps1)
-  ansible.windows.win_shell: |
-    & "{{ windows_ad_scripts_dest }}\11_add_service_principles.ps1"
-  args:
-    chdir: "{{ windows_ad_scripts_dest }}"
-  register: svc_result
-  changed_when: svc_result.rc == 0
+    # 8. Add service principals and users
+    - name: Add service principals (11_add_service_principles.ps1)
+      ansible.windows.win_shell: |
+        & "{{ windows_ad_scripts_dest }}\11_add_service_principles.ps1"
+      args:
+        chdir: "{{ windows_ad_scripts_dest }}"
+      register: windows_ad_svc_result
+      changed_when: windows_ad_svc_result.rc == 0
 
-# 9. Configure DNS forwarders
-- name: Configure DNS (12_config_dns.ps1)
-  ansible.windows.win_shell: |
-    & "{{ windows_ad_scripts_dest }}\12_config_dns.ps1"
-  args:
-    chdir: "{{ windows_ad_scripts_dest }}"
-  register: dns_result
-  changed_when: dns_result.rc == 0
+    # 9. Configure DNS forwarders
+    - name: Configure DNS (12_config_dns.ps1)
+      ansible.windows.win_shell: |
+        & "{{ windows_ad_scripts_dest }}\12_config_dns.ps1"
+      args:
+        chdir: "{{ windows_ad_scripts_dest }}"
+      register: windows_ad_dns_result
+      changed_when: windows_ad_dns_result.rc == 0
 
-# 10. Configure Certificate Authority
-- name: Configure CA (13_config_ca.ps1)
-  ansible.windows.win_shell: |
-    & "{{ windows_ad_scripts_dest }}\13_config_ca.ps1"
-  args:
-    chdir: "{{ windows_ad_scripts_dest }}"
-  register: ca_result
-  changed_when: ca_result.rc == 0
+    # 10. Configure Certificate Authority
+    - name: Configure CA (13_config_ca.ps1)
+      ansible.windows.win_shell: |
+        & "{{ windows_ad_scripts_dest }}\13_config_ca.ps1"
+      args:
+        chdir: "{{ windows_ad_scripts_dest }}"
+      register: windows_ad_ca_result
+      changed_when: windows_ad_ca_result.rc == 0
 
-# 11. Configure Oracle CMU (Central Management Unit) integration
-- name: Configure Oracle CMU (27_config_cmu.ps1)
-  ansible.windows.win_shell: |
-    & "{{ windows_ad_scripts_dest }}\27_config_cmu.ps1"
-  args:
-    chdir: "{{ windows_ad_scripts_dest }}"
-  register: cmu_result
-  changed_when: cmu_result.rc == 0
+    # 11. Configure Oracle CMU (Central Management Unit) integration
+    - name: Configure Oracle CMU (27_config_cmu.ps1)
+      ansible.windows.win_shell: |
+        & "{{ windows_ad_scripts_dest }}\27_config_cmu.ps1"
+      args:
+        chdir: "{{ windows_ad_scripts_dest }}"
+      register: windows_ad_cmu_result
+      no_log: "{{ windows_ad_no_log }}"
+      changed_when: windows_ad_cmu_result.rc == 0
+
+  always:
+    # 12. Remove the rendered password file, also after a failed run
+    - name: Remove 00_init_environment.ps1 (contains the admin password)
+      ansible.windows.win_file:
+        path: "{{ windows_ad_scripts_dest }}\\00_init_environment.ps1"
+        state: absent

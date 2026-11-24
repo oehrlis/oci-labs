@@ -21,6 +21,7 @@ try {
     $admin.SetPassword($adminPass)
     $admin.SetInfo()
 }
+Remove-Variable -Name adminPassB64, adminPass, securePass -ErrorAction SilentlyContinue
 Write-Output 'Administrator password set.'
 
 # --- 2. Machine environment variables -------------------------------------------
@@ -50,14 +51,16 @@ New-Item -ItemType Directory -Force -Path 'C:\OraLab\Scripts' | Out-Null
 New-Item -ItemType Directory -Force -Path 'C:\OraLab\config'  | Out-Null
 
 # --- 6. Download ad-lab scripts from GitHub (ZIP, no git required) --------------
-Write-Output 'Downloading ad-lab from GitHub...'
+# Pinned to a commit SHA (ad_lab_scripts_ref), optional SHA-256 check of the ZIP
+Write-Output 'Downloading ad-lab ${ad_lab_ref} from GitHub...'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$adLabZip  = 'C:\OraLab\ad-lab.zip'
-$adLabRoot = 'C:\OraLab\ad-lab-main'
+$adLabZip    = 'C:\OraLab\ad-lab.zip'
+$adLabRoot   = 'C:\OraLab\ad-lab-${ad_lab_ref}'
+$adLabSha256 = '${ad_lab_sha256}'
 $maxRetries = 3
 for ($i = 1; $i -le $maxRetries; $i++) {
     try {
-        Invoke-WebRequest -Uri 'https://github.com/oehrlis/ad-lab/archive/refs/heads/main.zip' `
+        Invoke-WebRequest -Uri 'https://github.com/oehrlis/ad-lab/archive/${ad_lab_ref}.zip' `
             -OutFile $adLabZip -UseBasicParsing
         break
     } catch {
@@ -65,6 +68,16 @@ for ($i = 1; $i -le $maxRetries; $i++) {
         Write-Output "Download attempt $i failed, retrying in 30s..."
         Start-Sleep 30
     }
+}
+if ($adLabSha256) {
+    $actualSha256 = (Get-FileHash -Path $adLabZip -Algorithm SHA256).Hash.ToLower()
+    if ($actualSha256 -ne $adLabSha256) {
+        Remove-Item $adLabZip -Force
+        throw "ad-lab archive SHA-256 mismatch: expected $adLabSha256, got $actualSha256"
+    }
+    Write-Output 'ad-lab archive SHA-256 verified.'
+} else {
+    Write-Output 'WARNING: ad_lab_scripts_sha256 is empty - archive checksum NOT verified.'
 }
 Expand-Archive -Path $adLabZip -DestinationPath 'C:\OraLab\' -Force
 Copy-Item -Path "$adLabRoot\scripts\*" -Destination 'C:\OraLab\Scripts\' -Recurse -Force
@@ -170,6 +183,22 @@ foreach ($scr in $scripts) {
         exit 1
     }
 }
+
+# Remove the Administrator password from 00_init_environment.ps1 once the
+# automatic setup is done. Manual scripts (27_config_cmu.ps1) then take it from
+# $env:LAB_ADMIN_PASSWORD or prompt for it.
+$initFile = 'C:\OraLab\Scripts\00_init_environment.ps1'
+(Get-Content $initFile) | ForEach-Object {
+    if ($_ -match '^\$PlainPassword\s*=') {
+        '$PlainPassword = if ($env:LAB_ADMIN_PASSWORD) { $env:LAB_ADMIN_PASSWORD } else { [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host -AsSecureString ''Administrator password''))) }'
+    } else { $_ }
+} | Set-Content $initFile -Encoding UTF8
+if (Select-String -Path $initFile -Pattern 'FromBase64String' -Quiet) {
+    Write-Error 'Password scrub of 00_init_environment.ps1 failed.'
+    Stop-Transcript
+    exit 1
+}
+Write-Output 'Administrator password removed from 00_init_environment.ps1.'
 
 "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - AD lab setup complete." |
     Set-Content 'C:\OraLab\logs\setup-complete.txt' -Encoding UTF8

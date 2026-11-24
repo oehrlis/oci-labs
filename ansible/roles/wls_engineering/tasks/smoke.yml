@@ -61,7 +61,8 @@
     cmd: |
       set -euo pipefail
       base='{{ wv_admin_url }}/management/weblogic/latest/edit'
-      post() { curl -K {{ wv_curl_cfg }} --max-time 300 -fS -X POST -H 'Content-Type: application/json' -d "$2" "$base/$1"; }
+      post() { curl -K {{ wv_curl_cfg }} --max-time 300 -fS -X POST \
+        -H 'Content-Type: application/json' -d "$2" "$base/$1"; }
       post changeManager/startEdit '{}'
       app='{"name": "{{ wls_smoke_app }}", "sourcePath": "{{ wv_stage }}/{{ wls_smoke_app }}.war",'
       app="$app"' "targets": [{"identity": ["servers", "{{ wls_managed_server }}"]}]}'
@@ -96,7 +97,9 @@
         {{ wv_smoke_server_states.AdminServer | default('') == 'RUNNING' }}
       ms_running: >-
         {{ wv_smoke_server_states[wls_managed_server] | default('') == 'RUNNING' }}
-      deploy: "{{ 'existing' if wv_app_exists.stdout == '200' else ('ok' if (wv_deploy.rc | default(1)) == 0 else 'failed') }}"
+      deploy: >-
+        {{ 'existing' if wv_app_exists.stdout == '200'
+           else ('ok' if (wv_deploy.rc | default(1)) == 0 else 'failed') }}
       page: "{{ wls_smoke_marker in wv_smoke_page.stdout }}"
 
 - name: Report the smoke test

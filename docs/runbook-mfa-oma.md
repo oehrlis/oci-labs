@@ -19,7 +19,7 @@ manually after the Terraform apply using outputs from this stack.
 
 ```mermaid
 flowchart LR
-    subgraph OCI["OCI Tenancy — Terraform-managed"]
+    subgraph OCI["OCI Tenancy - Terraform-managed"]
         direction TB
         subgraph IDOMAIN["Identity Domain"]
             OA["OAuth Confidential App\napp-zrh-lab-mfaoma-oauth-01\nclient_credentials grant\n\nRoles: MFA Client\nUser Administrator\nIdentity Domain Administrator"]
@@ -40,7 +40,7 @@ flowchart LR
         end
     end
 
-    subgraph ODB["Oracle Database 23.9+  —  manual steps"]
+    subgraph ODB["Oracle Database 23.9+  -  manual steps"]
         PARAMS["System Parameters\nMFA_OMA_IAM_DOMAIN_URL\nMFA_SMTP_HOST · PORT\nMFA_SENDER_EMAIL_ID"]
         WALLET["MFA Wallet\noracle.security.mfa.oma.clientid/secret\n+ SMTP: SYS.MFA_SMTP_CREDENTIAL$\n(DBMS_CREDENTIAL, 26ai)"]
         MFAUSER["MFA-enabled User\nCREATE USER ... AND FACTOR 'OMA_PUSH'"]
@@ -65,11 +65,11 @@ flowchart LR
 | --- | --- | --- |
 | **OAuth App** | `oci_identity_domains_app` | Oracle DB uses client_credentials to authenticate against the Identity Domain for OMA Push enrollment and push triggers. Must have roles: MFA Client, User Administrator, Identity Domain Administrator. |
 | **SMTP User** | `oci_identity_user` | Dedicated IAM user for SMTP authentication. Using a dedicated user avoids dependency on personal accounts and allows independent credential rotation. Always created at tenancy root (IAM users are tenancy-wide). |
-| **IAM Group** | `oci_identity_group` | Required wrapper for the SMTP User. Identity Domain tenancies reject `Allow user <name>` policy syntax — only group-based policies are valid. |
+| **IAM Group** | `oci_identity_group` | Required wrapper for the SMTP User. Identity Domain tenancies reject `Allow user <name>` policy syntax - only group-based policies are valid. |
 | **IAM Policy** | `oci_identity_policy` | Grants the SMTP Group `use email-family` in the target compartment. Without this, email sending fails with authorization errors. |
-| **SMTP Credential** | `oci_identity_smtp_credential` | Username/password for SMTP authentication. Password is shown only once at apply time — save it immediately. |
+| **SMTP Credential** | `oci_identity_smtp_credential` | Username/password for SMTP authentication. Password is shown only once at apply time - save it immediately. |
 | **Email Domain** | `oci_email_email_domain` | Optional. Registers the sender domain in OCI Email Delivery. Required for DKIM. After `apply`, a DNS TXT record must be added to verify ownership. One domain covers all senders under that domain. |
-| **Approved Sender** | `oci_email_sender` | Authorises a specific FROM address to send through OCI Email Delivery. Must match `MFA_SENDER_EMAIL_ID` in the DB. **One sender per FROM address** — multiple DBs can share the same sender address. Create separate senders (e.g. `db1-mfa@oradba.ch`) if per-DB tracking is needed. |
+| **Approved Sender** | `oci_email_sender` | Authorises a specific FROM address to send through OCI Email Delivery. Must match `MFA_SENDER_EMAIL_ID` in the DB. **One sender per FROM address** - multiple DBs can share the same sender address. Create separate senders (e.g. `db1-mfa@oradba.ch`) if per-DB tracking is needed. |
 | **DKIM Record** | `oci_email_dkim` | Optional. Adds a cryptographic signature to outgoing emails, improving deliverability and spam scores. Requires a verified email domain. |
 <!-- markdownlint-restore -->
 
@@ -79,17 +79,17 @@ Deploying the email domain, verification, and DKIM is a three-phase process beca
 DNS propagation and OCI domain verification take time:
 
 ```text
-Phase 1 — Create domain + sender
+Phase 1 - Create domain + sender
   create_email_domain = true
   email_domain        = "oradba.ch"
   create_dkim         = false      ← domain not yet verified
   → terraform apply
   → add TXT record from email_domain_verification_id output to DNS
 
-Phase 2 — Verify domain in OCI Console
+Phase 2 - Verify domain in OCI Console
   OCI Console: Email Delivery → Email Domains → oradba.ch → Verify Domain
 
-Phase 3 — Enable DKIM
+Phase 3 - Enable DKIM
   create_dkim = true
   → terraform apply
   → add CNAME record from dkim_cname_name / dkim_cname_value outputs to DNS
@@ -187,11 +187,11 @@ smtp_sender_name  = "Oracle DB MFA Demo"
 # OAuth Application (leave empty to auto-derive from naming convention)
 app_name = ""
 
-# Email Domain — Phase 1: create domain (leave create_dkim false until DNS is verified)
+# Email Domain - Phase 1: create domain (leave create_dkim false until DNS is verified)
 create_email_domain = false
 # email_domain      = "oradba.ch"
 
-# Email Domain — Phase 3: enable DKIM after domain is verified in OCI Console
+# Email Domain - Phase 3: enable DKIM after domain is verified in OCI Console
 create_dkim = false
 # email_domain_ocid = "ocid1.emaildomain.oc1.eu-zurich-1.xxx"  # only if create_email_domain = false
 ```
@@ -444,7 +444,7 @@ WALLET_ROOT="<value of wallet_root parameter>"
 ### 6.3 Create MFA Wallet
 
 The wallet requires a password and the `-compat_v12` flag. Set a secure wallet
-password and store it in 1Password — it is needed for all subsequent wallet operations.
+password and store it in 1Password - it is needed for all subsequent wallet operations.
 
 ```bash
 WALLET_PWD="<choose_a_secure_wallet_password>"
@@ -688,7 +688,7 @@ that can no longer be fulfilled.
 Dropping the DB user does not automatically remove the enrollment record in the
 Identity Domain. The record is harmless (it becomes orphaned), but can be cleaned
 up. If the OAuth App is deleted in Step T3, all associated enrollments are removed
-automatically — manual cleanup is only needed when keeping the OAuth App.
+automatically - manual cleanup is only needed when keeping the OAuth App.
 
 ```bash
 source .env

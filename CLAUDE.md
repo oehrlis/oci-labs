@@ -11,7 +11,7 @@ ausserhalb der eigenen Labs.
 
 Disposable Oracle lab environments on OCI: Terraform modules (network, naming, database host, IAM) and lab stacks,
 plus a Makefile that drives plan, apply, install, patch, verify and destroy. Labs, not production - build, use,
-tear down. Public repository: no customer data, hostnames, IPs or OCIDs. Lint: `markdownlint docs/`.
+tear down. Public repository: no customer data, hostnames, IPs or OCIDs. Lint: `make lint`.
 
 ## Role in the lab architecture
 
@@ -30,8 +30,9 @@ See the [lab architecture overview](https://github.com/oehrlis/oradba-labs/blob/
 
 ## Quick Reference
 
-- Build/Test: TODO
-- Lint: `markdownlint docs/`
+- Build/Test: no build; `make lint` is the gate (terraform fmt + validate incl. `terraform/global`, ansible-lint and
+  playbook syntax, yamllint, markdownlint, shellcheck, gitleaks, VERSION). CI runs the credential-free part
+- Lint: `make lint`, markdown alone `make lint-markdown` (markdownlint on `**/*.md`)
 - Secrets: 1Password via `op read`
 
 ## Rules (always active)

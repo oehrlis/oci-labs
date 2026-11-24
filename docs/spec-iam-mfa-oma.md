@@ -252,10 +252,10 @@ $ oci email sender create \
 
 **Out of scope:**
 
-- Domain-Verifizierung (DKIM/DNS) — manuell oder separates Modul
+- Domain-Verifizierung (DKIM/DNS) - manuell oder separates Modul
 - DB-seitige Konfiguration (Parameter, Wallet, User-Anlage)
-- Cisco Duo Integration — separates Modul später
-- Certificate-based MFA — separates Modul später
+- Cisco Duo Integration - separates Modul später
+- Certificate-based MFA - separates Modul später
 - Oracle Database Ressourcen (Compute, VCN)
 
 ## Abhängigkeiten

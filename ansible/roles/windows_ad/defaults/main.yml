@@ -36,3 +36,8 @@ windows_ad_scripts:
   - "12_config_dns.ps1"
   - "13_config_ca.ps1"
   - "27_config_cmu.ps1"
+
+# Hide output of the scripts that print or pass the admin password
+# (01_install_ad_role.ps1 logs it at DEBUG level, 27_config_cmu.ps1 passes it to
+# ktpass). Set to false only for troubleshooting in a throw-away lab.
+windows_ad_no_log: true

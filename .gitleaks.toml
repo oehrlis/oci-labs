@@ -28,20 +28,29 @@ description = "placeholder tokens (xxxx, 0000, ...)"
 regexTarget = "match"
 regexes = ['''/p/(?:[xX]+|0+|[aA]+)/''']
 
-# Real OCIDs: ocid1.<type>.<realm>.<region-or-empty>.<unique>. Tenancy, user and
-# compartment carry an empty region (ocid1.tenancy.oc1..aaaa...), regional resources a
+# Real OCIDs of any resource type (generic type part, RA-oci-labs-027):
+# ocid1.<type>.<realm>.<region-or-empty>.<unique>. Tenancy, user and compartment
+# carry an empty region (ocid1.tenancy.oc1..aaaa...), regional resources a
 # region key or name (ocid1.instance.oc1.eu-zurich-1.anl...). Real unique parts often
 # start with "aaaaaaaa" - only an unique part made of a/x/0 alone is a placeholder.
 [[rules]]
 id = "oci-ocid"
 description = "OCI resource OCID (identifies tenancy, users, resources)"
-regex = '''ocid1\.(?:tenancy|user|compartment|instance|vcn|subnet|drg|dbsystem|database|autonomousdatabase|vault|key|bucket|group|dynamicgroup|policy)\.oc[0-9]+\.[a-z0-9-]*\.[a-z0-9]{40,}'''
+regex = '''ocid1\.[a-z0-9_]+\.oc[0-9]+\.[a-z0-9-]*\.[a-z0-9]{40,}'''
 keywords = ["ocid1."]
 
 [[rules.allowlists]]
 description = "placeholder OCIDs (aaaa..., xxxx..., 0000...)"
 regexTarget = "match"
 regexes = ['''\.[ax0]{40,}$''']
+
+# Synthetic demo data: gen_fleet_snapshot.py invents well-formed fake target OCIDs
+# (ocid1.datasafetargetdatabase...) - "Every value is invented", SAMPLE DATA marker in
+# each record. Scoped to this one file and this rule; the generic regex made these
+# 55 matches visible, the old type list did not cover the type.
+[[rules.allowlists]]
+description = "synthetic fake OCIDs in the LRN6087 sample fleet snapshot (generated)"
+paths = ['''^demos/datasafe-lrn6087/fleet-snapshot/fleet-snapshot-sample\.json$''']
 
 # OCI API signing key fingerprint (MD5, 16 hex pairs) next to "fingerprint".
 [[rules]]

@@ -13,6 +13,7 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.06.26 oehrli - initial version
+# 2026.11.24 oehrli - vcn_cidr, allowed_cidrs, ad_lab_scripts_ref/_sha256
 # ------------------------------------------------------------------------------
 
 variable "compartment_ocid" {
@@ -23,6 +24,29 @@ variable "compartment_ocid" {
 variable "vcn_id" {
   type        = string
   description = "VCN OCID - required for creating the instance-level NSG."
+}
+
+variable "vcn_cidr" {
+  type        = string
+  description = "VCN CIDR block. When set, the NSG allows all AD and management ports from inside the VCN."
+  default     = null
+
+  validation {
+    condition     = var.vcn_cidr == null || can(cidrnetmask(var.vcn_cidr))
+    error_message = "vcn_cidr must be a valid IPv4 CIDR block, e.g. 10.19.0.0/16."
+  }
+}
+
+variable "allowed_cidrs" {
+  type        = list(string)
+  description = "Additional CIDRs allowed to reach RDP, WinRM, LDAP, Kerberos, DNS and GC. Default: empty (no ingress from outside the VCN)."
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for c in var.allowed_cidrs : can(cidrnetmask(c)) && c != "0.0.0.0/0"])
+    error_message = "allowed_cidrs must contain valid IPv4 CIDR blocks (e.g. 203.0.113.10/32); 0.0.0.0/0 is not allowed."
+  }
 }
 
 variable "lab_name_core" {
@@ -96,6 +120,30 @@ variable "company_name" {
   type        = string
   description = "Company name for AD lab (used in OU and user creation)."
   default     = "OraDBA Labs"
+}
+
+variable "ad_lab_scripts_ref" {
+  type        = string
+  description = "Full 40-character commit SHA of github.com/oehrlis/ad-lab to download. A branch name is not accepted: it would run moving code as Administrator."
+  default     = "3b152c02c12a5d0b9c94f0cef98e877d616c1d54"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{40}$", var.ad_lab_scripts_ref))
+    error_message = "ad_lab_scripts_ref must be a full 40-character lowercase commit SHA."
+  }
+}
+
+variable "ad_lab_scripts_sha256" {
+  type        = string
+  description = "Expected SHA-256 of the ad-lab archive for ad_lab_scripts_ref. Empty string skips the check. Update together with ad_lab_scripts_ref."
+  default     = "8d7ebbf3855e83341aa7cd498185f1396ac1f96afd6dc057c0ab5d19bd2e5c8f"
+  nullable    = false
+
+  validation {
+    condition     = var.ad_lab_scripts_sha256 == "" || can(regex("^[0-9a-f]{64}$", var.ad_lab_scripts_sha256))
+    error_message = "ad_lab_scripts_sha256 must be empty or a 64-character lowercase hex SHA-256."
+  }
 }
 
 variable "admin_password_secret" {

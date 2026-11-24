@@ -14,6 +14,7 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.06.26 oehrli - initial version
+# 2026.11.24 oehrli - pass NSG source CIDRs and ad-lab pin to windows_ad
 # ------------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -108,6 +109,9 @@ module "windows_ad" {
   vcn_id              = module.network.vcn_id
   subnet_id           = module.network.windows_subnet_id
 
+  vcn_cidr      = var.vcn_cidr
+  allowed_cidrs = var.windows_ad_allowed_cidrs
+
   lab_name_core = local.lab_name_core
   freeform_tags = local.base_freeform_tags
 
@@ -123,10 +127,13 @@ module "windows_ad" {
   domain_name           = var.domain_name
   company_name          = var.company_name
   admin_password_secret = var.admin_password_secret
+
+  ad_lab_scripts_ref    = var.ad_lab_scripts_ref
+  ad_lab_scripts_sha256 = var.ad_lab_scripts_sha256
 }
 
 # ---------------------------------------------------------------------------
-# Resource Scheduler — auto-stop Windows AD at 20:00 Europe/Zurich
+# Resource Scheduler - auto-stop Windows AD at 20:00 Europe/Zurich
 # ---------------------------------------------------------------------------
 
 resource "oci_resource_scheduler_schedule" "windows_ad_stop" {
