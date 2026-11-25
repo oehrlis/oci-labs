@@ -4,8 +4,8 @@
 # ------------------------------------------------------------------------------
 # Name.......: tasks/assert_vars.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
-# Date.......: 2026.10.20
-# Version....: v0.2.0
+# Date.......: 2026.11.25
+# Version....: v0.2.1
 # Purpose....: Fail early on missing inputs instead of half-building the lab.
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
@@ -30,7 +30,11 @@
       1-8 characters and at least one PDB.
     quiet: true
 
+# main.yml imports this file with tags: always, and import tags are inherited -
+# the task tags below alone would not keep the secrets assert out of a read-only
+# run (make dsdemo-verify). The when restricts it to runs that use the secrets.
 - name: Assert the run-time secrets
+  when: ansible_run_tags | intersect(oradb_secret_tags) | length > 0
   ansible.builtin.assert:
     that:
       - oradb_sys_password | length >= 12
@@ -44,3 +48,11 @@
     - databases
     - ds_prereqs
     - install
+
+- name: Report the skipped secrets assert
+  when: ansible_run_tags | intersect(oradb_secret_tags) | length == 0
+  ansible.builtin.debug:
+    msg: >-
+      Secrets assert skipped for tags {{ ansible_run_tags | join(',') }} - no SYS password or
+      Data Safe secret needed. Runs with install, databases or ds_prereqs (make dsdemo-install /
+      dsdemo-step) still enforce it.

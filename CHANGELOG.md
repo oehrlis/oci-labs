@@ -63,6 +63,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   scan-tests, security and testing. As `/repo-audit` intends, register, findings file and run report stay
 - Read any removed file with `git show <commit>:tasks/<file>`
 
+### Fixed
+
+- **oracle_db_native / dsdemo-verify**: `make dsdemo-verify` failed at "Assert the run-time secrets" although the
+  verify checks need neither the SYS password nor the Data Safe secret (helpers use `/ as sysdba`). `main.yml`
+  imports `assert_vars.yml` with `tags: always`, and import tags are inherited, so the task's own tags never
+  filtered it. The assert now runs only when `ansible_run_tags` contains one of `oradb_secret_tags` (`all`,
+  `install`, `databases`, `ds_prereqs`); every other run prints which tags skipped it
+
 ## [0.7.0] - 2026-11-23
 
 ### Added

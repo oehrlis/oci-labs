@@ -29,6 +29,8 @@
 # ------------------------------------------------------------------------------
 oradb_sys_password: ""
 oradb_ds_secret: ""
+# Run tags that need the two secrets - any other run (verify) skips the assert.
+oradb_secret_tags: [all, install, databases, ds_prereqs]
 
 # ------------------------------------------------------------------------------
 # Filesystem layout - same contract as db19_engineering
