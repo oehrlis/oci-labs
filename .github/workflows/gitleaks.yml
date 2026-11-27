@@ -42,8 +42,27 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" gitleaks
           "${RUNNER_TEMP}/gitleaks" version
 
+      # RA-oci-labs-028: on a PR the config comes from the base branch, so a PR cannot
+      # weaken its own scan. A PR that changes .gitleaks.toml is scanned with the old one.
+      - name: Select gitleaks config
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          cfg="${RUNNER_TEMP}/gitleaks.toml"
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            git show "origin/${BASE_REF}:.gitleaks.toml" > "${cfg}"
+            echo "gitleaks config: from base branch origin/${BASE_REF}"
+          else
+            cp .gitleaks.toml "${cfg}"
+            echo "gitleaks config: from checked-out tree"
+          fi
+          echo "GITLEAKS_CONFIG_FILE=${cfg}" >> "${GITHUB_ENV}"
+
       - name: Scan history
         run: |
           set -euo pipefail
-          "${RUNNER_TEMP}/gitleaks" git --config .gitleaks.toml --redact --no-banner \
+          "${RUNNER_TEMP}/gitleaks" git --config "${GITLEAKS_CONFIG_FILE}" --redact --no-banner \
             --log-opts=--all --exit-code 1 .

@@ -13,6 +13,7 @@
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.06.26 oehrli - initial version
+# 2026.11.24 oehrli - windows_ad_allowed_cidrs, ad_lab_scripts_ref/_sha256
 # ------------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -90,6 +91,12 @@ variable "allowed_rdp_cidrs" {
   default     = []
 }
 
+variable "windows_ad_allowed_cidrs" {
+  type        = list(string)
+  description = "CIDRs outside the VCN allowed to reach all AD ports (RDP, WinRM, LDAP, Kerberos, DNS, GC) via the DC NSG. Default: empty (VCN only; home_cidrs are covered by the subnet Security List)."
+  default     = []
+}
+
 variable "enable_flow_logs" {
   type        = bool
   description = "Enable VCN flow logs."
@@ -158,6 +165,18 @@ variable "company_name" {
   type        = string
   description = "Company name used in AD OU and user creation."
   default     = "OraDBA Labs"
+}
+
+variable "ad_lab_scripts_ref" {
+  type        = string
+  description = "Commit SHA of github.com/oehrlis/ad-lab downloaded by cloudbase-init. Null keeps the module default."
+  default     = null
+}
+
+variable "ad_lab_scripts_sha256" {
+  type        = string
+  description = "Expected SHA-256 of the ad-lab archive for ad_lab_scripts_ref. Null keeps the module default."
+  default     = null
 }
 
 variable "admin_password_secret" {

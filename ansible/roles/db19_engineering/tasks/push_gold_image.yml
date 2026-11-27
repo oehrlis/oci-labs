@@ -135,15 +135,16 @@
 # as the base of the next cycle (2026-11-18: base and target image of one day
 # carried the same name before the time went into it).
 # no_log: the PAR URL is a bearer credential - anyone who reads it can write to
-# the bucket until it is revoked.
+# the bucket until it is revoked. curl reads it as config from stdin (-K -), so
+# it never shows in the process list of the host (RA-oci-labs-015).
 - name: Upload the gold image and its manifest # noqa: command-instead-of-module
   become: true
   ansible.builtin.command:
     cmd: >-
-      curl --fail --silent --show-error --retry 3 --retry-delay 5
+      curl -K - --fail --silent --show-error --retry 3 --retry-delay 5
       -H 'if-none-match: *'
       -X PUT -T {{ db19_stage_dir }}/{{ item }}
-      {{ db19_gold_image_par }}{{ item }}
+    stdin: 'url = "{{ db19_gold_image_par }}{{ item }}"'
   loop:
     - "{{ db19_gold_artifact.path | basename }}"
     - >-

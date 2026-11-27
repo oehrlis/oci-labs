@@ -9,11 +9,14 @@
 # Purpose....: Provision a Windows Server 2022 AD instance with cloudbase-init.
 # Notes......: Stack-code "windc". Requires x86 shape (VM.Standard3.Flex).
 #              admin_password_secret is base64-encoded for safe tftpl handling.
+#              Base64 is not encryption: user_data stays readable via IMDS and the
+#              OCI API for the instance lifetime (see README.md).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.06.26 oehrli - initial version
+# 2026.11.24 oehrli - ad-lab pinned to a commit + SHA-256, NSG source CIDRs
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
@@ -32,6 +35,8 @@ locals {
     netbios_name       = local.netbios_name
     company_name       = var.company_name
     lab_name_core      = var.lab_name_core
+    ad_lab_ref         = var.ad_lab_scripts_ref
+    ad_lab_sha256      = var.ad_lab_scripts_sha256
   })
 }
 

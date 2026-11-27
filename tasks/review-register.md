@@ -171,7 +171,7 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 
 ### RA-oci-labs-012 - CONTRIBUTING fehlt
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: CONTRIBUTING.md
@@ -179,10 +179,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: kein CONTRIBUTING.md im Root (review-doku); Ein-Personen-Lab-Repo
 - gesehen: 2026-10-08
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-013 - make lint laeuft nicht in der CI
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: .github/workflows/ci.yml
@@ -192,6 +194,8 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   markdownlint, shellcheck, check-version laufen nur lokal (`make lint`, Makefile:172) - bestaetigt von review-doku,
   review-testing und scan-tests
 - gesehen: 2026-10-08
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-014 - Lab-Instanz ohne Auto-Stop als Default (cpu-patch-test)
 
@@ -210,7 +214,7 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 
 ### RA-oci-labs-015 - Bucket-Write-PAR und Read-PAR im argv (ps-sichtbar)
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: Makefile
@@ -220,10 +224,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   ansible-playbook-Argument (am Artefakt bestaetigt); ansible/roles/db19_engineering/tasks/push_gold_image.yml:116-119 -
   derselbe PAR als `curl -X PUT`-Argument auf dem Lab-Host (no_log schuetzt nur die Ansible-Ausgabe); Makefile:496-497 -
   Read-PAR als curl-Argument auf der Workstation; Widerspruch zu Makefile:343-346 ("never on the command line")
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-016 - Windows-AD-NSG oeffnet RDP, WinRM, LDAP, Kerberos, DNS fuer 0.0.0.0/0
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: terraform/modules/windows_ad/security.tf
@@ -233,10 +239,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   `nsg_tcp_rules`/`nsg_udp_rules` (3389, 5985, 5986, 389, 636, 88, 464, 53, 3268, 3269), am Artefakt bestaetigt;
   Kommentar :11 begruendet das mit "kein Public IP per Default"; die Security List begrenzt RDP dagegen auf
   `allowed_rdp_cidrs` (terraform/modules/network/main.tf:630-645)
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-017 - Windows-Administrator-Passwort dauerhaft in Instanz-Metadaten und in einer Datei auf dem DC
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: terraform/modules/windows_ad/templates/windows_ad-cloudinit.yaml.tftpl
@@ -245,6 +253,8 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: terraform/modules/windows_ad/main.tf:30 - `admin_password_b64 = base64encode(var.admin_password_secret)`; :68 -
   Cloud-Init als `user_data`; windows_ad-cloudinit.yaml.tftpl:12 und :76-87 - Passwort (Base64, Klartext-aequivalent)
   wird in `00_init_environment.ps1` unter `C:\OraLab\Scripts` geschrieben und nicht entfernt
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-018 - Skript setzt bekanntes Default-Passwort fuer den oracle-OS-User
 
@@ -263,7 +273,7 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 ### RA-oci-labs-019
 
 - titel: PAR-Lebensdauer ohne Obergrenze, Write-PAR bei Abbruch nicht widerrufen, SSH-Allow-List ohne Ablauf
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: Makefile
@@ -272,10 +282,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: Makefile:475 - `PAR_DAYS ?= 7` ohne Plausibilitaetspruefung, geht ungeprueft in `--time-expires` (Makefile:481,
   493); Makefile:545 - `GOLD_PAR_HOURS ?= 2` ebenso; Makefile:551-570 - Write-PAR wird erst nach dem Playbook
   widerrufen, ohne `trap`; Makefile:708-722 - `cpu-lab-allow-ip` setzt eine SSH-Freigabe ohne Ablauf
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-020 - .gitignore deckt auto.tfvars, Plan-Dateien und .ssh/ nicht repo-weit ab
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: .gitignore
@@ -285,10 +297,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   (am Artefakt bestaetigt); env-eigene .gitignore nur in terraform/envs/core und terraform/envs/cpu-patch-test; `git
   check-ignore` meldet `terraform/envs/ad-cmu-test/.ssh/id` und `terraform/envs/mfa_oma_setup/.ssh/id` als nicht
   ignoriert
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-021 - Netzwerk-Modul oeffnet SSH und WireGuard per Default fuer 0.0.0.0/0; ad-cmu-test erbt das
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: terraform/modules/network/variables.tf
@@ -298,10 +312,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   `allowed_wireguard_cidrs` ebenso (am Artefakt bestaetigt); verwendet in der Public-Subnet-Security-List,
   terraform/modules/network/main.tf:374-403; terraform/envs/ad-cmu-test/main.tf:54-77 uebergibt `allowed_ssh_cidrs`
   nicht
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-022 - Ansible-Rolle windows_ad rendert das Admin-Passwort ohne no_log und laesst die Datei liegen
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: ansible/roles/windows_ad/tasks/main.yml
@@ -310,10 +326,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: ansible/roles/windows_ad/tasks/main.yml:45-48 - `win_template` von `00_init_environment.ps1.j2` ohne `no_log`;
   ansible/roles/windows_ad/templates/00_init_environment.ps1.j2:31 - Passwort als Klartext-Zuweisung; kein Aufraeum-Task
   am Ende der Rolle
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-023 - Windows-Bootstrap laedt und startet ungepinnten Code von einem Branch
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: security
 - ort: terraform/modules/windows_ad/templates/windows_ad-cloudinit.yaml.tftpl
@@ -322,10 +340,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: terraform/modules/windows_ad/templates/windows_ad-cloudinit.yaml.tftpl:60 - `Invoke-WebRequest` auf
   `.../ad-lab/archive/refs/heads/main.zip` ohne Checksumme; die Skripte laufen danach als Administrator
   (ansible/roles/windows_ad/tasks/main.yml:51-118)
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-024 - terraform/global wird von make lint nie validiert
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: terraform/global
@@ -335,10 +355,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   terraform/global/provider.tf und terraform/global/versions.tf existieren; `terraform init -backend=false && terraform
   validate` laeuft fuer terraform/global offline erfolgreich (vom Orchestrator verifiziert) - es fehlt nur der Aufruf im
   Gate
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-025 - Ansible-Playbook-Syntax-Check nur mit laufendem Lab ausfuehrbar
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: Makefile
@@ -347,10 +369,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: Makefile:197-199 - `lint-ansible-syntax: guard-ansible guard-cpu-env` - `guard-cpu-env` verlangt die erst nach
   `make cpu-lab-apply` erzeugte Env-Datei (am Artefakt bestaetigt); Makefile:172 - `lint` enthaelt `lint-ansible-syntax`
   nicht
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-026 - CLAUDE.md enthaelt unfuellte TODO-Platzhalter
 
-- status: offen
+- status: behoben
 - schwere: mittel
 - rolle: doku-tests
 - ort: CLAUDE.md
@@ -358,10 +382,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: CLAUDE.md:5 - `TODO: describe project purpose, tech stack, and main commands.`; CLAUDE.md:9 - `- Build/Test:
   TODO` (am Artefakt bestaetigt)
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-027 - gitleaks-OCID-Regel deckt nur 16 Ressourcentypen ab
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: security
 - ort: .gitleaks.toml
@@ -371,10 +397,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
   erfasst u.a. `bastion`, `bastionsession`, `natgateway`, `internetgateway`, `securitylist`, `networksecuritygroup`,
   `routetable`, `volume`, `bootvolume`, `image`, `publicip`, `domain`, `resourceschedule`; heute kein solcher Treffer in
   Baum und Historie
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-028 - CI-Scan eines Pull Requests nutzt die .gitleaks.toml aus dem PR
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: security
 - ort: .gitleaks.toml
@@ -382,10 +410,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: .github/workflows/gitleaks.yml:14 - Trigger `pull_request`; :48-49 - `--config .gitleaks.toml` aus dem
   ausgecheckten PR-Stand
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-029 - Doku empfiehlt Secrets als `-e ...` im argv, entgegen der Makefile-Regel
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: security
 - ort: ansible/roles/db19_engineering/tasks/credentials.yml
@@ -394,6 +424,8 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - beleg: ansible/roles/db19_engineering/tasks/credentials.yml:48-50 - Assert-Meldung empfiehlt `-e mos_password="$(op
   read ...)"`; ebenso ansible/roles/db19_engineering/tasks/create_db.yml:26, terraform/envs/cpu-patch-test/outputs.tf:32
   und :41, terraform/envs/cpu-patch-test/.env.example:63 - gegen Makefile:343-346
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-030 - OCI-CLI-Profilname und Compartment-Name als Defaults im Baum
 
@@ -412,7 +444,7 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 
 ### RA-oci-labs-031 - CLAUDE.md nennt falsches Lint-Kommando
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: CLAUDE.md
@@ -420,10 +452,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: CLAUDE.md:10 - `markdownlint docs/` (am Artefakt bestaetigt) vs Makefile:211-214 - `markdownlint "**/*.md"` mit
   .markdownlintignore
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-032 - Makefile-Kopfzeile zeigt Version v0.1.0 statt 0.3.0
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: Makefile
@@ -431,10 +465,12 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: Makefile:8 - `# Version....: v0.1.0` (am Artefakt bestaetigt); VERSION:1 - `0.3.0`; Makefile:39 liest VERSION
   korrekt, nur der Kopfkommentar ist veraltet
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-033 - terraform/envs/site2site-udm ist ein Env-Verzeichnis ohne IaC
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: terraform/envs/site2site-udm
@@ -442,6 +478,8 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: terraform/envs/site2site-udm/ - nur README.md, keine .tf-Datei; Makefile:185 meldet den Skip sichtbar
   ("SKIPPED: no provider.tf")
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-034 - Leere Platzhalter-Doku ansible/docs/ansible-workflow.md
 
@@ -517,7 +555,7 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 
 ### RA-oci-labs-040 - Em-Dashes in docs/runbook-mfa-oma.md
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: docs/runbook-mfa-oma.md
@@ -525,23 +563,29 @@ Makefile:720-728 sind `clean`/`clean-terraform`. Kein Lint-Target enthaelt `|| t
 - gefunden: 2026-10-08
 - beleg: docs/runbook-mfa-oma.md:22,43,68,70,72,82,89,92,190,194,447,503,538,671,786 - 15 Zeichen U+2014 (am Artefakt
   gezaehlt)
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-041 - Em-Dashes in docs/spec-iam-mfa-oma.md
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: docs/spec-iam-mfa-oma.md
 - regel: doc-drift
 - gefunden: 2026-10-08
 - beleg: docs/spec-iam-mfa-oma.md:255,257,258 - 3 Zeichen U+2014 (am Artefakt gezaehlt)
+- erledigt: 2026-11-24
+- commit: e423b48
 
 ### RA-oci-labs-042 - Em-Dash in terraform/modules/iam_mfa_oma/README.md
 
-- status: offen
+- status: behoben
 - schwere: niedrig
 - rolle: doku-tests
 - ort: terraform/modules/iam_mfa_oma/README.md
 - regel: doc-drift
 - gefunden: 2026-10-08
 - beleg: terraform/modules/iam_mfa_oma/README.md:170 - 1 Zeichen U+2014 (am Artefakt gezaehlt)
+- erledigt: 2026-11-24
+- commit: 07c0f5e

@@ -8,12 +8,15 @@
 # Version....: v0.1.0
 # Purpose....: Instance-level NSG for Windows AD (RDP, WinRM, AD, Kerberos).
 # Notes......: NSG complements the subnet-level Security List in the network module.
-#              Ingress source 0.0.0.0/0 is safe: subnet has no public IP by default.
+#              NSG and Security List rules are a union: an open NSG source would
+#              override the Security List, so ingress is limited to vcn_cidr and
+#              allowed_cidrs (default empty = no ingress from outside the VCN).
 # Reference..: https://github.com/oehrlis/oci-labs
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
 # Modified...:
 # 2026.06.26 oehrli - initial version
+# 2026.11.24 oehrli - ingress limited to vcn_cidr + allowed_cidrs (no 0.0.0.0/0)
 # ------------------------------------------------------------------------------
 
 locals {
@@ -38,6 +41,20 @@ locals {
     kpwd_udp     = { port = 464, description = "Kerberos pwd change UDP" }
     dns_udp      = { port = 53, description = "DNS UDP" }
   }
+
+  # Allowed ingress sources: VCN CIDR (if known) plus explicit external CIDRs
+  nsg_source_cidrs = distinct(concat(var.vcn_cidr == null ? [] : [var.vcn_cidr], var.allowed_cidrs))
+
+  # One rule per (port rule, source CIDR) pair
+  nsg_tcp_ingress = {
+    for pair in setproduct(keys(local.nsg_tcp_rules), local.nsg_source_cidrs) :
+    "${pair[0]}-${pair[1]}" => merge(local.nsg_tcp_rules[pair[0]], { source = pair[1] })
+  }
+
+  nsg_udp_ingress = {
+    for pair in setproduct(keys(local.nsg_udp_rules), local.nsg_source_cidrs) :
+    "${pair[0]}-${pair[1]}" => merge(local.nsg_udp_rules[pair[0]], { source = pair[1] })
+  }
 }
 
 # ------------------------------------------------------------------------------
@@ -56,14 +73,14 @@ resource "oci_core_network_security_group" "windows_ad" {
 # ------------------------------------------------------------------------------
 
 resource "oci_core_network_security_group_security_rule" "ingress_tcp" {
-  for_each = local.nsg_tcp_rules
+  for_each = local.nsg_tcp_ingress
 
   network_security_group_id = oci_core_network_security_group.windows_ad.id
   direction                 = "INGRESS"
   protocol                  = "6"
-  source                    = "0.0.0.0/0"
+  source                    = each.value.source
   source_type               = "CIDR_BLOCK"
-  description               = each.value.description
+  description               = "${each.value.description} from ${each.value.source}"
 
   tcp_options {
     destination_port_range {
@@ -78,14 +95,14 @@ resource "oci_core_network_security_group_security_rule" "ingress_tcp" {
 # ------------------------------------------------------------------------------
 
 resource "oci_core_network_security_group_security_rule" "ingress_udp" {
-  for_each = local.nsg_udp_rules
+  for_each = local.nsg_udp_ingress
 
   network_security_group_id = oci_core_network_security_group.windows_ad.id
   direction                 = "INGRESS"
   protocol                  = "17"
-  source                    = "0.0.0.0/0"
+  source                    = each.value.source
   source_type               = "CIDR_BLOCK"
-  description               = each.value.description
+  description               = "${each.value.description} from ${each.value.source}"
 
   udp_options {
     destination_port_range {

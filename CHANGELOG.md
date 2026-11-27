@@ -6,14 +6,63 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-24
+
+Security hardening from the repo-audit register (22 open findings closed) plus the MFA fixes of 2026-11-23.
+
 ### Added
 
+- **CI** (`.github/workflows/ci.yml`, RA-oci-labs-013): the credential-free part of `make lint` on every push to
+  main and every PR - terraform fmt and validate, ansible-lint, playbook syntax, yamllint, markdownlint, shellcheck,
+  VERSION. The pinned `oradba.automation` tarball is installed first; gitleaks keeps its own workflow
+- **make cpu-lab-revoke-ip** (RA-oci-labs-019): counterpart to `cpu-lab-allow-ip`, closes every external SSH entry
+  of the CPU lab; `cpu-lab-allow-ip` now reminds of it, because an NSG rule cannot expire
+- **CONTRIBUTING.md** (RA-oci-labs-012): branch and commit conventions, `make lint` as gate, the public-repo and
+  secret rules
+- **terraform/modules/windows_ad/README.md**: what the admin password exposure is and is not (metadata stays
+  readable for the instance lifetime), the new variables, follow-up OCI Vault secret via instance principal
 - **tasks/open-work.md**: the one checkbox file of the repo, replaces `tasks/todo.md`. Holds what is still open
   from the removed state and plan files, checked against the code on 2026-11-23, plus the review-register findings
   worth scheduling
 - **tasks/lessons.md**: lessons not written down elsewhere - baseline drift through AutoUpgrade keywords,
   `rollback restore` and foreign restore points, PDB$SEED READ WRITE after deploy, smoke test against the old home,
   NSG union, and three working-method lessons
+
+### Fixed
+
+- **windows_ad NSG** (RA-oci-labs-016): RDP, WinRM, LDAP, Kerberos, DNS and GC no longer open to `0.0.0.0/0` -
+  ingress only from `vcn_cidr` plus `allowed_cidrs` (default empty, `0.0.0.0/0` rejected). ad-cmu-test passes
+  `windows_ad_allowed_cidrs`. The rule keys change: the next apply replaces the NSG rules
+- **windows_ad password** (RA-oci-labs-017/022): phase 1 of the bootstrap drops its password variables; a
+  successful phase 2 removes the password line from `00_init_environment.ps1` and fails if it is still there. The
+  Ansible role renders the file with `no_log`, runs every script that reads it in one block and deletes it in
+  `always`; tasks that see the password log only with `windows_ad_no_log: false`
+- **windows_ad bootstrap** (RA-oci-labs-023): ad-lab is downloaded by full commit SHA (`ad_lab_scripts_ref`, a
+  branch name is rejected) and checked against `ad_lab_scripts_sha256` before it is unpacked
+- **modules/network** (RA-oci-labs-021): `allowed_ssh_cidrs` defaults to `[]` instead of `0.0.0.0/0`, with CIDR
+  validation. Only ad-cmu-test relied on the old default; it has no Linux jumphost
+- **PAR handling** (RA-oci-labs-015/019): no pre-authenticated request URL in an argv any more - curl reads it as
+  config from stdin (`-K -`) on the workstation and on the lab host, the gold image write PAR reaches ansible in a
+  0600 vars file. A `trap` revokes the write PAR on every exit, Ctrl-C and a failed playbook included. `PAR_DAYS`
+  (1-7) and `GOLD_PAR_HOURS` (1-6) are checked by `guard-par-lifetime` instead of passing a typo through
+- **make lint-terraform** (RA-oci-labs-024): validates `terraform/global` too, and fails when any directory fails -
+  the loop returned only the exit code of the last one
+- **make lint-ansible-syntax** (RA-oci-labs-025): runs with an inline localhost inventory, no lab needed, and is
+  part of `make lint`
+- **gitleaks** (RA-oci-labs-027/028): the OCID rule covers every resource type; a PR is scanned with the config of
+  its base branch, so it cannot weaken its own scan. The generated LRN6087 sample with invented OCIDs is allowlisted
+  by path
+- `.gitignore` (RA-oci-labs-020): `*.auto.tfvars`, `*.auto.tfvars.json` and saved plans (`*.tfplan`, `tfplan`)
+- `db19_engineering` credentials check (RA-oci-labs-029): the failure message no longer recommends secrets as
+  `-e key=value` on the command line
+- `CLAUDE.md` (RA-oci-labs-026/031): build/test and lint lines filled, lint command is `make lint`
+- Makefile header (RA-oci-labs-032): no hard-coded version, `VERSION` is the source
+- `wls_engineering`: five YAML lines over 120 characters wrapped (same rendered values, checked with an assert
+  playbook); the REST lifecycle URL is its own fact `wv_lifecycle_url`. yamllint was red on main - the new CI
+  would have failed on its first run
+- Em dashes replaced by hyphens in `docs/runbook-mfa-oma.md`, `docs/spec-iam-mfa-oma.md` and
+  `terraform/envs/ad-cmu-test/main.tf` (RA-oci-labs-040/041); the one in `terraform/modules/iam_mfa_oma/README.md`
+  went with `07c0f5e` (RA-oci-labs-042)
 
 ### Changed
 
@@ -41,6 +90,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- `terraform/envs/site2site-udm/` (RA-oci-labs-033) - a one-line README placeholder without IaC; the site-to-site
+  VPN lives in deep-thought. Last content in `67e0f53` (`git show 67e0f53:terraform/envs/site2site-udm/README.md`)
 - `tasks/state-2026-11-23.md` - resume card superseded by `tasks/state-2026-11-24.md` (MFA demo done), open points
   moved there or already in `tasks/open-work.md`; last content in `c16c536`
   (`git show c16c536:tasks/state-2026-11-23.md`)

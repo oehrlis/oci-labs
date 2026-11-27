@@ -109,10 +109,17 @@ variable "flow_log_retention_duration" {
 
 # --- Security settings for public subnet ---
 
+# Opt-in since RA-oci-labs-021 (2026-11-24): the old default opened SSH to 0.0.0.0/0, and
+# ad-cmu-test inherited it. Every other stack already passes an explicit list.
 variable "allowed_ssh_cidrs" {
   type        = list(string)
-  description = "CIDRs allowed to access SSH on the public subnet."
-  default     = ["0.0.0.0/0"]
+  description = "CIDRs allowed to access SSH on the public subnet. Empty = no ingress."
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.allowed_ssh_cidrs : can(cidrnetmask(c))])
+    error_message = "allowed_ssh_cidrs must contain valid IPv4 CIDRs, e.g. 203.0.113.10/32."
+  }
 }
 
 variable "ssh_port" {

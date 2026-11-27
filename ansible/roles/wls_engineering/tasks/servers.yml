@@ -70,7 +70,7 @@
       ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
         cmd: >-
           curl -K {{ wv_curl_cfg }} --max-time 10
-          '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes/AdminServer?fields=state&links=none'
+          '{{ wv_lifecycle_url }}/AdminServer?fields=state&links=none'
         executable: /bin/bash
       register: wv_as_state
       until: "'RUNNING' in wv_as_state.stdout"
@@ -99,7 +99,7 @@
       ansible.builtin.shell:  # noqa: command-instead-of-module - credentials stay in the 0600 curl config
         cmd: >-
           curl -K {{ wv_curl_cfg }} --max-time 10
-          '{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes/{{ wls_managed_server }}?fields=state&links=none'
+          '{{ wv_lifecycle_url }}/{{ wls_managed_server }}?fields=state&links=none'
         executable: /bin/bash
       register: wv_ms_state
       until: "'RUNNING' in wv_ms_state.stdout"

@@ -5,7 +5,7 @@
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Editor.....: Stefan Oehrli
 # Date.......: 19.08.2026
-# Version....: v0.1.0
+# Version....: see VERSION (header stays version-free, RA-oci-labs-032)
 # Purpose....: Lifecycle automation for the OCI lab stacks - lint, validate, and
 #              the cpu-patch-test lab (build, install, patch, verify, destroy).
 # Notes......: Config via terraform/envs/<env>/.env (auto-sourced per target).
@@ -190,7 +190,7 @@ CPU_INVENTORY_ABS := $(ANSIBLE_DIR)/$(CPU_INVENTORY)
 # ==============================================================================
 
 .PHONY: lint
-lint: lint-terraform lint-ansible lint-yaml lint-markdown lint-shell lint-secrets check-version ## Run all lint checks
+lint: lint-terraform lint-ansible lint-ansible-syntax lint-yaml lint-markdown lint-shell lint-secrets check-version ## Run all lint checks
 
 .PHONY: fmt-terraform
 fmt-terraform: guard-terraform ## Format Terraform files in-place
@@ -198,15 +198,19 @@ fmt-terraform: guard-terraform ## Format Terraform files in-place
 	@echo "✅ Terraform files formatted"
 
 .PHONY: lint-terraform
-lint-terraform: guard-terraform ## Check Terraform formatting and validate every env and template
+# terraform/global is validated too (RA-oci-labs-024). A failing directory fails
+# the target - the loop used to report only the exit code of the last one.
+lint-terraform: guard-terraform ## Check Terraform formatting and validate every env, template and global
 	@echo -e "$(COLOR_BOLD)terraform fmt -check$(COLOR_RESET)"
 	$(Q)"$(TERRAFORM)" fmt -check -recursive "$(TF_DIR)"
-	@echo -e "$(COLOR_BOLD)terraform validate per env and template$(COLOR_RESET)"
-	@for env in $(TF_DIR)/envs/*/ $(TF_DIR)/templates/*/; do \
+	@echo -e "$(COLOR_BOLD)terraform validate per env, template and global$(COLOR_RESET)"
+	@failed=""; \
+	for env in $(TF_DIR)/global/ $(TF_DIR)/envs/*/ $(TF_DIR)/templates/*/; do \
 	  [[ -f "$$env/provider.tf" ]] || { echo "--- $$env SKIPPED: no provider.tf, nothing to validate"; continue; }; \
 	  echo "--- $$env"; \
-	  ( cd "$$env" && "$(TERRAFORM)" init -backend=false -input=false >/dev/null && "$(TERRAFORM)" validate ); \
-	done
+	  ( cd "$$env" && "$(TERRAFORM)" init -backend=false -input=false >/dev/null && "$(TERRAFORM)" validate ) || failed="$$failed $$env"; \
+	done; \
+	[[ -z "$$failed" ]] || { echo "❌ terraform validate failed in:$$failed" >&2; exit 1; }
 	@echo "✅ Terraform lint complete"
 
 .PHONY: lint-ansible
@@ -216,8 +220,10 @@ lint-ansible: ## Lint Ansible roles and playbooks with ansible-lint
 	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE_LINT)" roles/ playbooks/
 
 .PHONY: lint-ansible-syntax
-lint-ansible-syntax: guard-ansible guard-cpu-env ## Syntax-check the cpu-patch playbook
-	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" --syntax-check
+# A syntax check needs no lab: an inline localhost inventory is enough, so it runs
+# in `make lint` and in CI (RA-oci-labs-025).
+lint-ansible-syntax: guard-ansible ## Syntax-check the cpu-patch playbook (no lab needed)
+	$(Q)cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "localhost," "$(CPU_PLAYBOOK)" --syntax-check
 
 .PHONY: lint-yaml
 lint-yaml: ## Lint YAML files with yamllint
@@ -525,8 +531,21 @@ PAR_OBJECT := LINUX.X64_193000_db_home.zip
 PAR_NAME   := cpu-lab-base-image-19c
 PAR_DAYS   ?= 7
 
+# Upper bounds for every PAR this Makefile mints (RA-oci-labs-019): a typo such
+# as PAR_DAYS=70 must fail, not mint a bearer credential for ten weeks. A PAR URL
+# never goes into an argv either - curl reads it as config from stdin (-K -).
+PAR_DAYS_MAX       := 7
+GOLD_PAR_HOURS_MAX := 6
+
+.PHONY: guard-par-lifetime
+guard-par-lifetime:
+	@[[ "$(PAR_DAYS)" =~ ^[0-9]+$$ ]] && (( $(PAR_DAYS) >= 1 && $(PAR_DAYS) <= $(PAR_DAYS_MAX) )) || \
+	  { echo "❌ PAR_DAYS=$(PAR_DAYS) - must be a whole number from 1 to $(PAR_DAYS_MAX)" >&2; exit 1; }
+	@[[ "$(GOLD_PAR_HOURS)" =~ ^[0-9]+$$ ]] && (( $(GOLD_PAR_HOURS) >= 1 && $(GOLD_PAR_HOURS) <= $(GOLD_PAR_HOURS_MAX) )) || \
+	  { echo "❌ GOLD_PAR_HOURS=$(GOLD_PAR_HOURS) - must be a whole number from 1 to $(GOLD_PAR_HOURS_MAX)" >&2; exit 1; }
+
 .PHONY: cpu-lab-par
-cpu-lab-par: guard-oci guard-terraform ## Mint a short-lived PAR for the 19c base image and write it to .env (PAR_DAYS=7)
+cpu-lab-par: guard-oci guard-terraform guard-par-lifetime ## Mint a short-lived PAR for the 19c base image and write it to .env (PAR_DAYS=7)
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  profile="$${profile:-DEFAULT}"; \
 	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
@@ -544,8 +563,9 @@ cpu-lab-par: guard-oci guard-terraform ## Mint a short-lived PAR for the 19c bas
 	      --time-expires "$$expires" \
 	      --query 'data."full-path"' --raw-output)"; \
 	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
-	  code="$$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "$$uri")"; \
-	  size="$$(curl -sI --max-time 30 "$$uri" | tr -d '\r' | awk 'tolower($$1)=="content-length:"{print $$2}')"; \
+	  head="$$(printf 'url = "%s"\n' "$$uri" | curl -K - -sI --max-time 30 -w 'http_code=%{http_code}\n' | tr -d '\r')"; \
+	  code="$$(awk -F= '/^http_code=/{print $$2}' <<<"$$head")"; \
+	  size="$$(awk 'tolower($$1)=="content-length:"{print $$2}' <<<"$$head")"; \
 	  if [[ "$$code" != "200" ]]; then echo "❌ PAR does not serve the object (HTTP $$code)"; exit 1; fi; \
 	  echo "  verified: HTTP $$code, content-length $$size"; \
 	  touch "$(CPU_ENV_FILE)"; \
@@ -590,7 +610,7 @@ PATCH_PAR_FILE := $(CPU_ENV_DIR)/.patch-par
 PATCH_PREFIX   ?=
 
 .PHONY: cpu-lab-patch-par
-cpu-lab-patch-par: guard-oci ## Mint a read PAR on PATCH_PREFIX in the orarepo bucket for the target RU (PAR_DAYS=7)
+cpu-lab-patch-par: guard-oci guard-par-lifetime ## Mint a read PAR on PATCH_PREFIX in the orarepo bucket for the target RU (PAR_DAYS=7)
 	@[[ -n "$(PATCH_PREFIX)" ]] || { echo "❌ PATCH_PREFIX is required, e.g. PATCH_PREFIX=patches/2026-10/"; exit 1; }
 	@[[ "$(PATCH_PREFIX)" == */ ]] || echo "⚠️  PATCH_PREFIX does not end with / - it matches every object name starting with '$(PATCH_PREFIX)'"
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
@@ -611,7 +631,7 @@ cpu-lab-patch-par: guard-oci ## Mint a read PAR on PATCH_PREFIX in the orarepo b
 	      --time-expires "$$expires" \
 	      --query 'data."full-path"' --raw-output)"; \
 	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
-	  list="$$(curl -fsS --max-time 30 "$$uri?fields=name,size")" || { echo "❌ PAR does not list the prefix"; exit 1; }; \
+	  list="$$(printf 'url = "%s?fields=name,size"\n' "$$uri" | curl -K - -fsS --max-time 30)" || { echo "❌ PAR does not list the prefix"; exit 1; }; \
 	  echo "$$list" | python3 -c 'import json,sys; o=[x for x in json.load(sys.stdin).get("objects",[]) if not x["name"].endswith("/")]; print("  objects : %d, %.1f GB" % (len(o), sum(x.get("size",0) for x in o)/1e9)); [print("    " + x["name"]) for x in o]'; \
 	  ( umask 077; printf '%s\n' "$$uri" > "$(PATCH_PAR_FILE)" ); \
 	  echo "  written : $(PATCH_PAR_FILE) (git-ignored, 0600; token not echoed)"
@@ -628,7 +648,7 @@ REPO_PAR_NAME := cpu-lab-repo
 REPO_PAR_FILE := $(CPU_ENV_DIR)/.repo-par
 
 .PHONY: cpu-lab-repo-par
-cpu-lab-repo-par: guard-oci ## Mint a read-by-name PAR on the whole orarepo bucket, no listing (PAR_DAYS=7, REPO_CHECK=<file> to probe)
+cpu-lab-repo-par: guard-oci guard-par-lifetime ## Mint a read-by-name PAR on the whole orarepo bucket, no listing (PAR_DAYS=7, REPO_CHECK=<file> to probe)
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  [[ -n "$$profile" ]] || { echo "❌ No TF_VAR_oci_config_profile in $(CPU_ENV_FILE) - refusing to fall back to DEFAULT (wrong tenancy)"; exit 1; }; \
 	  expires="$$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$(PAR_DAYS)")"; \
@@ -645,7 +665,7 @@ cpu-lab-repo-par: guard-oci ## Mint a read-by-name PAR on the whole orarepo buck
 	      --query 'data."full-path"' --raw-output)"; \
 	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
 	  if [[ -n "$(REPO_CHECK)" ]]; then \
-	    curl -fsSI --max-time 30 "$${uri}$(REPO_CHECK)" >/dev/null \
+	    printf 'url = "%s%s"\n' "$$uri" "$(REPO_CHECK)" | curl -K - -fsSI --max-time 30 >/dev/null \
 	      && echo "  probe   : $(REPO_CHECK) readable" \
 	      || { echo "❌ $(REPO_CHECK) not readable through the PAR"; exit 1; }; \
 	  fi; \
@@ -672,9 +692,22 @@ GOLD_PAR_NAME  := cpu-lab-goldimage-write
 GOLD_PAR_HOURS ?= 2
 
 .PHONY: cpu-lab-goldimage-push
-cpu-lab-goldimage-push: guard-oci guard-ansible guard-cpu-env ## Push the gold image built on the lab host into the orarepo bucket
+# The write PAR reaches ansible through a 0600 vars file, not the argv, and a
+# trap revokes it on every exit - Ctrl-C and a failed playbook included
+# (RA-oci-labs-015/019).
+cpu-lab-goldimage-push: guard-oci guard-ansible guard-cpu-env guard-par-lifetime ## Push the gold image built on the lab host into the orarepo bucket
 	$(Q)profile="$$(grep -oE '^export TF_VAR_oci_config_profile="[^"]+"' "$(CPU_ENV_FILE)" 2>/dev/null | cut -d'"' -f2)"; \
 	  profile="$${profile:-DEFAULT}"; \
+	  revoke() { \
+	    rm -f "$${vars_file:-}"; \
+	    echo "Revoking the write PAR"; \
+	    ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
+	        --query 'data[?name==`$(GOLD_PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
+	    for id in $$ids; do \
+	      "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
+	    done; \
+	  }; \
+	  trap revoke EXIT; trap 'exit 130' INT TERM; \
 	  expires="$$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=$(GOLD_PAR_HOURS))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))')"; \
 	  echo "Minting a write PAR on $(PAR_BUCKET), valid $(GOLD_PAR_HOURS)h (expires $$expires)"; \
 	  uri="$$("$(OCI)" --profile "$$profile" os preauth-request create \
@@ -683,17 +716,10 @@ cpu-lab-goldimage-push: guard-oci guard-ansible guard-cpu-env ## Push the gold i
 	      --query 'data."full-path"' --raw-output)"; \
 	  [[ -n "$$uri" ]] || { echo "❌ PAR creation returned no URI"; exit 1; }; \
 	  echo "  PAR     : $$(echo "$$uri" | sed 's#/p/[^/]*/#/p/<token>/#')"; \
-	  rc=0; \
+	  vars_file="$$(umask 077; mktemp "$${TMPDIR:-/tmp}/goldimage-par.XXXXXX")"; \
+	  printf 'db19_gold_image_par: "%s"\n' "$$uri" > "$$vars_file"; \
 	  cd "$(ANSIBLE_DIR)" && "$(ANSIBLE)" -i "$(CPU_INVENTORY)" "$(CPU_PLAYBOOK)" \
-	    --tags goldimage_push -e db19_gold_image_par="$$uri" $(ANSIBLE_EXTRA) || rc=$$?; \
-	  cd - >/dev/null; \
-	  echo "Revoking the write PAR"; \
-	  ids="$$("$(OCI)" --profile "$$profile" os preauth-request list --bucket-name "$(PAR_BUCKET)" \
-	      --query 'data[?name==`$(GOLD_PAR_NAME)`].id' --raw-output | tr -d '[]", ' | grep . || true)"; \
-	  for id in $$ids; do \
-	    "$(OCI)" --profile "$$profile" os preauth-request delete --bucket-name "$(PAR_BUCKET)" --par-id "$$id" --force; \
-	  done; \
-	  exit $$rc
+	    --tags goldimage_push -e @"$$vars_file" $(ANSIBLE_EXTRA)
 	@echo "✅ Gold image and manifest pushed - list with: make cpu-lab-goldimage-list"
 
 .PHONY: cpu-lab-goldimage-list
@@ -948,6 +974,11 @@ cpu-lab-bastion-list: guard-oci guard-terraform ## List active Bastion sessions
 INTERVAL ?= 30
 PROGRESS_SCRIPT := $(TOOLS_DIR)/cpu-lab-progress.sh
 
+# The two resources that carry the external SSH allow-list of the CPU lab.
+SSH_ALLOW_TARGETS := \
+  -target=module.oracle_db_host.module.host.oci_core_network_security_group_security_rule.ingress_ssh \
+  -target=module.network.oci_core_security_list.public
+
 .PHONY: cpu-lab-allow-ip
 cpu-lab-allow-ip: guard-terraform ## Re-point the SSH allow-list at your current egress IP (NSG only)
 	$(Q)ip="$$(curl -s -4 --max-time 15 https://ifconfig.me)"; \
@@ -961,10 +992,24 @@ cpu-lab-allow-ip: guard-terraform ## Re-point the SSH allow-list at your current
 	  printf 'allowed_ssh_cidrs = ["%s/32"]\n' "$$ip" >> terraform.tfvars.new; \
 	  mv -f terraform.tfvars.new terraform.tfvars; \
 	  echo "terraform.tfvars updated - applying the NSG rules only"; \
-	  "$(TERRAFORM)" apply -input=false -auto-approve \
-	    -target=module.oracle_db_host.module.host.oci_core_network_security_group_security_rule.ingress_ssh \
-	    -target=module.network.oci_core_security_list.public 2>&1 | tail -5
+	  "$(TERRAFORM)" apply -input=false -auto-approve $(SSH_ALLOW_TARGETS) 2>&1 | tail -5
 	@echo "✅ SSH allow-list updated - the instance was not touched"
+	@echo "⚠️  The rule has no expiry - remove it when done: make cpu-lab-revoke-ip"
+
+# Counterpart to cpu-lab-allow-ip (RA-oci-labs-019): an NSG rule cannot expire,
+# so closing it is an explicit step. Empty list = Bastion only.
+.PHONY: cpu-lab-revoke-ip
+cpu-lab-revoke-ip: guard-terraform ## Remove every external SSH allow-list entry (NSG only, Bastion keeps working)
+	$(Q)cd "$(CPU_ENV_DIR)" && \
+	  set -a; [[ -f .env ]] && . ./.env; set +a; \
+	  current="$$(grep -oE '^allowed_ssh_cidrs = \[[^]]*\]' terraform.tfvars 2>/dev/null || true)"; \
+	  if [[ -z "$$current" || "$$current" == "allowed_ssh_cidrs = []" ]]; then echo "No external SSH entry - nothing to do."; exit 0; fi; \
+	  echo "Removing: $$current"; \
+	  grep -v '^allowed_ssh_cidrs' terraform.tfvars > terraform.tfvars.new; \
+	  printf 'allowed_ssh_cidrs = []\n' >> terraform.tfvars.new; \
+	  mv -f terraform.tfvars.new terraform.tfvars; \
+	  "$(TERRAFORM)" apply -input=false -auto-approve $(SSH_ALLOW_TARGETS) 2>&1 | tail -5
+	@echo "✅ External SSH closed - use make cpu-lab-bastion-tunnel"
 
 .PHONY: cpu-lab-progress
 # When the host is reached through a Bastion tunnel instead of its public IP,

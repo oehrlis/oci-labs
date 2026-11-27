@@ -33,6 +33,14 @@ windows_subnet_cidr = "10.19.50.0/24"
 # Uncomment to allow direct RDP from your IP:
 # allowed_rdp_cidrs = ["<your-ip>/32"]
 
+# DC NSG: sources outside the VCN for all AD ports (RDP, WinRM, LDAP, Kerberos,
+# DNS, GC). Default [] = VCN only. home_cidrs below are already covered by the
+# subnet Security List. Never 0.0.0.0/0 (rejected by validation).
+# windows_ad_allowed_cidrs = ["203.0.113.10/32"]
+
+# No allowed_ssh_cidrs: this stack has no Linux jumphost (network module
+# default [] = no external SSH). Reach the DC via VPN/DRG or OCI Bastion.
+
 # Windows AD
 domain_name                  = "example.com"
 company_name                 = "Example Labs"
@@ -44,6 +52,12 @@ windows_boot_volume_size_gbs = 100
 assign_windows_public_ip     = false
 
 # admin_password_secret is NOT set here - use TF_VAR_admin_password_secret
+
+# ad-lab scripts: pinned commit + archive SHA-256 (module defaults if unset).
+# Get the hash for a new commit with:
+#   curl -sL https://github.com/oehrlis/ad-lab/archive/<sha>.zip | shasum -a 256
+# ad_lab_scripts_ref    = "3b152c02c12a5d0b9c94f0cef98e877d616c1d54"
+# ad_lab_scripts_sha256 = "8d7ebbf3855e83341aa7cd498185f1396ac1f96afd6dc057c0ab5d19bd2e5c8f"
 
 # VPN / DRG - site-to-site IPSec
 drg_id = "ocid1.drg.oc1.eu-zurich-1.xxx"

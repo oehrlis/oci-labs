@@ -40,4 +40,11 @@
     wv_admin_url: "https://localhost:{{ wv_ports.admin_port }}"
     wv_t3s_url: "t3s://localhost:{{ wv_ports.admin_port }}"
     wv_curl_cfg: "{{ wls_etc_dir }}/curl-{{ wv_tag }}.cfg"
-    wv_report_stem: "cputest-WLS-{{ wv_short | replace('.', '_') }}-{{ ansible_facts['date_time']['date'] | replace('-', '') }}"
+    wv_report_stem: >-
+      cputest-WLS-{{ wv_short | replace('.', '_') }}-{{ ansible_facts['date_time']['date']
+      | replace('-', '') }}
+
+# Own task: set_fact cannot read a fact it sets in the same task (wv_admin_url).
+- name: Derive the REST lifecycle URL of WebLogic {{ wls.version }}
+  ansible.builtin.set_fact:
+    wv_lifecycle_url: "{{ wv_admin_url }}/management/weblogic/latest/domainRuntime/serverLifeCycleRuntimes"
